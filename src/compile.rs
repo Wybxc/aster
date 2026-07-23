@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::{Result, bail};
 use termcolor::{ColorChoice, StandardStream};
 use typst::diag::SourceDiagnostic;
-use typst_kit::diagnostics::DiagnosticFormat;
+use typst_kit::diagnostics::{self, DiagnosticFormat, DiagnosticWorld};
 
 use crate::world::{build_library, build_world};
 
@@ -16,31 +16,24 @@ pub fn run(entry: &Path, project_root: &Path) -> Result<String> {
     let world = build_world(entry, project_root, &library);
 
     let warned = typst::compile::<typst_html::HtmlDocument>(&world);
-
-    let mut all_diags: Vec<&SourceDiagnostic> = warned.warnings.iter().collect();
+    emit_diags(&world, &warned.warnings);
 
     let result = warned
         .output
         .and_then(|doc| typst_html::html(&doc, &typst_html::HtmlOptions::default()));
 
     match result {
-        Ok(html) => {
-            if !all_diags.is_empty() {
-                emit_diags(&world, &all_diags);
-            }
-            Ok(html)
-        }
+        Ok(html) => Ok(html),
         Err(errors) => {
-            all_diags.extend(errors.iter());
-            emit_diags(&world, &all_diags);
+            emit_diags(&world, &errors);
             bail!("compilation failed")
         }
     }
 }
 
-fn emit_diags(world: &impl typst_kit::diagnostics::DiagnosticWorld, diags: &[&SourceDiagnostic]) {
+fn emit_diags(world: &impl DiagnosticWorld, diags: &[SourceDiagnostic]) {
     let mut writer = StandardStream::stderr(ColorChoice::Auto);
-    if typst_kit::diagnostics::emit(&mut writer, world, diags.iter().copied(), DiagnosticFormat::Human).is_err() {
+    if diagnostics::emit(&mut writer, world, diags.iter(), DiagnosticFormat::Human).is_err() {
         for diag in diags {
             eprintln!("error: {diag:?}");
         }
