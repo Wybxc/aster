@@ -4,27 +4,30 @@ use anyhow::{Result, bail};
 use termcolor::{ColorChoice, StandardStream};
 use typst::diag::SourceDiagnostic;
 use typst_kit::diagnostics::{self, DiagnosticFormat, DiagnosticWorld};
+use typst::ecow::EcoVec;
+use typst_html::{HtmlDocument, HtmlNode, HtmlOptions, HtmlTag};
 
 use crate::world::{build_library, build_world};
 
 /// Compile a single entry point and return the rendered HTML string.
 ///
 /// The output is the inner content of `<body>` — the document shell
-/// (`<html>`, `<head>`, `<body>`) is stripped away. Only typst's
-/// `html.html` / `html.body` / etc. produce those wrappers implicitly.
+/// (`<html>`, `<head>`, `<body>`) is stripped away by modifying the
+/// document tree before serialization.
 pub fn run(entry: &Path, project_root: &Path) -> Result<String> {
     let library = build_library();
     let world = build_world(entry, project_root, &library);
 
-    let warned = typst::compile::<typst_html::HtmlDocument>(&world);
+    let warned = typst::compile::<HtmlDocument>(&world);
     emit_diags(&world, &warned.warnings);
 
-    let result = warned
-        .output
-        .and_then(|doc| typst_html::html(&doc, &typst_html::HtmlOptions::default()));
-
-    match result {
-        Ok(html) => Ok(strip_html_shell(&html)),
+    match warned.output {
+        Ok(mut doc) => {
+            extract_body(&mut doc);
+            let html = typst_html::html(&doc, &HtmlOptions::default())
+                .map_err(|_| anyhow::anyhow!("failed to encode HTML"))?;
+            Ok(strip_shell(&html))
+        }
         Err(errors) => {
             emit_diags(&world, &errors);
             bail!("compilation failed")
@@ -32,18 +35,37 @@ pub fn run(entry: &Path, project_root: &Path) -> Result<String> {
     }
 }
 
-/// Strip the `<html>`, `<head>`, and `<body>` wrapper, returning only the
-/// inner body content.
-fn strip_html_shell(html: &str) -> String {
-    let start = html.find("<body").map(|i| {
-        // Advance past `<body` and any attributes until `>`.
-        let rest = &html[i + 5..];
-        let close = rest.find('>').unwrap_or(0);
-        i + 5 + close + 1
-    }).unwrap_or(0);
+/// Replaces the `<html>` element's children with the `<body>`'s children
+/// and replaces its tag with `x`, so that the serialized output has a
+/// trivial wrapper we can strip mechanically.
+fn extract_body(doc: &mut HtmlDocument) {
+    let root = doc.root_mut();
+    let mut body_children: Option<EcoVec<HtmlNode>> = None;
 
-    let end = html.rfind("</body>").unwrap_or(html.len());
+    for child in &root.children {
+        if let HtmlNode::Element(e) = child {
+            if e.tag == typst_html::tag::body {
+                body_children = Some(e.children.clone());
+                break;
+            }
+        }
+    }
 
+    if let Some(children) = body_children {
+        root.children = children;
+        root.attrs.0.clear();
+        root.tag = HtmlTag::intern("x").expect("'x' is a valid tag name");
+    }
+}
+
+/// Strip the `<!DOCTYPE html><x>` prefix and `</x>` suffix left by
+/// [`extract_body`].
+fn strip_shell(html: &str) -> String {
+    const PREFIX: &str = "<!DOCTYPE html><x>";
+    const SUFFIX: &str = "</x>";
+
+    let start = html.find(PREFIX).map(|i| i + PREFIX.len()).unwrap_or(0);
+    let end = html.rfind(SUFFIX).unwrap_or(html.len());
     html[start..end].to_owned()
 }
 
