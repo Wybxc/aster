@@ -80,12 +80,10 @@ fn main() {
             });
 
             let project_root = file.parent().unwrap();
-            let vpath = VirtualPath::virtualize(project_root, &file).unwrap_or_else(
-                |e| {
-                    eprintln!("error: invalid path: {e}");
-                    std::process::exit(1);
-                },
-            );
+            let vpath = VirtualPath::virtualize(project_root, &file).unwrap_or_else(|e| {
+                eprintln!("error: invalid path: {e}");
+                std::process::exit(1);
+            });
             let main = RootedPath::new(VirtualRoot::Project, vpath).intern();
 
             // Build library with the HTML feature enabled.
@@ -115,12 +113,11 @@ fn main() {
 
             match result {
                 Ok(doc) => {
-                    let html = typst_html::html(&doc, &HtmlOptions::default()).unwrap_or_else(
-                        |e| {
+                    let html =
+                        typst_html::html(&doc, &HtmlOptions::default()).unwrap_or_else(|e| {
                             eprintln!("error: failed to encode HTML: {e:?}");
                             std::process::exit(1);
-                        },
-                    );
+                        });
                     println!("{html}");
                 }
                 Err(errors) => {
