@@ -5,3 +5,6 @@ edition = "2024"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
+fontdb = "0.23"
+typst = "0.15.1"
+typst-html = "0.15.1"
