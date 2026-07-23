@@ -15,6 +15,18 @@ use typst_kit::files::{FileStore, FsRoot, SystemFiles};
 use typst_kit::fonts::FontStore;
 use typst_kit::packages::SystemPackages;
 
+/// Search upward from `dir` for an `aster.toml` file.
+fn find_project_root(dir: &std::path::Path) -> Option<PathBuf> {
+    let mut current = Some(dir);
+    while let Some(path) = current {
+        if path.join("aster.toml").exists() {
+            return Some(path.to_owned());
+        }
+        current = path.parent();
+    }
+    None
+}
+
 /// A World that compiles a single project with package support.
 struct CompileWorld {
     library: LazyHash<Library>,
@@ -79,27 +91,33 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Build a typst file to HTML
-    Build {
-        /// The typst file to compile
-        file: PathBuf,
-    },
+    /// Build the project
+    Build,
 }
 
 fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Build { file } => {
-            // Canonicalize the input file path to turn it into an absolute path
-            // from which we can derive the project root.
-            let file = std::path::absolute(&file).unwrap_or_else(|e| {
-                eprintln!("error: failed to resolve '{}': {}", file.display(), e);
+        Commands::Build => {
+            // Search upward from the current directory for an aster.toml.
+            let cwd = std::env::current_dir().unwrap_or_else(|e| {
+                eprintln!("error: failed to get current directory: {e}");
+                std::process::exit(1);
+            });
+            let project_root = find_project_root(&cwd).unwrap_or_else(|| {
+                eprintln!("error: no aster.toml found in current or parent directories");
                 std::process::exit(1);
             });
 
-            let project_root = file.parent().unwrap();
-            let vpath = VirtualPath::virtualize(project_root, &file).unwrap_or_else(|e| {
+            // The entry point is src/index.typ relative to the project root.
+            let entry = project_root.join("src").join("index.typ");
+            if !entry.exists() {
+                eprintln!("error: src/index.typ not found in project");
+                std::process::exit(1);
+            }
+
+            let vpath = VirtualPath::virtualize(&project_root, &entry).unwrap_or_else(|e| {
                 eprintln!("error: invalid path: {e}");
                 std::process::exit(1);
             });
@@ -116,7 +134,7 @@ fn main() {
             // Set up package resolution (local data → cache → universe).
             let downloader = SystemDownloader::new("aster/0.1.0");
             let packages = SystemPackages::new(downloader);
-            let project = FsRoot::new(project_root.to_owned());
+            let project = FsRoot::new(project_root);
             let system_files = SystemFiles::new(project, packages);
 
             let world = CompileWorld {
