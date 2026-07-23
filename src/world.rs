@@ -75,10 +75,8 @@ pub fn build_library() -> Library {
 
 /// Build a fresh world for the given entry point.
 pub fn build_world(entry: &Path, project_root: &Path, library: &Library) -> CompileWorld {
-    let vpath = VirtualPath::virtualize(project_root, entry).unwrap_or_else(|e| {
-        eprintln!("error: invalid path: {e}");
-        std::process::exit(1);
-    });
+    let vpath = VirtualPath::virtualize(project_root, entry)
+        .expect("entry must be inside project root");
     let main = RootedPath::new(VirtualRoot::Project, vpath).intern();
 
     let mut fonts = FontStore::new();
