@@ -46,14 +46,17 @@ fn build() -> Result<()> {
     let mut has_errors = false;
 
     for entry in &entries {
-        let relative = entry.strip_prefix(&src_dir).expect("file must be under src/");
+        let relative = entry
+            .strip_prefix(&src_dir)
+            .expect("file must be under src/");
         let output = root.join("dist").join(relative).with_extension("html");
 
         match compile::run(entry, &root) {
             Ok(html) => {
                 if let Some(parent) = output.parent() {
-                    std::fs::create_dir_all(parent)
-                        .with_context(|| format!("failed to create directory {}", parent.display()))?;
+                    std::fs::create_dir_all(parent).with_context(|| {
+                        format!("failed to create directory {}", parent.display())
+                    })?;
                 }
                 std::fs::write(&output, &html)
                     .with_context(|| format!("failed to write {}", output.display()))?;
