@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
+use termcolor::{ColorChoice, StandardStream};
 use typst::diag::{FileError, SourceResult};
 use typst::foundations::{Bytes, Datetime, Duration};
 use typst::syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot};
@@ -8,6 +9,7 @@ use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
 use typst::{Feature, Features, Library, LibraryExt, World};
 use typst_html::{HtmlDocument, HtmlOptions};
+use typst_kit::diagnostics::{DiagnosticFormat, DiagnosticWorld};
 use typst_kit::downloader::SystemDownloader;
 use typst_kit::files::{FileStore, FsRoot, SystemFiles};
 use typst_kit::fonts::FontStore;
@@ -48,6 +50,23 @@ impl World for CompileWorld {
 
     fn today(&self, _offset: Option<Duration>) -> Option<Datetime> {
         None
+    }
+}
+
+impl DiagnosticWorld for CompileWorld {
+    fn name(&self, id: FileId) -> String {
+        let cwd = std::env::current_dir().ok();
+        self.files
+            .loader()
+            .resolve(id)
+            .ok()
+            .and_then(|p| {
+                cwd.as_ref()
+                    .and_then(|cwd| p.strip_prefix(cwd).ok())
+                    .map(|p| p.display().to_string())
+                    .or_else(|| Some(p.display().to_string()))
+            })
+            .unwrap_or_else(|| id.vpath().get_with_slash().to_string())
     }
 }
 
@@ -121,8 +140,19 @@ fn main() {
                     println!("{html}");
                 }
                 Err(errors) => {
-                    for err in &errors {
-                        eprintln!("error: {err:?}");
+                    let mut diagnostic_writer = StandardStream::stderr(ColorChoice::Auto);
+                    if typst_kit::diagnostics::emit(
+                        &mut diagnostic_writer,
+                        &world,
+                        &errors,
+                        DiagnosticFormat::Human,
+                    )
+                    .is_err()
+                    {
+                        // Fallback: print raw diagnostic.
+                        for err in &errors {
+                            eprintln!("error: {err:?}");
+                        }
                     }
                     std::process::exit(1);
                 }
