@@ -8,14 +8,17 @@ use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
 use typst::{Feature, Features, Library, LibraryExt, World};
 use typst_html::{HtmlDocument, HtmlOptions};
+use typst_kit::downloader::SystemDownloader;
+use typst_kit::files::{FileStore, FsRoot, SystemFiles};
+use typst_kit::fonts::FontStore;
+use typst_kit::packages::SystemPackages;
 
-/// A minimal World that compiles a single file.
+/// A World that compiles a single project with package support.
 struct CompileWorld {
     library: LazyHash<Library>,
-    book: LazyHash<FontBook>,
+    fonts: FontStore,
+    files: FileStore<SystemFiles>,
     main: FileId,
-    source: Source,
-    fonts: Vec<Font>,
 }
 
 impl World for CompileWorld {
@@ -24,7 +27,7 @@ impl World for CompileWorld {
     }
 
     fn book(&self) -> &LazyHash<FontBook> {
-        &self.book
+        self.fonts.book()
     }
 
     fn main(&self) -> FileId {
@@ -32,19 +35,15 @@ impl World for CompileWorld {
     }
 
     fn source(&self, id: FileId) -> Result<Source, FileError> {
-        if id == self.main {
-            Ok(self.source.clone())
-        } else {
-            Err(FileError::NotFound(PathBuf::new()))
-        }
+        self.files.source(id)
     }
 
-    fn file(&self, _id: FileId) -> Result<Bytes, FileError> {
-        Err(FileError::NotFound(PathBuf::new()))
+    fn file(&self, id: FileId) -> Result<Bytes, FileError> {
+        self.files.file(id)
     }
 
     fn font(&self, index: usize) -> Option<Font> {
-        self.fonts.get(index).cloned()
+        self.fonts.font(index)
     }
 
     fn today(&self, _offset: Option<Duration>) -> Option<Datetime> {
@@ -73,61 +72,41 @@ fn main() {
 
     match cli.command {
         Commands::Build { file } => {
-            let content = std::fs::read_to_string(&file).unwrap_or_else(|e| {
-                eprintln!("error: failed to read '{}': {}", file.display(), e);
+            // Canonicalize the input file path to turn it into an absolute path
+            // from which we can derive the project root.
+            let file = std::path::absolute(&file).unwrap_or_else(|e| {
+                eprintln!("error: failed to resolve '{}': {}", file.display(), e);
                 std::process::exit(1);
             });
+
+            let project_root = file.parent().unwrap();
+            let vpath = VirtualPath::virtualize(project_root, &file).unwrap_or_else(
+                |e| {
+                    eprintln!("error: invalid path: {e}");
+                    std::process::exit(1);
+                },
+            );
+            let main = RootedPath::new(VirtualRoot::Project, vpath).intern();
 
             // Build library with the HTML feature enabled.
             let features: Features = [Feature::Html].into_iter().collect();
             let library = Library::builder().with_features(features).build();
 
-            // Discover system fonts using fontdb.
-            let mut fontdb = fontdb::Database::new();
-            fontdb.load_system_fonts();
+            // Set up font discovery (system fonts, lazily loaded).
+            let mut fonts = FontStore::new();
+            fonts.extend(typst_kit::fonts::system());
 
-            let mut fonts = Vec::new();
-            let mut infos = Vec::new();
-
-            for face in fontdb.faces() {
-                let face_data: Option<Vec<u8>> = match &face.source {
-                    fontdb::Source::Binary(arc) => {
-                        let slice: &[u8] = (**arc).as_ref().as_ref();
-                        Some(slice.to_vec())
-                    }
-                    fontdb::Source::File(path) => std::fs::read(path).ok(),
-                    fontdb::Source::SharedFile(_, arc) => {
-                        let slice: &[u8] = (**arc).as_ref().as_ref();
-                        Some(slice.to_vec())
-                    }
-                };
-
-                if let Some(data) = face_data {
-                    let bytes = Bytes::new(data);
-                    for font in Font::iter(bytes) {
-                        infos.push(font.info().clone());
-                        fonts.push(font);
-                    }
-                }
-            }
-
-            let book = FontBook::from_infos(infos);
-
-            // Set up the main source file.
-            let vpath = VirtualPath::new(file.to_string_lossy()).unwrap_or_else(|e| {
-                eprintln!("error: invalid path: {e}");
-                std::process::exit(1);
-            });
-            let rooted = RootedPath::new(VirtualRoot::Project, vpath);
-            let id = rooted.intern();
-            let source = Source::new(id, content);
+            // Set up package resolution (local data → cache → universe).
+            let downloader = SystemDownloader::new("aster/0.1.0");
+            let packages = SystemPackages::new(downloader);
+            let project = FsRoot::new(project_root.to_owned());
+            let system_files = SystemFiles::new(project, packages);
 
             let world = CompileWorld {
                 library: LazyHash::new(library),
-                book: LazyHash::new(book),
-                main: id,
-                source,
                 fonts,
+                files: FileStore::new(system_files),
+                main,
             };
 
             // Compile to HTML.
@@ -136,11 +115,12 @@ fn main() {
 
             match result {
                 Ok(doc) => {
-                    let html =
-                        typst_html::html(&doc, &HtmlOptions::default()).unwrap_or_else(|e| {
+                    let html = typst_html::html(&doc, &HtmlOptions::default()).unwrap_or_else(
+                        |e| {
                             eprintln!("error: failed to encode HTML: {e:?}");
                             std::process::exit(1);
-                        });
+                        },
+                    );
                     println!("{html}");
                 }
                 Err(errors) => {
