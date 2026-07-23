@@ -1,14 +1,22 @@
-mod cli;
 mod compile;
 mod project;
 mod world;
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
-use termcolor::{ColorChoice, StandardStream};
-use typst_kit::diagnostics::DiagnosticFormat;
 
-use cli::{Cli, Commands};
+#[derive(Parser)]
+#[command(name = "aster", version, about = "Aster build system")]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(clap::Subcommand)]
+enum Commands {
+    /// Build the project
+    Build,
+}
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -21,8 +29,8 @@ fn main() -> Result<()> {
 fn build() -> Result<()> {
     let cwd = std::env::current_dir().context("failed to get current directory")?;
 
-    let root = project::find_root(&cwd)
-        .context("no aster.toml found in current or parent directories")?;
+    let root =
+        project::find_root(&cwd).context("no aster.toml found in current or parent directories")?;
 
     let src_dir = root.join("src");
     if !src_dir.is_dir() {
@@ -38,9 +46,7 @@ fn build() -> Result<()> {
     let mut has_errors = false;
 
     for entry in &entries {
-        let relative = entry
-            .strip_prefix(&src_dir)
-            .expect("file must be under src/");
+        let relative = entry.strip_prefix(&src_dir).expect("file must be under src/");
         let output = root.join("dist").join(relative).with_extension("html");
 
         match compile::run(entry, &root) {
@@ -52,23 +58,8 @@ fn build() -> Result<()> {
                 std::fs::write(&output, &html)
                     .with_context(|| format!("failed to write {}", output.display()))?;
             }
-            Err(err) => {
+            Err(_) => {
                 has_errors = true;
-                let relative = relative.with_extension("html");
-                eprintln!("error: failed to build {}", relative.display());
-                let mut writer = StandardStream::stderr(ColorChoice::Auto);
-                if typst_kit::diagnostics::emit(
-                    &mut writer,
-                    &err.world,
-                    &err.diagnostics,
-                    DiagnosticFormat::Human,
-                )
-                .is_err()
-                {
-                    for diag in &err.diagnostics {
-                        eprintln!("error: {diag:?}");
-                    }
-                }
             }
         }
     }
