@@ -45,10 +45,10 @@ pub fn run(entry: &Path, project_root: &Path, inputs: Dict) -> Result<String> {
         .map_err(|_| anyhow::anyhow!("compilation failed"))?;
 
     extract_body(&mut doc);
-    let html = typst_html::html(&doc, &HtmlOptions::default())
+    let style_css = highlight::apply_to_doc(&mut doc, None, None);
+    let body = typst_html::html(&doc, &HtmlOptions::default())
         .map_err(|_| anyhow::anyhow!("failed to encode HTML"))?;
-    let html = strip_shell(&html);
-    Ok(highlight::apply(&html, None, None))
+    Ok(strip_shell(&body) + &style_css)
 }
 
 // ---------------------------------------------------------------------------

@@ -4,6 +4,9 @@ use std::sync::LazyLock;
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{self, Theme, ThemeSettings, Style, FontStyle, Color as SynColor};
 use syntect::parsing::SyntaxSet;
+use typst::ecow::EcoVec;
+use typst::syntax::Span;
+use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 
 static SS: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
 
@@ -66,78 +69,105 @@ fn build_theme(name: &str, fg: Rgb, rules: &[Rule]) -> Theme {
     Theme {
         name: Some(name.into()),
         author: None,
-        settings: ThemeSettings {
-            foreground: Some(color(fg)),
-            ..Default::default()
-        },
-        scopes: rules
-            .iter()
-            .map(|r| {
-                let mut fs = FontStyle::empty();
-                if r.bold   { fs |= FontStyle::BOLD; }
-                if r.italic { fs |= FontStyle::ITALIC; }
-                highlighting::ThemeItem {
-                    scope: r.scope.parse().unwrap(),
-                    style: highlighting::StyleModifier {
-                        foreground: Some(color(r.fg)),
-                        font_style: Some(fs),
-                        ..Default::default()
-                    },
-                }
-            })
-            .collect(),
+        settings: ThemeSettings { foreground: Some(color(fg)), ..Default::default() },
+        scopes: rules.iter().map(|r| {
+            let mut fs = FontStyle::empty();
+            if r.bold   { fs |= FontStyle::BOLD; }
+            if r.italic { fs |= FontStyle::ITALIC; }
+            highlighting::ThemeItem {
+                scope: r.scope.parse().unwrap(),
+                style: highlighting::StyleModifier {
+                    foreground: Some(color(r.fg)),
+                    font_style: Some(fs),
+                    ..Default::default()
+                },
+            }
+        }).collect(),
     }
 }
 
 // ---------------------------------------------------------------------------
-// Public API
+// DOM‑level API — apply highlighting in-place on an HtmlDocument
 // ---------------------------------------------------------------------------
 
-/// Post-process an HTML string: find every `<code data-lang="X">` block,
-/// re-highlight it with both themes, replace its contents with dual‑theme
-/// `<span>` tags, and inject a `<style>` block into the output.
-pub fn apply(html: &str, light: Option<&Theme>, dark: Option<&Theme>) -> String {
+/// Re‑highlight every `<code>` element that carries a `data-lang` attribute,
+/// replacing its children with `<span class="hl-N">` elements, and return a
+/// CSS style block string (to be injected by the caller after serialization).
+pub fn apply_to_doc(
+    doc: &mut HtmlDocument,
+    light: Option<&Theme>,
+    dark: Option<&Theme>,
+) -> String {
     let light = light.unwrap_or(&LIGHT);
     let dark = dark.unwrap_or(&DARK);
 
-    let mut result = String::with_capacity(html.len() + 4096);
-    let mut style = String::new();
-    // Maps (light_rgb, dark_rgb, fontstyle_bits) → class index.
     let mut cls: Vec<(Rgb, Rgb, u8)> = Vec::new();
+    let root = doc.root_mut();
 
-    let mut pos = 0;
-    while let Some(start) = html[pos..].find("<code") {
-        let abs = pos + start;
-        let rest = &html[abs..];
+    walk_code_blocks(root, light, dark, &mut cls);
 
-        // Must have data-lang=; otherwise skip.
-        let Some(lang_start) = rest.find("data-lang=") else {
-            pos = abs + 5; continue
-        };
-        let after_eq  = &rest[lang_start + 10..];
-        let q = char::from(after_eq.as_bytes().first().copied().unwrap_or(b'"'));
-        let end_q = after_eq[1..].find(q).map(|i| i + 1).unwrap_or(0);
-        let lang = &after_eq[1..end_q];
+    // Build CSS
+    if cls.is_empty() {
+        return String::new();
+    }
+    let mut style = String::from("<style>\n");
+    for (i, &((lr,lg,lb), _, bits)) in cls.iter().enumerate() {
+        let mut s = format!("color:#{lr:02x}{lg:02x}{lb:02x}");
+        if bits & 1 != 0 { s.push_str(";font-weight:bold"); }
+        if bits & 2 != 0 { s.push_str(";font-style:italic"); }
+        let _ = writeln!(style, ".hl-{i}{{{s}}}");
+    }
+    style.push_str("@media(prefers-color-scheme:dark){\n");
+    for (i, &(_, (dr,dg,db), bits)) in cls.iter().enumerate() {
+        let mut s = format!("color:#{dr:02x}{dg:02x}{db:02x}");
+        if bits & 1 != 0 { s.push_str(";font-weight:bold"); }
+        if bits & 2 != 0 { s.push_str(";font-style:italic"); }
+        let _ = writeln!(style, ".hl-{i}{{{s}}}");
+    }
+    style.push_str("}\n</style>\n");
+    style
+}
 
-        let after_open = rest.find('>').map(|i| i + 1).unwrap_or(0);
-        let inner = &rest[after_open..];
-        let Some(end_tag) = inner.find("</code>") else { pos = abs + 5; continue };
+// ---------------------------------------------------------------------------
+// DOM walk helpers
+// ---------------------------------------------------------------------------
 
-        let inner_html = &inner[..end_tag];
-        let raw = strip_html(inner_html).trim().to_owned();
+fn walk_code_blocks(
+    elem: &mut HtmlElement,
+    light: &Theme,
+    dark: &Theme,
+    cls: &mut Vec<(Rgb, Rgb, u8)>,
+) {
+    // Find <code> elements with data-lang
+    let is_code = elem.tag == typst_html::tag::code;
+    let lang = if is_code {
+        elem.attrs.0.iter().find_map(|(attr, val)| {
+            if *attr.resolve() == *"data-lang" { Some(val.clone()) } else { None }
+        })
+    } else {
+        None
+    };
 
-        // Re-highlight
-        let ltokens = highlight(&raw, lang, light);
-        let dtokens = highlight(&raw, lang, dark);
+    if let Some(lang_str) = lang {
+        // Extract raw text from children
+        let raw = collect_text(&elem.children);
+        if raw.trim().is_empty() {
+            // Still recurse into children for nested <code> (shouldn't happen)
+            for child in elem.children.make_mut().iter_mut() {
+                if let HtmlNode::Element(e) = child {
+                    walk_code_blocks(e, light, dark, cls);
+                }
+            }
+            return;
+        }
 
-        // Write everything before this tag
-        result.push_str(&html[pos..abs]);
+        // Re‑highlight
+        let ltokens = highlight(&raw, &lang_str, light);
+        let dtokens = highlight(&raw, &lang_str, dark);
 
-        // Open tag
-        let tag_end = rest.find('>').map(|i| i + 1).unwrap_or(0);
-        result.push_str(&rest[..tag_end]);
-
-        // Emit dual‑theme spans
+        // Build new children: <span class="hl-N">token</span>
+        let mut new_children = EcoVec::new();
+        // █ a span that holds consecutive identical-style tokens
         for ((ls, ltxt), (ds, _)) in ltokens.iter().zip(dtokens.iter()) {
             let lfg = (ls.foreground.r, ls.foreground.g, ls.foreground.b);
             let dfg = (ds.foreground.r, ds.foreground.g, ds.foreground.b);
@@ -146,55 +176,43 @@ pub fn apply(html: &str, light: Option<&Theme>, dark: Option<&Theme>) -> String 
             let idx = cls.iter().position(|&(l, d, b)| l == lfg && d == dfg && b == bits)
                 .unwrap_or_else(|| { cls.push((lfg, dfg, bits)); cls.len() - 1 });
 
-            let txt = ltxt
-                .replace('&', "&amp;")
-                .replace('<', "&lt;")
-                .replace('>', "&gt;");
-
             if lfg == (0,0,0) && dfg == (0,0,0) && bits == 0 {
-                result.push_str(&txt);
+                // Plain text — avoid wasteful spans
+                new_children.push(HtmlNode::Text(ltxt.clone().into(), Span::detached()));
             } else {
-                let _ = write!(result, r#"<span class="hl-{idx}">{txt}</span>"#);
+                let mut span = HtmlElement::new(typst_html::tag::span);
+                span.attrs.push(typst_html::attr::class, format!("hl-{idx}"));
+                span.children.push(HtmlNode::Text(ltxt.clone().into(), Span::detached()));
+                new_children.push(HtmlNode::Element(span));
             }
         }
-
-        result.push_str("</code>");
-        pos = abs + after_open + end_tag + "</code>".len();
-    }
-    result.push_str(&html[pos..]);
-
-    // Build style block
-    if !cls.is_empty() {
-        style.push_str("<style>\n");
-        for (i, &((lr,lg,lb), (_dr,_dg,_db), bits)) in cls.iter().enumerate() {
-            let mut s = format!("color:#{lr:02x}{lg:02x}{lb:02x}");
-            if bits & 1 != 0 { s.push_str(";font-weight:bold"); }
-            if bits & 2 != 0 { s.push_str(";font-style:italic"); }
-            let _ = writeln!(style, ".hl-{i}{{{s}}}");
-        }
-        style.push_str("@media(prefers-color-scheme:dark){\n");
-        for (i, &((_,_,_), (dr,dg,db), bits)) in cls.iter().enumerate() {
-            let mut s = format!("color:#{dr:02x}{dg:02x}{db:02x}");
-            if bits & 1 != 0 { s.push_str(";font-weight:bold"); }
-            if bits & 2 != 0 { s.push_str(";font-style:italic"); }
-            let _ = writeln!(style, ".hl-{i}{{{s}}}");
-        }
-        style.push_str("}\n</style>\n");
-    }
-
-    if !style.is_empty() {
-        if let Some(body) = result.rfind("</body>") {
-            result.insert_str(body, &style);
-        } else {
-            result.push_str(&style);
+        elem.children = new_children;
+    } else {
+        // Recurse
+        for child in elem.children.make_mut().iter_mut() {
+            if let HtmlNode::Element(e) = child {
+                walk_code_blocks(e, light, dark, cls);
+            }
         }
     }
+}
 
-    result
+/// Collect text content from a flat list of child nodes (recursing into
+/// elements but ignoring Tag / Frame markers).
+fn collect_text(nodes: &[HtmlNode]) -> String {
+    let mut out = String::new();
+    for node in nodes {
+        match node {
+            HtmlNode::Text(t, _) => out.push_str(t),
+            HtmlNode::Element(e) => out.push_str(&collect_text(&e.children)),
+            _ => {}
+        }
+    }
+    out
 }
 
 // ---------------------------------------------------------------------------
-// Highlight a single block of code, return (Style, text) pairs.
+// Syntect highlighting
 // ---------------------------------------------------------------------------
 
 fn highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(Style, String)> {
@@ -212,47 +230,11 @@ fn highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(Style, String)> {
                 out.push((*st, txt.to_string()));
             }
         }
-        // Syntect 5.x omits the newline; add one explicitly.
         out.push((Style {
             foreground: theme.settings.foreground.unwrap_or(SynColor::BLACK),
             background: SynColor::WHITE,
             font_style: FontStyle::empty(),
         }, "\n".into()));
-    }
-    out
-}
-
-/// Strip HTML tags & entities to recover raw text.
-fn strip_html(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    let (mut tag, mut ent) = (false, false);
-    let mut ent_buf = String::new();
-
-    for c in s.chars() {
-        match c {
-            '<' => tag = true,
-            '>' if tag => tag = false,
-            _ if tag => {}
-            '&' => { ent = true; ent_buf.clear(); }
-            ';' if ent => {
-                let e = ent_buf.as_str();
-                match e {
-                    "amp"  => out.push('&'),
-                    "lt"   => out.push('<'),
-                    "gt"   => out.push('>'),
-                    "quot" => out.push('"'),
-                    "apos" => out.push('\''),
-                    _ if e.starts_with('#') => {
-                        let n: u32 = e[1..].parse().unwrap_or(0);
-                        if let Some(ch) = char::from_u32(n) { out.push(ch); }
-                    }
-                    _ => {}
-                }
-                ent = false;
-            }
-            _ if ent => ent_buf.push(c),
-            _ => out.push(c),
-        }
     }
     out
 }
