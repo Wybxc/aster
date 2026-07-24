@@ -8,6 +8,7 @@ use typst::foundations::Dict;
 use typst_html::{HtmlDocument, HtmlNode, HtmlOptions, HtmlTag};
 use typst_kit::diagnostics::{self, DiagnosticFormat, DiagnosticWorld};
 
+use crate::highlight;
 use crate::world::{build_library, build_world};
 
 // ---------------------------------------------------------------------------
@@ -46,7 +47,8 @@ pub fn run(entry: &Path, project_root: &Path, inputs: Dict) -> Result<String> {
     extract_body(&mut doc);
     let html = typst_html::html(&doc, &HtmlOptions::default())
         .map_err(|_| anyhow::anyhow!("failed to encode HTML"))?;
-    Ok(strip_shell(&html))
+    let html = strip_shell(&html);
+    Ok(highlight::apply(&html, None, None))
 }
 
 // ---------------------------------------------------------------------------

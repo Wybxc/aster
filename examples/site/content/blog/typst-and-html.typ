@@ -20,7 +20,7 @@ pages can import `lib/aster/content.typ` and use `#get-collection()`,
 
 The data flowing between phases uses a simple protocol:
 
-```typ
+```typc
 state.protocol = 1
 collections.blog."hello-world".rendered = (
   (kind: "element", tag: "h2", attrs: (:), children: (
