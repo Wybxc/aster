@@ -1,9 +1,8 @@
-use std::collections::HashMap;
 use std::fmt::Write;
 use std::sync::LazyLock;
 
 use syntect::easy::HighlightLines;
-use syntect::highlighting::{self, ThemeSet, Theme, FontStyle, Color as SynColor};
+use syntect::highlighting::{Color as SynColor, FontStyle, Theme, ThemeSet};
 use syntect::parsing::SyntaxSet;
 use typst::ecow::EcoVec;
 use typst::syntax::Span;
@@ -38,15 +37,23 @@ pub fn rehighlight(doc: &mut HtmlDocument) -> String {
     let mut style = String::from("<style>\n");
     for (i, &((lr, lg, lb), _, bits)) in cls.iter().enumerate() {
         let mut s = format!("color:#{lr:02x}{lg:02x}{lb:02x}");
-        if bits & 1 != 0 { s.push_str(";font-weight:bold"); }
-        if bits & 2 != 0 { s.push_str(";font-style:italic"); }
+        if bits & 1 != 0 {
+            s.push_str(";font-weight:bold");
+        }
+        if bits & 2 != 0 {
+            s.push_str(";font-style:italic");
+        }
         let _ = writeln!(style, ".hl-{i}{{{s}}}");
     }
     style.push_str("@media(prefers-color-scheme:dark){\n");
     for (i, &(_, (dr, dg, db), bits)) in cls.iter().enumerate() {
         let mut s = format!("color:#{dr:02x}{dg:02x}{db:02x}");
-        if bits & 1 != 0 { s.push_str(";font-weight:bold"); }
-        if bits & 2 != 0 { s.push_str(";font-style:italic"); }
+        if bits & 1 != 0 {
+            s.push_str(";font-weight:bold");
+        }
+        if bits & 2 != 0 {
+            s.push_str(";font-style:italic");
+        }
         let _ = writeln!(style, ".hl-{i}{{{s}}}");
     }
     style.push_str("}\n</style>\n");
@@ -55,12 +62,16 @@ pub fn rehighlight(doc: &mut HtmlDocument) -> String {
 
 fn walk(elem: &mut HtmlElement, light: &Theme, dark: &Theme, cls: &mut Vec<(Rgb, Rgb, u8)>) {
     if elem.tag == typst_html::tag::code
-        && let Some(lang) = elem.attrs.0.iter().find_map(|(a, v)| {
-            (*a.resolve() == *"data-lang").then(|| v.clone())
-        })
+        && let Some(lang) = elem
+            .attrs
+            .0
+            .iter()
+            .find_map(|(a, v)| (*a.resolve() == *"data-lang").then(|| v.clone()))
     {
         let raw = collect_text(&elem.children).trim().to_owned();
-        if raw.is_empty() { return; }
+        if raw.is_empty() {
+            return;
+        }
 
         let ltokens = do_highlight(&raw, &lang, light);
         let dtokens = do_highlight(&raw, &lang, dark);
@@ -71,15 +82,22 @@ fn walk(elem: &mut HtmlElement, light: &Theme, dark: &Theme, cls: &mut Vec<(Rgb,
             let dfg = (ds.foreground.r, ds.foreground.g, ds.foreground.b);
             let bits = ls.font_style.bits() | ds.font_style.bits();
 
-            let idx = cls.iter().position(|&(l, d, b)| l == lfg && d == dfg && b == bits)
-                .unwrap_or_else(|| { cls.push((lfg, dfg, bits)); cls.len() - 1 });
+            let idx = cls
+                .iter()
+                .position(|&(l, d, b)| l == lfg && d == dfg && b == bits)
+                .unwrap_or_else(|| {
+                    cls.push((lfg, dfg, bits));
+                    cls.len() - 1
+                });
 
-            if lfg == (0,0,0) && dfg == (0,0,0) && bits == 0 {
+            if lfg == (0, 0, 0) && dfg == (0, 0, 0) && bits == 0 {
                 new_children.push(HtmlNode::Text(ltxt.clone().into(), Span::detached()));
             } else {
                 let mut span = HtmlElement::new(typst_html::tag::span);
-                span.attrs.push(typst_html::attr::class, format!("hl-{idx}"));
-                span.children.push(HtmlNode::Text(ltxt.clone().into(), Span::detached()));
+                span.attrs
+                    .push(typst_html::attr::class, format!("hl-{idx}"));
+                span.children
+                    .push(HtmlNode::Text(ltxt.clone().into(), Span::detached()));
                 new_children.push(HtmlNode::Element(span));
             }
         }
@@ -94,7 +112,11 @@ fn walk(elem: &mut HtmlElement, light: &Theme, dark: &Theme, cls: &mut Vec<(Rgb,
     }
 }
 
-fn do_highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(syntect::highlighting::Style, String)> {
+fn do_highlight(
+    code: &str,
+    lang: &str,
+    theme: &Theme,
+) -> Vec<(syntect::highlighting::Style, String)> {
     let syntax = SS
         .find_syntax_by_token(lang)
         .or_else(|| SS.find_syntax_by_extension(lang))
@@ -104,13 +126,18 @@ fn do_highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(syntect::highligh
     let mut out = Vec::new();
     for line in code.lines() {
         if let Ok(tokens) = hl.highlight_line(line, &SS) {
-            for (st, txt) in &tokens { out.push((*st, txt.to_string())); }
+            for (st, txt) in &tokens {
+                out.push((*st, txt.to_string()));
+            }
         }
-        out.push((syntect::highlighting::Style {
-            foreground: theme.settings.foreground.unwrap_or(SynColor::BLACK),
-            background: SynColor::WHITE,
-            font_style: FontStyle::empty(),
-        }, "\n".into()));
+        out.push((
+            syntect::highlighting::Style {
+                foreground: theme.settings.foreground.unwrap_or(SynColor::BLACK),
+                background: SynColor::WHITE,
+                font_style: FontStyle::empty(),
+            },
+            "\n".into(),
+        ));
     }
     out
 }
