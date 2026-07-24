@@ -48,7 +48,7 @@ pub fn run(entry: &Path, project_root: &Path, inputs: Dict) -> Result<String> {
     let doc = compile_document(entry, project_root, inputs)
         .map_err(|_| anyhow::anyhow!("compilation failed"))?;
 
-    Ok(serialize::serialize_body(&doc))
+    Ok(serialize::serialize_full(&doc))
 }
 
 // ---------------------------------------------------------------------------
