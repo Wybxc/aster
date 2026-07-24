@@ -11,4 +11,5 @@ toml = "1.1"
 typst = "0.15.1"
 typst-html = "0.15.1"
 typst-kit = { version = "0.15.1", features = ["system-files", "system-downloader", "scan-fonts", "emit-diagnostics"] }
+typst-svg = "0.15.1"
 termcolor = "1"

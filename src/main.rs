@@ -1,6 +1,6 @@
 mod compile;
 mod content;
-mod highlight;
+mod html;
 mod project;
 mod world;
 
