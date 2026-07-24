@@ -3,9 +3,9 @@ use std::path::Path;
 use anyhow::{Result, bail};
 use termcolor::{ColorChoice, StandardStream};
 use typst::diag::SourceDiagnostic;
-use typst_kit::diagnostics::{self, DiagnosticFormat, DiagnosticWorld};
 use typst::ecow::EcoVec;
 use typst_html::{HtmlDocument, HtmlNode, HtmlOptions, HtmlTag};
+use typst_kit::diagnostics::{self, DiagnosticFormat, DiagnosticWorld};
 
 use crate::world::{build_library, build_world};
 
@@ -43,26 +43,26 @@ fn extract_body(doc: &mut HtmlDocument) {
     let mut body_children: Option<EcoVec<HtmlNode>> = None;
 
     for child in &root.children {
-        if let HtmlNode::Element(e) = child {
-            if e.tag == typst_html::tag::body {
-                body_children = Some(e.children.clone());
-                break;
-            }
+        if let HtmlNode::Element(e) = child
+            && e.tag == typst_html::tag::body
+        {
+            body_children = Some(e.children.clone());
+            break;
         }
     }
 
     if let Some(children) = body_children {
         root.children = children;
         root.attrs.0.clear();
-        root.tag = HtmlTag::intern("x").expect("'x' is a valid tag name");
+        root.tag = HtmlTag::intern("aster-body").expect("'aster-body' is a valid tag name");
     }
 }
 
-/// Strip the `<!DOCTYPE html><x>` prefix and `</x>` suffix left by
+/// Strip the `<!DOCTYPE html><aster-body>` prefix and `</aster-body>` suffix left by
 /// [`extract_body`].
 fn strip_shell(html: &str) -> String {
-    const PREFIX: &str = "<!DOCTYPE html><x>";
-    const SUFFIX: &str = "</x>";
+    const PREFIX: &str = "<!DOCTYPE html><aster-body>";
+    const SUFFIX: &str = "</aster-body>";
 
     let start = html.find(PREFIX).map(|i| i + PREFIX.len()).unwrap_or(0);
     let end = html.rfind(SUFFIX).unwrap_or(html.len());
