@@ -12,7 +12,9 @@ use crate::compile;
 
 #[derive(Clone)]
 pub enum ContentNode {
-    Text { value: String },
+    Text {
+        value: String,
+    },
     Element {
         tag: String,
         attrs: BTreeMap<String, String>,
@@ -37,7 +39,9 @@ impl ContentNode {
     fn from_node(node: &HtmlNode) -> Result<Option<ContentNode>, String> {
         match node {
             HtmlNode::Element(elem) => Self::from_element(elem).map(Some),
-            HtmlNode::Text(text, _) => Ok(Some(ContentNode::Text { value: text.to_string() })),
+            HtmlNode::Text(text, _) => Ok(Some(ContentNode::Text {
+                value: text.to_string(),
+            })),
             HtmlNode::Frame(_) => Err(
                 "frame-based content is not supported in content collections; \
                  avoid html.frame() in collection entries"
@@ -81,11 +85,16 @@ impl ContentNode {
                 (Str::from("kind"), Value::Str(Str::from("text"))),
                 (Str::from("value"), Value::Str(Str::from(value))),
             ])),
-            ContentNode::Element { tag, attrs, children, void } => {
+            ContentNode::Element {
+                tag,
+                attrs,
+                children,
+                void,
+            } => {
                 let attrs_dict = Value::Dict(Dict::from_iter(
-                    attrs.into_iter().map(|(k, v)| {
-                        (Str::from(k), Value::Str(Str::from(v)))
-                    }),
+                    attrs
+                        .into_iter()
+                        .map(|(k, v)| (Str::from(k), Value::Str(Str::from(v)))),
                 ));
 
                 let children_arr = Value::Array(Array::from_iter(
@@ -149,12 +158,14 @@ pub fn load_collections(
         };
 
         let content_nodes = compile_content_entry(path, project_root, config_inputs.clone())?;
-        cols.entry(collection.clone()).or_default().push(ContentEntry {
-            collection,
-            id: id.clone(),
-            file_path: path.clone(),
-            rendered: content_nodes,
-        });
+        cols.entry(collection.clone())
+            .or_default()
+            .push(ContentEntry {
+                collection,
+                id: id.clone(),
+                file_path: path.clone(),
+                rendered: content_nodes,
+            });
     }
 
     // Build the nested Dict: { "blog": { "post-1": {...}, ... }, ... }
@@ -162,9 +173,8 @@ pub fn load_collections(
     for (col_name, entries) in &cols {
         let mut entry_map = BTreeMap::<Str, Value>::new();
         for entry in entries {
-            let rendered = Array::from_iter(
-                entry.rendered.clone().into_iter().map(|n| n.into_value()),
-            );
+            let rendered =
+                Array::from_iter(entry.rendered.clone().into_iter().map(|n| n.into_value()));
 
             let entry_dict = Dict::from_iter([
                 (Str::from("id"), Value::Str(Str::from(entry.id.as_str()))),
@@ -174,19 +184,14 @@ pub fn load_collections(
                 ),
                 (
                     Str::from("file-path"),
-                    Value::Str(Str::from(
-                        entry.file_path.to_string_lossy().as_ref(),
-                    )),
+                    Value::Str(Str::from(entry.file_path.to_string_lossy().as_ref())),
                 ),
                 (Str::from("rendered"), Value::Array(rendered)),
             ]);
 
             entry_map.insert(Str::from(entry.id.as_str()), Value::Dict(entry_dict));
         }
-        collections_dict.insert(
-            col_name.clone(),
-            Dict::from_iter(entry_map.into_iter()),
-        );
+        collections_dict.insert(col_name.clone(), Dict::from_iter(entry_map.into_iter()));
     }
 
     let mut outer = BTreeMap::<Str, Value>::new();
@@ -208,7 +213,9 @@ fn find_content_typ_files(dir: &Path) -> Vec<PathBuf> {
     };
 
     while let Some(current) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&current) else { continue };
+        let Ok(entries) = std::fs::read_dir(&current) else {
+            continue;
+        };
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
@@ -227,7 +234,7 @@ fn compile_content_entry(
     project_root: &Path,
     inputs: Dict,
 ) -> Result<Vec<ContentNode>, String> {
-    let doc: HtmlDocument = compile::compile_document(entry, project_root, inputs)
-        .map_err(|e| format!("{e:#}"))?;
+    let doc: HtmlDocument =
+        compile::compile_document(entry, project_root, inputs).map_err(|e| format!("{e:#}"))?;
     ContentNode::from_body(&doc)
 }

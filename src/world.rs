@@ -71,7 +71,10 @@ impl DiagnosticWorld for CompileWorld {
 /// `aster.toml`.
 pub fn build_library(inputs: Dict) -> Library {
     let features: Features = [Feature::Html].into_iter().collect();
-    Library::builder().with_inputs(inputs).with_features(features).build()
+    Library::builder()
+        .with_inputs(inputs)
+        .with_features(features)
+        .build()
 }
 
 /// Convert a parsed `toml::Value` into a typst [`Value`].
@@ -82,14 +85,13 @@ fn toml_to_typst(value: &toml::Value) -> Value {
         toml::Value::Float(f) => Value::Float(*f),
         toml::Value::Boolean(b) => Value::Bool(*b),
         toml::Value::Datetime(dt) => Value::Str(Str::from(dt.to_string())),
-        toml::Value::Array(arr) => {
-            Value::Array(arr.iter().map(toml_to_typst).collect())
-        }
-        toml::Value::Table(table) => {
-            Value::Dict(table.iter().map(|(k, v)| {
-                (Str::from(k.as_str()), toml_to_typst(v))
-            }).collect())
-        }
+        toml::Value::Array(arr) => Value::Array(arr.iter().map(toml_to_typst).collect()),
+        toml::Value::Table(table) => Value::Dict(
+            table
+                .iter()
+                .map(|(k, v)| (Str::from(k.as_str()), toml_to_typst(v)))
+                .collect(),
+        ),
     }
 }
 
@@ -97,7 +99,9 @@ fn toml_to_typst(value: &toml::Value) -> Value {
 /// `sys.inputs`.
 pub fn parse_config(path: &Path) -> Result<Dict, String> {
     let content = std::fs::read_to_string(path).map_err(|e| format!("failed to read: {e}"))?;
-    let table: toml::Table = content.parse().map_err(|e| format!("failed to parse: {e}"))?;
+    let table: toml::Table = content
+        .parse()
+        .map_err(|e| format!("failed to parse: {e}"))?;
     let value = toml::Value::Table(table);
     match toml_to_typst(&value) {
         Value::Dict(d) => Ok(d),

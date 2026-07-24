@@ -3,10 +3,15 @@
 // Place this file in your project at lib/aster/content.typ and import:
 //   #import "/lib/aster/content.typ": get-collection, get-entry, render
 
-#let _state = sys.inputs.at("_aster")
+#let _state = sys.inputs.at("_aster", default: none)
+#assert(
+  _state != none,
+  message: "Aster content collections are not available; " +
+    "maybe not running in an Aster project context?"
+)
 #assert(
   _state.protocol == 1,
-  message: "unsupported Aster content protocol — this version of " +
+  message: "unsupported Aster content protocol; this version of " +
     "content.typ is incompatible with the Aster binary",
 )
 
