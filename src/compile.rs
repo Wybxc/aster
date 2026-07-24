@@ -21,18 +21,18 @@ pub fn run(entry: &Path, project_root: &Path) -> Result<String> {
     let warned = typst::compile::<HtmlDocument>(&world);
     emit_diags(&world, &warned.warnings);
 
-    match warned.output {
-        Ok(mut doc) => {
-            extract_body(&mut doc);
-            let html = typst_html::html(&doc, &HtmlOptions::default())
-                .map_err(|_| anyhow::anyhow!("failed to encode HTML"))?;
-            Ok(strip_shell(&html))
-        }
+    let html = match warned.output.and_then(|mut doc| {
+        extract_body(&mut doc);
+        typst_html::html(&doc, &HtmlOptions::default())
+    }) {
+        Ok(html) => strip_shell(&html),
         Err(errors) => {
             emit_diags(&world, &errors);
             bail!("compilation failed")
         }
-    }
+    };
+
+    Ok(html)
 }
 
 /// Replaces the `<html>` element's children with the `<body>`'s children
