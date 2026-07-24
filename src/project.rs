@@ -35,33 +35,6 @@ pub fn find_typ_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
     Ok(files)
 }
 
-/// Collect all `.typ` files under `dir`, silently skipping unreadable entries.
-///
-/// Unlike [`find_typ_files`], this function canonicalises the root directory
-/// and returns an empty vec when that fails — matching the best-effort policy
-/// used for optional content collections.
-pub fn find_typ_files_quiet(dir: &Path) -> Vec<PathBuf> {
-    let mut files = Vec::new();
-    let Ok(mut stack) = dir.canonicalize().map(|p| vec![p]) else {
-        return files;
-    };
-
-    while let Some(current) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&current) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                stack.push(path);
-            } else if path.extension().is_some_and(|ext| ext == "typ") {
-                files.push(path);
-            }
-        }
-    }
-    files
-}
-
 // ---------------------------------------------------------------------------
 // Project layout
 // ---------------------------------------------------------------------------

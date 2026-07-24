@@ -139,12 +139,23 @@ pub fn load_collections(
     project_root: &Path,
     config_inputs: Dict,
 ) -> Result<Value, String> {
-    let typ_files = crate::project::find_typ_files_quiet(content_dir);
+    let typ_files = crate::project::find_typ_files(content_dir)
+        .map_err(|e| format!("failed to scan content directory: {e}"))?;
     // Collect entries per collection.
     let mut cols: BTreeMap<String, Vec<ContentEntry>> = BTreeMap::new();
 
     for path in &typ_files {
         let relative = path.strip_prefix(content_dir).map_err(|_| "path error")?;
+
+        // A valid entry is at least content/<collection>/<file>.typ.
+        if relative.components().count() < 2 {
+            return Err(format!(
+                "entry {:?} is not inside a collection subdirectory; \
+                 expected content/<collection>/.../<id>.typ",
+                path.display()
+            ));
+        }
+
         let mut components = relative.components();
         let collection = components
             .next()
