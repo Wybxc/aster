@@ -36,17 +36,26 @@ pub fn compile_document(
 }
 
 // ---------------------------------------------------------------------------
-// High-level: compile a page → content HTML with syntax highlighting.
+// High-level: compile a page → serialized HTML string.
 //
-// Serializes only the <body> children (no auto-generated shell) and
-// applies dual‑theme syntax highlighting in a single pass.
+// Two serialization modes:
+//   - full  : the entire document tree (for templates using #html.html(...))
+//   - body  : only <body> children  (for simple markup templates)
 // ---------------------------------------------------------------------------
 
 pub fn run(entry: &Path, project_root: &Path, inputs: Dict) -> Result<String> {
     let doc = compile_document(entry, project_root, inputs)
         .map_err(|_| anyhow::anyhow!("compilation failed"))?;
 
-    Ok(serialize::serialize_body(&doc))
+    // Typst's auto-generated <html> always carries lang="en".  When the user
+    // writes #html.html(...), the root has no such attribute.
+    let is_auto = doc.root().attrs.0.iter().any(|(a, v)| *a.resolve() == *"lang" && v == "en");
+
+    if is_auto {
+        Ok(serialize::serialize_body(&doc))
+    } else {
+        Ok(serialize::serialize_full(&doc))
+    }
 }
 
 // ---------------------------------------------------------------------------
