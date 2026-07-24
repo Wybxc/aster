@@ -45,10 +45,10 @@ fn build() -> Result<()> {
     let collections_value = load_collections(&root, config_inputs.clone());
 
     // Build the `_aster` payload.
-    let mut aster_payload = Vec::new();
-    aster_payload.push((Str::from("protocol"), Value::Int(1)));
-    aster_payload.push((Str::from("collections"), collections_value));
-    let aster_payload = Dict::from_iter(aster_payload);
+    let aster_payload = Dict::from_iter([
+        (Str::from("protocol"), Value::Int(1)),
+        (Str::from("collections"), collections_value),
+    ]);
 
     // Final inputs: config + _aster.
     let mut final_inputs_data: Vec<(Str, Value)> = config_inputs.clone().into_iter().collect();

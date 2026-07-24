@@ -191,14 +191,14 @@ pub fn load_collections(
 
             entry_map.insert(Str::from(entry.id.as_str()), Value::Dict(entry_dict));
         }
-        collections_dict.insert(col_name.clone(), Dict::from_iter(entry_map.into_iter()));
+        collections_dict.insert(col_name.clone(), Dict::from_iter(entry_map));
     }
 
     let mut outer = BTreeMap::<Str, Value>::new();
     for (k, v) in collections_dict {
         outer.insert(Str::from(k), Value::Dict(v));
     }
-    Ok(Dict::from_iter(outer.into_iter()))
+    Ok(Dict::from_iter(outer))
 }
 
 // ---------------------------------------------------------------------------

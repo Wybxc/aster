@@ -2,7 +2,7 @@ use std::fmt::Write;
 use std::sync::LazyLock;
 
 use syntect::easy::HighlightLines;
-use syntect::highlighting::{ThemeSet, Theme, FontStyle, Color as SynColor};
+use syntect::highlighting::{Color as SynColor, FontStyle, Theme, ThemeSet};
 use syntect::parsing::SyntaxSet;
 use typst::ecow::EcoVec;
 use typst::syntax::Span;
@@ -26,11 +26,7 @@ const DEFAULT_DARK: &str = "base16-ocean.dark";
 ///
 /// Pass `None` to use the Aster defaults (`InspiredGitHub` light,
 /// `base16-ocean.dark` dark).
-pub fn apply_to_doc(
-    doc: &mut HtmlDocument,
-    light: Option<&str>,
-    dark: Option<&str>,
-) -> String {
+pub fn apply_to_doc(doc: &mut HtmlDocument, light: Option<&str>, dark: Option<&str>) -> String {
     let light = light
         .and_then(|k| THEMES.themes.get(k))
         .unwrap_or_else(|| &THEMES.themes[DEFAULT_LIGHT]);
@@ -48,17 +44,25 @@ pub fn apply_to_doc(
         return String::new();
     }
     let mut style = String::from("<style>\n");
-    for (i, &((lr,lg,lb), _, bits)) in cls.iter().enumerate() {
+    for (i, &((lr, lg, lb), _, bits)) in cls.iter().enumerate() {
         let mut s = format!("color:#{lr:02x}{lg:02x}{lb:02x}");
-        if bits & 1 != 0 { s.push_str(";font-weight:bold"); }
-        if bits & 2 != 0 { s.push_str(";font-style:italic"); }
+        if bits & 1 != 0 {
+            s.push_str(";font-weight:bold");
+        }
+        if bits & 2 != 0 {
+            s.push_str(";font-style:italic");
+        }
         let _ = writeln!(style, ".hl-{i}{{{s}}}");
     }
     style.push_str("@media(prefers-color-scheme:dark){\n");
-    for (i, &(_, (dr,dg,db), bits)) in cls.iter().enumerate() {
+    for (i, &(_, (dr, dg, db), bits)) in cls.iter().enumerate() {
         let mut s = format!("color:#{dr:02x}{dg:02x}{db:02x}");
-        if bits & 1 != 0 { s.push_str(";font-weight:bold"); }
-        if bits & 2 != 0 { s.push_str(";font-style:italic"); }
+        if bits & 1 != 0 {
+            s.push_str(";font-weight:bold");
+        }
+        if bits & 2 != 0 {
+            s.push_str(";font-style:italic");
+        }
         let _ = writeln!(style, ".hl-{i}{{{s}}}");
     }
     style.push_str("}\n</style>\n");
@@ -77,14 +81,13 @@ fn walk_code_blocks(
     dark: &Theme,
     cls: &mut Vec<(Rgb, Rgb, u8)>,
 ) {
-    let is_code = elem.tag == typst_html::tag::code;
-    let lang = is_code.then(|| {
-        elem.attrs.0.iter().find_map(|(attr, val)| {
-            (*attr.resolve() == *"data-lang").then(|| val.clone())
-        })
-    }).flatten();
-
-    if let Some(lang_str) = lang {
+    if elem.tag == typst_html::tag::code
+        && let Some(lang_str) = elem
+            .attrs
+            .0
+            .iter()
+            .find_map(|(attr, val)| (*attr.resolve() == *"data-lang").then(|| val.clone()))
+    {
         let raw = collect_text(&elem.children);
         if raw.trim().is_empty() {
             recurse(elem, light, dark, cls);
@@ -100,15 +103,22 @@ fn walk_code_blocks(
             let dfg = (ds.foreground.r, ds.foreground.g, ds.foreground.b);
             let bits = ls.font_style.bits() | ds.font_style.bits();
 
-            let idx = cls.iter().position(|&(l, d, b)| l == lfg && d == dfg && b == bits)
-                .unwrap_or_else(|| { cls.push((lfg, dfg, bits)); cls.len() - 1 });
+            let idx = cls
+                .iter()
+                .position(|&(l, d, b)| l == lfg && d == dfg && b == bits)
+                .unwrap_or_else(|| {
+                    cls.push((lfg, dfg, bits));
+                    cls.len() - 1
+                });
 
-            if lfg == (0,0,0) && dfg == (0,0,0) && bits == 0 {
+            if lfg == (0, 0, 0) && dfg == (0, 0, 0) && bits == 0 {
                 new_children.push(HtmlNode::Text(ltxt.clone().into(), Span::detached()));
             } else {
                 let mut span = HtmlElement::new(typst_html::tag::span);
-                span.attrs.push(typst_html::attr::class, format!("hl-{idx}"));
-                span.children.push(HtmlNode::Text(ltxt.clone().into(), Span::detached()));
+                span.attrs
+                    .push(typst_html::attr::class, format!("hl-{idx}"));
+                span.children
+                    .push(HtmlNode::Text(ltxt.clone().into(), Span::detached()));
                 new_children.push(HtmlNode::Element(span));
             }
         }
@@ -157,11 +167,14 @@ fn highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(syntect::highlightin
                 out.push((*st, txt.to_string()));
             }
         }
-        out.push((syntect::highlighting::Style {
-            foreground: theme.settings.foreground.unwrap_or(SynColor::BLACK),
-            background: SynColor::WHITE,
-            font_style: FontStyle::empty(),
-        }, "\n".into()));
+        out.push((
+            syntect::highlighting::Style {
+                foreground: theme.settings.foreground.unwrap_or(SynColor::BLACK),
+                background: SynColor::WHITE,
+                font_style: FontStyle::empty(),
+            },
+            "\n".into(),
+        ));
     }
     out
 }

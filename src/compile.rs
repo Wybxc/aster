@@ -37,27 +37,45 @@ pub fn compile_document(
 }
 
 // ---------------------------------------------------------------------------
-// High-level: compile a page → stripped HTML string
+// High-level: compile a page → stripped HTML string.
+//
+// Pages that use `html.html()` produce a full <html> structure directly.
+// Pages that don't get an auto‑generated shell — we strip it so only user
+// content remains.
 // ---------------------------------------------------------------------------
 
 pub fn run(entry: &Path, project_root: &Path, inputs: Dict) -> Result<String> {
     let mut doc = compile_document(entry, project_root, inputs)
         .map_err(|_| anyhow::anyhow!("compilation failed"))?;
 
-    extract_body(&mut doc);
-    let style_css = highlight::apply_to_doc(&mut doc, None, None);
-    let body = typst_html::html(&doc, &HtmlOptions::default())
-        .map_err(|_| anyhow::anyhow!("failed to encode HTML"))?;
-    Ok(strip_shell(&body) + &style_css)
+    // Detect whether this is an auto-generated shell or user-authored HTML.
+    // Typst's auto-generated <html> always has `lang="en"`.  When the user
+    // writes #html.html(...), typst uses it as the document root and the
+    // auto-generated shell is omitted, so `lang="en"` will not be present.
+    let is_auto_shell = doc.root().attrs.0.iter().any(|(attr, val)| {
+        *attr.resolve() == *"lang" && val == "en"
+    });
+
+    if is_auto_shell {
+        // Strip the auto-generated <html><head><body> and keep only content.
+        highlight::apply_to_doc(&mut doc, None, None);
+        extract_body(&mut doc);
+        let body = typst_html::html(&doc, &HtmlOptions::default())
+            .map_err(|_| anyhow::anyhow!("failed to encode HTML"))?;
+        Ok(strip_shell(&body))
+    } else {
+        // User-authored HTML — only remove the DOCTYPE.
+        highlight::apply_to_doc(&mut doc, None, None);
+        let raw = typst_html::html(&doc, &HtmlOptions::default())
+            .map_err(|_| anyhow::anyhow!("failed to encode HTML"))?;
+        Ok(strip_doctype(&raw))
+    }
 }
 
 // ---------------------------------------------------------------------------
-// Body extraction helpers
+// Body / shell extraction
 // ---------------------------------------------------------------------------
 
-/// Replaces the `<html>` element's children with the `<body>`'s children
-/// and replaces its tag with `aster-body`, so that the serialized output has a
-/// trivial wrapper we can strip mechanically.
 fn extract_body(doc: &mut HtmlDocument) {
     let root = doc.root_mut();
     let mut body_children: Option<EcoVec<HtmlNode>> = None;
@@ -78,8 +96,6 @@ fn extract_body(doc: &mut HtmlDocument) {
     }
 }
 
-/// Strip the `<!DOCTYPE html><aster-body>` prefix and `</aster-body>` suffix
-/// left by [`extract_body`].
 fn strip_shell(html: &str) -> String {
     const PREFIX: &str = "<!DOCTYPE html><aster-body>";
     const SUFFIX: &str = "</aster-body>";
@@ -87,6 +103,10 @@ fn strip_shell(html: &str) -> String {
     let start = html.find(PREFIX).map(|i| i + PREFIX.len()).unwrap_or(0);
     let end = html.rfind(SUFFIX).unwrap_or(html.len());
     html[start..end].to_owned()
+}
+
+fn strip_doctype(html: &str) -> String {
+    html.strip_prefix("<!DOCTYPE html>").unwrap_or(html).to_owned()
 }
 
 // ---------------------------------------------------------------------------
