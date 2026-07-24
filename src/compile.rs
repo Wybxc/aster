@@ -7,7 +7,7 @@ use typst::foundations::Dict;
 use typst_html::{HtmlDocument, HtmlOptions};
 use typst_kit::diagnostics::{self, DiagnosticFormat, DiagnosticWorld};
 
-use crate::html as serialize;
+use crate::highlight;
 use crate::world::{build_library, build_world};
 
 // ---------------------------------------------------------------------------
@@ -37,18 +37,23 @@ pub fn compile_document(
 
 // ---------------------------------------------------------------------------
 // High-level: compile a page → serialized HTML string.
-//
-// Serializes only the <body> children, discarding any auto‑generated or
-// user‑authored outer <html>/<head>/<body> tags.  Pages that need full
-// control over the document structure should use a template that does
-// not produce an outer <html> wrapper — the body content is sufficient.
 // ---------------------------------------------------------------------------
 
 pub fn run(entry: &Path, project_root: &Path, inputs: Dict) -> Result<String> {
-    let doc = compile_document(entry, project_root, inputs)
+    let mut doc = compile_document(entry, project_root, inputs)
         .map_err(|_| anyhow::anyhow!("compilation failed"))?;
 
-    Ok(serialize::serialize_full(&doc))
+    let style_css = highlight::rehighlight(&mut doc);
+
+    let raw = typst_html::html(&doc, &HtmlOptions::default())
+        .map_err(|_| anyhow::anyhow!("failed to encode HTML"))?;
+
+    let html = raw
+        .strip_prefix("<!DOCTYPE html>")
+        .unwrap_or(&raw)
+        .to_owned();
+
+    Ok(html + &style_css)
 }
 
 // ---------------------------------------------------------------------------
