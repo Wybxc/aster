@@ -38,24 +38,17 @@ pub fn compile_document(
 // ---------------------------------------------------------------------------
 // High-level: compile a page → serialized HTML string.
 //
-// Two serialization modes:
-//   - full  : the entire document tree (for templates using #html.html(...))
-//   - body  : only <body> children  (for simple markup templates)
+// Serializes only the <body> children, discarding any auto‑generated or
+// user‑authored outer <html>/<head>/<body> tags.  Pages that need full
+// control over the document structure should use a template that does
+// not produce an outer <html> wrapper — the body content is sufficient.
 // ---------------------------------------------------------------------------
 
 pub fn run(entry: &Path, project_root: &Path, inputs: Dict) -> Result<String> {
     let doc = compile_document(entry, project_root, inputs)
         .map_err(|_| anyhow::anyhow!("compilation failed"))?;
 
-    // Typst's auto-generated <html> always carries lang="en".  When the user
-    // writes #html.html(...), the root has no such attribute.
-    let is_auto = doc.root().attrs.0.iter().any(|(a, v)| *a.resolve() == *"lang" && v == "en");
-
-    if is_auto {
-        Ok(serialize::serialize_body(&doc))
-    } else {
-        Ok(serialize::serialize_full(&doc))
-    }
+    Ok(serialize::serialize_body(&doc))
 }
 
 // ---------------------------------------------------------------------------
