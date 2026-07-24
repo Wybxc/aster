@@ -118,10 +118,10 @@ impl ContentNode {
 // ---------------------------------------------------------------------------
 
 pub struct ContentEntry {
-    pub collection: String,
-    pub id: String,
-    pub file_path: PathBuf,
-    pub rendered: Vec<ContentNode>,
+    collection: String,
+    id: String,
+    file_path: PathBuf,
+    rendered: Vec<ContentNode>,
 }
 
 // ---------------------------------------------------------------------------
@@ -129,14 +129,17 @@ pub struct ContentEntry {
 // ---------------------------------------------------------------------------
 
 /// Discover every `.typ` file under `content/`, compile each one as an HTML
-/// document, extract the body DOM, and return a Typst `Dict` suitable for
-/// `sys.inputs._aster.collections`.
+/// document, extract the body DOM, and return the complete `_aster` protocol
+/// value (including protocol version and collections).
+///
+/// The returned `Value` is a `Dict` with keys `protocol` and `collections`,
+/// suitable for `sys.inputs._aster`.
 pub fn load_collections(
     content_dir: &Path,
     project_root: &Path,
     config_inputs: Dict,
-) -> Result<Dict, String> {
-    let typ_files = find_content_typ_files(content_dir);
+) -> Result<Value, String> {
+    let typ_files = crate::project::find_typ_files_quiet(content_dir);
     // Collect entries per collection.
     let mut cols: BTreeMap<String, Vec<ContentEntry>> = BTreeMap::new();
 
@@ -198,35 +201,21 @@ pub fn load_collections(
     for (k, v) in collections_dict {
         outer.insert(Str::from(k), Value::Dict(v));
     }
-    Ok(Dict::from_iter(outer))
+
+    // Build the _aster protocol envelope.
+    let aster_payload = Dict::from_iter([
+        (Str::from("protocol"), Value::Int(1)),
+        (
+            Str::from("collections"),
+            Value::Dict(Dict::from_iter(outer)),
+        ),
+    ]);
+    Ok(Value::Dict(aster_payload))
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/// Recursively collect all `.typ` files under `dir` (iterative, depth-first).
-fn find_content_typ_files(dir: &Path) -> Vec<PathBuf> {
-    let mut files = Vec::new();
-    let Ok(mut stack) = dir.canonicalize().map(|p| vec![p]) else {
-        return files;
-    };
-
-    while let Some(current) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&current) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                stack.push(path);
-            } else if path.extension().is_some_and(|ext| ext == "typ") {
-                files.push(path);
-            }
-        }
-    }
-    files
-}
 
 /// Compile a single content entry to body content nodes.
 fn compile_content_entry(

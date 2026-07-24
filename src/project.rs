@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use typst::foundations::{Dict, Str, Value};
+
 /// Search upward from `dir` for an `aster.toml` file.
 pub fn find_root(dir: &Path) -> Option<PathBuf> {
     let mut current = Some(dir);
@@ -13,6 +15,8 @@ pub fn find_root(dir: &Path) -> Option<PathBuf> {
 }
 
 /// Collect all `.typ` files under `dir` (iterative, depth-first).
+///
+/// Propagates I/O errors from individual entries.
 pub fn find_typ_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
     let mut files = Vec::new();
     let mut stack = vec![dir.to_owned()];
@@ -29,4 +33,96 @@ pub fn find_typ_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
     }
 
     Ok(files)
+}
+
+/// Collect all `.typ` files under `dir`, silently skipping unreadable entries.
+///
+/// Unlike [`find_typ_files`], this function canonicalises the root directory
+/// and returns an empty vec when that fails — matching the best-effort policy
+/// used for optional content collections.
+pub fn find_typ_files_quiet(dir: &Path) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    let Ok(mut stack) = dir.canonicalize().map(|p| vec![p]) else {
+        return files;
+    };
+
+    while let Some(current) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&current) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.extension().is_some_and(|ext| ext == "typ") {
+                files.push(path);
+            }
+        }
+    }
+    files
+}
+
+// ---------------------------------------------------------------------------
+// Project layout
+// ---------------------------------------------------------------------------
+
+/// The page templates directory (`<root>/src`).
+pub fn src_dir(root: &Path) -> PathBuf {
+    root.join("src")
+}
+
+/// The content collections directory (`<root>/content`).
+pub fn content_dir(root: &Path) -> PathBuf {
+    root.join("content")
+}
+
+/// The build output directory (`<root>/dist`).
+pub fn output_dir(root: &Path) -> PathBuf {
+    root.join("dist")
+}
+
+/// Compute the output HTML path for a page template.
+///
+/// Returns `Some(<root>/dist/<relative>.html)` when `page` is inside
+/// `src_dir(root)`, or `None` if it isn't.
+pub fn page_output_path(page: &Path, root: &Path) -> Option<PathBuf> {
+    let src = src_dir(root);
+    let relative = page.strip_prefix(&src).ok()?;
+    Some(output_dir(root).join(relative).with_extension("html"))
+}
+
+// ---------------------------------------------------------------------------
+// Project configuration
+// ---------------------------------------------------------------------------
+
+/// Parse `aster.toml` at the given path and return a [`Dict`] suitable for
+/// `sys.inputs`.
+pub fn parse_config(path: &Path) -> Result<Dict, String> {
+    let content = std::fs::read_to_string(path).map_err(|e| format!("failed to read: {e}"))?;
+    let table: toml::Table = content
+        .parse()
+        .map_err(|e| format!("failed to parse: {e}"))?;
+    let value = toml::Value::Table(table);
+    match toml_to_typst(&value) {
+        Value::Dict(d) => Ok(d),
+        _ => Err("unexpected value type from toml conversion".to_owned()),
+    }
+}
+
+/// Convert a parsed `toml::Value` into a typst [`Value`].
+fn toml_to_typst(value: &toml::Value) -> Value {
+    match value {
+        toml::Value::String(s) => Value::Str(Str::from(s.as_str())),
+        toml::Value::Integer(i) => Value::Int(*i),
+        toml::Value::Float(f) => Value::Float(*f),
+        toml::Value::Boolean(b) => Value::Bool(*b),
+        toml::Value::Datetime(dt) => Value::Str(Str::from(dt.to_string())),
+        toml::Value::Array(arr) => Value::Array(arr.iter().map(toml_to_typst).collect()),
+        toml::Value::Table(table) => Value::Dict(
+            table
+                .iter()
+                .map(|(k, v)| (Str::from(k.as_str()), toml_to_typst(v)))
+                .collect(),
+        ),
+    }
 }
