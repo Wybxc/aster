@@ -32,6 +32,11 @@ fn build() -> Result<()> {
     let root =
         project::find_root(&cwd).context("no aster.toml found in current or parent directories")?;
 
+    // Parse aster.toml and expose its contents as sys.inputs.
+    let config_path = root.join("aster.toml");
+    let inputs = world::parse_config(&config_path)
+        .map_err(|e| anyhow::anyhow!("failed to parse aster.toml: {e}"))?;
+
     let src_dir = root.join("src");
     if !src_dir.is_dir() {
         bail!("src/ directory not found in project");
@@ -51,7 +56,7 @@ fn build() -> Result<()> {
             .expect("file must be under src/");
         let output = root.join("dist").join(relative).with_extension("html");
 
-        match compile::run(entry, &root) {
+        match compile::run(entry, &root, inputs.clone()) {
             Ok(html) => {
                 if let Some(parent) = output.parent() {
                     std::fs::create_dir_all(parent).with_context(|| {

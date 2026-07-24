@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use typst::diag::FileError;
-use typst::foundations::{Bytes, Datetime, Duration};
+use typst::foundations::{Bytes, Datetime, Dict, Duration, Str, Value};
 use typst::syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
@@ -67,10 +67,42 @@ impl DiagnosticWorld for CompileWorld {
     }
 }
 
-/// Build library with the HTML feature enabled.
-pub fn build_library() -> Library {
+/// Build library with the HTML feature enabled and optional inputs from
+/// `aster.toml`.
+pub fn build_library(inputs: Dict) -> Library {
     let features: Features = [Feature::Html].into_iter().collect();
-    Library::builder().with_features(features).build()
+    Library::builder().with_inputs(inputs).with_features(features).build()
+}
+
+/// Convert a parsed `toml::Value` into a typst [`Value`].
+fn toml_to_typst(value: &toml::Value) -> Value {
+    match value {
+        toml::Value::String(s) => Value::Str(Str::from(s.as_str())),
+        toml::Value::Integer(i) => Value::Int(*i),
+        toml::Value::Float(f) => Value::Float(*f),
+        toml::Value::Boolean(b) => Value::Bool(*b),
+        toml::Value::Datetime(dt) => Value::Str(Str::from(dt.to_string())),
+        toml::Value::Array(arr) => {
+            Value::Array(arr.iter().map(toml_to_typst).collect())
+        }
+        toml::Value::Table(table) => {
+            Value::Dict(table.iter().map(|(k, v)| {
+                (Str::from(k.as_str()), toml_to_typst(v))
+            }).collect())
+        }
+    }
+}
+
+/// Parse `aster.toml` at the given path and return a [`Dict`] suitable for
+/// `sys.inputs`.
+pub fn parse_config(path: &Path) -> Result<Dict, String> {
+    let content = std::fs::read_to_string(path).map_err(|e| format!("failed to read: {e}"))?;
+    let table: toml::Table = content.parse().map_err(|e| format!("failed to parse: {e}"))?;
+    let value = toml::Value::Table(table);
+    match toml_to_typst(&value) {
+        Value::Dict(d) => Ok(d),
+        _ => Err("unexpected value type from toml conversion".to_owned()),
+    }
 }
 
 /// Build a fresh world for the given entry point.

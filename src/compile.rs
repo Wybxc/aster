@@ -4,6 +4,7 @@ use anyhow::{Result, bail};
 use termcolor::{ColorChoice, StandardStream};
 use typst::diag::SourceDiagnostic;
 use typst::ecow::EcoVec;
+use typst::foundations::Dict;
 use typst_html::{HtmlDocument, HtmlNode, HtmlOptions, HtmlTag};
 use typst_kit::diagnostics::{self, DiagnosticFormat, DiagnosticWorld};
 
@@ -11,11 +12,10 @@ use crate::world::{build_library, build_world};
 
 /// Compile a single entry point and return the rendered HTML string.
 ///
-/// The output is the inner content of `<body>` — the document shell
-/// (`<html>`, `<head>`, `<body>`) is stripped away by modifying the
-/// document tree before serialization.
-pub fn run(entry: &Path, project_root: &Path) -> Result<String> {
-    let library = build_library();
+/// `inputs` is the [`Dict`] from parsing `aster.toml`, exposed as `sys.inputs`
+/// inside typst source files.
+pub fn run(entry: &Path, project_root: &Path, inputs: Dict) -> Result<String> {
+    let library = build_library(inputs);
     let world = build_world(entry, project_root, &library);
 
     let warned = typst::compile::<HtmlDocument>(&world);
