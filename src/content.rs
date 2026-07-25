@@ -8,123 +8,6 @@ use typst_html::{HtmlDocument, HtmlNode};
 use crate::compile;
 
 // ---------------------------------------------------------------------------
-// Intermediate representation of HTML Content nodes
-// ---------------------------------------------------------------------------
-
-#[derive(Clone)]
-pub enum ContentNode {
-    Text {
-        value: String,
-    },
-    Element {
-        tag: String,
-        attrs: BTreeMap<String, String>,
-        children: Vec<ContentNode>,
-        void: bool,
-    },
-}
-
-impl ContentNode {
-    fn from_body(doc: &HtmlDocument) -> Result<Vec<ContentNode>> {
-        let root = doc.root();
-        for child in &root.children {
-            if let HtmlNode::Element(e) = child
-                && e.tag == typst_html::tag::body
-            {
-                return Self::collect(&e.children);
-            }
-        }
-        Ok(Vec::new())
-    }
-
-    fn from_node(node: &HtmlNode) -> Result<Option<ContentNode>> {
-        match node {
-            HtmlNode::Element(elem) => Self::from_element(elem).map(Some),
-            HtmlNode::Text(text, _) => Ok(Some(ContentNode::Text {
-                value: text.to_string(),
-            })),
-            HtmlNode::Frame(_) => bail!(
-                "frame-based content is not supported in content collections; \
-                 avoid html.frame() in collection entries"
-            ),
-            // Introspection tags carry no DOM — skip silently.
-            HtmlNode::Tag(_) => Ok(None),
-        }
-    }
-
-    fn collect(nodes: &[HtmlNode]) -> Result<Vec<ContentNode>> {
-        let mut out = Vec::new();
-        for node in nodes {
-            if let Some(n) = Self::from_node(node)? {
-                out.push(n);
-            }
-        }
-        Ok(out)
-    }
-
-    fn from_element(elem: &typst_html::HtmlElement) -> Result<ContentNode> {
-        let mut attrs = BTreeMap::new();
-        for (attr, value) in &elem.attrs.0 {
-            attrs.insert(attr.resolve().to_string(), value.to_string());
-        }
-
-        let void = typst_html::tag::is_void(elem.tag);
-        let children = Self::collect(&elem.children)?;
-
-        Ok(ContentNode::Element {
-            tag: elem.tag.resolve().to_string(),
-            attrs,
-            children,
-            void,
-        })
-    }
-
-    pub fn into_value(self) -> Value {
-        match self {
-            ContentNode::Text { value } => Value::Dict(Dict::from_iter([
-                (Str::from("kind"), Value::Str(Str::from("text"))),
-                (Str::from("value"), Value::Str(Str::from(value))),
-            ])),
-            ContentNode::Element {
-                tag,
-                attrs,
-                children,
-                void,
-            } => {
-                let attrs_dict = Value::Dict(Dict::from_iter(
-                    attrs
-                        .into_iter()
-                        .map(|(k, v)| (Str::from(k), Value::Str(Str::from(v)))),
-                ));
-
-                let children_arr = Value::Array(Array::from_iter(
-                    children.into_iter().map(|c| c.into_value()),
-                ));
-
-                Value::Dict(Dict::from_iter([
-                    (Str::from("kind"), Value::Str(Str::from("element"))),
-                    (Str::from("tag"), Value::Str(Str::from(tag))),
-                    (Str::from("attrs"), attrs_dict),
-                    (Str::from("children"), children_arr),
-                    (Str::from("void"), Value::Bool(void)),
-                ]))
-            }
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Per-entry result
-// ---------------------------------------------------------------------------
-
-pub struct ContentEntry {
-    collection: String,
-    id: String,
-    file_path: PathBuf,
-    rendered: Vec<ContentNode>,
-}
-
-// ---------------------------------------------------------------------------
 // Top-level: discover & compile all entries → collections Dict
 // ---------------------------------------------------------------------------
 
@@ -141,8 +24,8 @@ pub fn load_collections(
 ) -> Result<Value> {
     let typ_files =
         crate::project::find_typ_files(content_dir).context("failed to scan content directory")?;
-    // Collect entries per collection.
-    let mut cols: BTreeMap<String, Vec<ContentEntry>> = BTreeMap::new();
+    // Collect rendered body values per collection.
+    let mut cols: BTreeMap<String, Vec<(String, PathBuf, Vec<Value>)>> = BTreeMap::new();
 
     for path in &typ_files {
         let relative = path.strip_prefix(content_dir).context("path error")?;
@@ -171,39 +54,34 @@ pub fn load_collections(
             p.to_string_lossy().to_string()
         };
 
-        let content_nodes = compile_content_entry(path, project_root, config_inputs.clone())?;
+        let rendered = compile_content_entry(path, project_root, config_inputs.clone())?;
         cols.entry(collection.clone())
             .or_default()
-            .push(ContentEntry {
-                collection,
-                id: id.clone(),
-                file_path: path.clone(),
-                rendered: content_nodes,
-            });
+            .push((id, path.clone(), rendered));
     }
 
     // Build the nested Dict: { "blog": { "post-1": {...}, ... }, ... }
     let mut collections_dict = BTreeMap::<String, Dict>::new();
     for (col_name, entries) in &cols {
         let mut entry_map = BTreeMap::<Str, Value>::new();
-        for entry in entries {
-            let rendered =
-                Array::from_iter(entry.rendered.clone().into_iter().map(|n| n.into_value()));
-
+        for (id, file_path, rendered_values) in entries {
             let entry_dict = Dict::from_iter([
-                (Str::from("id"), Value::Str(Str::from(entry.id.as_str()))),
+                (Str::from("id"), Value::Str(Str::from(id.as_str()))),
                 (
                     Str::from("collection"),
-                    Value::Str(Str::from(entry.collection.as_str())),
+                    Value::Str(Str::from(col_name.as_str())),
                 ),
                 (
                     Str::from("file-path"),
-                    Value::Str(Str::from(entry.file_path.to_string_lossy().as_ref())),
+                    Value::Str(Str::from(file_path.to_string_lossy().as_ref())),
                 ),
-                (Str::from("rendered"), Value::Array(rendered)),
+                (
+                    Str::from("rendered"),
+                    Value::Array(Array::from_iter(rendered_values.iter().cloned())),
+                ),
             ]);
 
-            entry_map.insert(Str::from(entry.id.as_str()), Value::Dict(entry_dict));
+            entry_map.insert(Str::from(id.as_str()), Value::Dict(entry_dict));
         }
         collections_dict.insert(col_name.clone(), Dict::from_iter(entry_map));
     }
@@ -228,12 +106,85 @@ pub fn load_collections(
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Compile a single content entry to body content nodes.
+/// Compile a single content entry to body DOM values.
 fn compile_content_entry(
     entry: &Path,
     project_root: &Path,
     inputs: Dict,
-) -> Result<Vec<ContentNode>> {
+) -> Result<Vec<Value>> {
     let doc = compile::compile_document(entry, project_root, inputs)?;
-    ContentNode::from_body(&doc)
+    body_to_values(&doc)
+}
+
+/// Extract the children of `<body>` and convert each to a Typst `Value`.
+fn body_to_values(doc: &HtmlDocument) -> Result<Vec<Value>> {
+    let root = doc.root();
+    for child in &root.children {
+        if let HtmlNode::Element(e) = child
+            && e.tag == typst_html::tag::body
+        {
+            return html_nodes_to_values(&e.children);
+        }
+    }
+    Ok(Vec::new())
+}
+
+/// Convert one `HtmlNode` to a Typst `Value`.
+///
+/// - `Element` → `{kind: "element", tag, attrs, children, void}`
+/// - `Text` → `{kind: "text", value}`
+/// - `Frame` → error (unsupported)
+/// - `Tag` → `None` (silently skipped)
+fn html_node_to_value(node: &HtmlNode) -> Result<Option<Value>> {
+    match node {
+        HtmlNode::Element(elem) => {
+            let mut attrs = BTreeMap::new();
+            for (attr, value) in &elem.attrs.0 {
+                attrs.insert(attr.resolve().to_string(), value.to_string());
+            }
+
+            let void = typst_html::tag::is_void(elem.tag);
+            let children = html_nodes_to_values(&elem.children)?;
+
+            let attrs_dict = Value::Dict(Dict::from_iter(
+                attrs
+                    .into_iter()
+                    .map(|(k, v)| (Str::from(k), Value::Str(Str::from(v)))),
+            ));
+
+            let children_arr = Value::Array(Array::from_iter(children));
+
+            Ok(Some(Value::Dict(Dict::from_iter([
+                (Str::from("kind"), Value::Str(Str::from("element"))),
+                (
+                    Str::from("tag"),
+                    Value::Str(Str::from(elem.tag.resolve().as_str())),
+                ),
+                (Str::from("attrs"), attrs_dict),
+                (Str::from("children"), children_arr),
+                (Str::from("void"), Value::Bool(void)),
+            ]))))
+        }
+        HtmlNode::Text(text, _) => Ok(Some(Value::Dict(Dict::from_iter([
+            (Str::from("kind"), Value::Str(Str::from("text"))),
+            (Str::from("value"), Value::Str(Str::from(text.as_str()))),
+        ])))),
+        HtmlNode::Frame(_) => bail!(
+            "frame-based content is not supported in content collections; \
+             avoid html.frame() in collection entries"
+        ),
+        // Introspection tags carry no DOM — skip silently.
+        HtmlNode::Tag(_) => Ok(None),
+    }
+}
+
+/// Convert a slice of `HtmlNode`s to a `Vec<Value>`.
+fn html_nodes_to_values(nodes: &[HtmlNode]) -> Result<Vec<Value>> {
+    let mut out = Vec::new();
+    for node in nodes {
+        if let Some(v) = html_node_to_value(node)? {
+            out.push(v);
+        }
+    }
+    Ok(out)
 }

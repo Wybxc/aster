@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use syntect::easy::ScopeRegionIterator;
 use syntect::highlighting::{Highlighter, Theme, ThemeSet};
 use syntect::parsing::{ParseState, Scope, ScopeStack, SyntaxSet};
-use typst::ecow::EcoVec;
+use typst::ecow::{EcoVec, eco_format, eco_vec};
 use typst::syntax::{LinkedNode, Span, SyntaxNode, parse_code, parse_math};
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 
@@ -70,7 +70,7 @@ fn walk(elem: &mut HtmlElement, theme: &Theme) {
 
         let mut new_children: EcoVec<HtmlNode> = EcoVec::new();
         for (scope_name, bits, txt) in &tokens {
-            let mut style = format!("color:var(--hl-{scope_name})");
+            let mut style = eco_format!("color:var(--hl-{scope_name})");
             if bits & 1 != 0 {
                 style.push_str(";font-weight:bold");
             }
@@ -78,10 +78,12 @@ fn walk(elem: &mut HtmlElement, theme: &Theme) {
                 style.push_str(";font-style:italic");
             }
 
-            let mut span = HtmlElement::new(typst_html::tag::span);
-            span.attrs.push(typst_html::attr::style, style);
-            span.children
-                .push(HtmlNode::Text(txt.clone().into(), Span::detached()));
+            let span = HtmlElement::new(typst_html::tag::span)
+                .with_attr(typst_html::attr::style, style)
+                .with_children(eco_vec![HtmlNode::Text(
+                    txt.clone().into(),
+                    Span::detached()
+                )]);
             new_children.push(HtmlNode::Element(span));
         }
         elem.children = new_children;
@@ -99,11 +101,7 @@ fn walk(elem: &mut HtmlElement, theme: &Theme) {
 // Syntect-based highlighting (all non-Typst languages)
 // ---------------------------------------------------------------------------
 
-fn do_syntect_highlight(
-    code: &str,
-    lang: &str,
-    theme: &Theme,
-) -> Vec<(String, u8, String)> {
+fn do_syntect_highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(String, u8, String)> {
     let syntax = SS
         .find_syntax_by_token(lang)
         .or_else(|| SS.find_syntax_by_extension(lang))
@@ -112,7 +110,10 @@ fn do_syntect_highlight(
     let highlighter = Highlighter::new(theme);
     let mut parse_state = ParseState::new(syntax);
     let mut scope_stack = ScopeStack::new();
-    let default_fg = theme.settings.foreground.unwrap_or(syntect::highlighting::Color::BLACK);
+    let default_fg = theme
+        .settings
+        .foreground
+        .unwrap_or(syntect::highlighting::Color::BLACK);
     let mut out = Vec::new();
 
     for line in code.lines() {
@@ -150,11 +151,7 @@ fn do_syntect_highlight(
 // Replicates Typst's `ThemedHighlighter` approach but outputs CSS var names.
 // ---------------------------------------------------------------------------
 
-fn do_typst_highlight(
-    code: &str,
-    lang: &str,
-    theme: &Theme,
-) -> Vec<(String, u8, String)> {
+fn do_typst_highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(String, u8, String)> {
     let root: SyntaxNode = match lang {
         "typc" => parse_code(code),
         "typm" => parse_math(code),
@@ -165,7 +162,13 @@ fn do_typst_highlight(
     let mut tokens = Vec::new();
     let mut scopes: Vec<Scope> = Vec::new();
 
-    walk_typst_node(code, &LinkedNode::new(&root), &highlighter, &mut scopes, &mut tokens);
+    walk_typst_node(
+        code,
+        &LinkedNode::new(&root),
+        &highlighter,
+        &mut scopes,
+        &mut tokens,
+    );
 
     // The AST walker emits leaf-node text preserving newlines inside the node
     // range.  To keep clean line structure we split tokens at newline
