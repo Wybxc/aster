@@ -1,17 +1,31 @@
 // Page template: blog index
-// Theme: override --hl-N CSS variables to customize syntax highlighting
-// colors for both light and dark mode.
+// Theme: override --hl-{scope} CSS variables to customize syntax highlighting
+// colors.  Inspect the generated HTML to see which scope names your code
+// produces — run `grep -oE 'var\(--hl-[^)]+\)' dist/*.html | sort -u`.
+// Common examples:
+//   --hl-default          un-tokenised / plain text
+//   --hl-keyword-control  keywords (if, let, fn, …)
+//   --hl-string-quoted    string literals
+//   --hl-comment-line     line comments
+//   --hl-constant-numeric numbers
+//   --hl-entity-name      function / method names
 #let theme-css = "
 :root {
-  --hl-0: #d73a49;
-  --hl-1: #6f42c1;
-  --hl-2: #032f62;
+  --hl-default: #24292e;
+  --hl-keyword-control: #d73a49;
+  --hl-string-quoted: #032f62;
+  --hl-comment-line: #6a737d;
+  --hl-constant-numeric: #6f42c1;
+  --hl-entity-name: #005cc5;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --hl-0: #f97583;
-    --hl-1: #b392f0;
-    --hl-2: #79b8ff;
+    --hl-default: #e1e4e8;
+    --hl-keyword-control: #f97583;
+    --hl-string-quoted: #79b8ff;
+    --hl-comment-line: #959da5;
+    --hl-constant-numeric: #b392f0;
+    --hl-entity-name: #79b8ff;
   }
 }
 "

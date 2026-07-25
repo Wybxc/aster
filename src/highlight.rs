@@ -1,8 +1,8 @@
 use std::sync::LazyLock;
 
-use syntect::easy::HighlightLines;
-use syntect::highlighting::{Color as SynColor, FontStyle, Theme, ThemeSet};
-use syntect::parsing::SyntaxSet;
+use syntect::easy::ScopeRegionIterator;
+use syntect::highlighting::{Highlighter, Theme, ThemeSet};
+use syntect::parsing::{ParseState, Scope, ScopeStack, SyntaxSet};
 use typst::ecow::EcoVec;
 use typst::syntax::Span;
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
@@ -14,38 +14,52 @@ static THEMES: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
 /// font style bits only — actual colors are deferred to CSS variables).
 const TOKEN_THEME: &str = "InspiredGitHub";
 
-type Rgb = (u8, u8, u8);
-
 /// Find every `<code data-lang="X">` in the document and replace its children
-/// with `<span style="color:var(--hl-N)">` tokens.
+/// with `<span style="color:var(--hl-{scope})">` tokens, where `{scope}` is a
+/// semantic name derived from syntect's scope stack.
 ///
-/// Users define the `--hl-N` CSS variables in their own stylesheet to control
-/// syntax highlighting colors for both light and dark mode:
+/// Users define the `--hl-{scope}` CSS variables in their own stylesheet to
+/// control colors for both light and dark mode:
 ///
 /// ```css
 /// :root {
-///   --hl-0: #d73a49;
-///   --hl-1: #6f42c1;
+///   --hl-keyword-control: #d73a49;
+///   --hl-string-quoted: #6f42c1;
 /// }
 /// @media (prefers-color-scheme: dark) {
 ///   :root {
-///     --hl-0: #f97583;
-///     --hl-1: #b392f0;
+///     --hl-keyword-control: #f97583;
+///     --hl-string-quoted: #b392f0;
 ///   }
 /// }
 /// ```
 pub fn rehighlight(doc: &mut HtmlDocument) {
     let theme = &THEMES.themes[TOKEN_THEME];
-    let mut cls: Vec<(Rgb, u8)> = Vec::new();
 
     for child in doc.root_mut().children.make_mut().iter_mut() {
         if let HtmlNode::Element(e) = child {
-            walk(e, theme, &mut cls);
+            walk(e, theme);
         }
     }
 }
 
-fn walk(elem: &mut HtmlElement, theme: &Theme, cls: &mut Vec<(Rgb, u8)>) {
+/// Derive a semantic CSS variable suffix from a scope stack.
+///
+/// Iterates the stack bottom-up (most specific first), returning the first
+/// non-source, non-meta scope's first two dot-separated segments joined by a
+/// hyphen.  Falls back to `"default"`.
+fn scope_css_name(scopes: &[Scope]) -> String {
+    for scope in scopes.iter().rev() {
+        let s = scope.to_string();
+        let parts: Vec<&str> = s.split('.').collect();
+        if parts.len() >= 2 && parts[0] != "source" && parts[0] != "meta" {
+            return format!("{}-{}", parts[0], parts[1]);
+        }
+    }
+    "default".to_string()
+}
+
+fn walk(elem: &mut HtmlElement, theme: &Theme) {
     if elem.tag == typst_html::tag::code
         && let Some(lang) = elem
             .attrs
@@ -61,19 +75,8 @@ fn walk(elem: &mut HtmlElement, theme: &Theme, cls: &mut Vec<(Rgb, u8)>) {
         let tokens = do_highlight(&raw, &lang, theme);
 
         let mut new_children: EcoVec<HtmlNode> = EcoVec::new();
-        for (st, txt) in &tokens {
-            let fg = (st.foreground.r, st.foreground.g, st.foreground.b);
-            let bits = st.font_style.bits();
-
-            let idx = cls
-                .iter()
-                .position(|&(f, b)| f == fg && b == bits)
-                .unwrap_or_else(|| {
-                    cls.push((fg, bits));
-                    cls.len() - 1
-                });
-
-            let mut style = format!("color:var(--hl-{idx})");
+        for (scope_name, bits, txt) in &tokens {
+            let mut style = format!("color:var(--hl-{scope_name})");
             if bits & 1 != 0 {
                 style.push_str(";font-weight:bold");
             }
@@ -93,38 +96,69 @@ fn walk(elem: &mut HtmlElement, theme: &Theme, cls: &mut Vec<(Rgb, u8)>) {
 
     for child in elem.children.make_mut().iter_mut() {
         if let HtmlNode::Element(e) = child {
-            walk(e, theme, cls);
+            walk(e, theme);
         }
     }
 }
 
+/// Tokenise `code` using syntect's lower-level API, returning
+/// `(css_var_suffix, font_style_bits, token_text)` tuples.
+///
+/// Uses `Highlighter` + `ParseState` + `ScopeStack` directly instead of the
+/// easy `HighlightLines` wrapper, so we retain scope information for semantic
+/// CSS variable naming.
 fn do_highlight(
     code: &str,
     lang: &str,
     theme: &Theme,
-) -> Vec<(syntect::highlighting::Style, String)> {
+) -> Vec<(String, u8, String)> {
     let syntax = SS
         .find_syntax_by_token(lang)
         .or_else(|| SS.find_syntax_by_extension(lang))
         .unwrap_or_else(|| SS.find_syntax_plain_text());
 
-    let mut hl = HighlightLines::new(syntax, theme);
+    let highlighter = Highlighter::new(theme);
+    let mut parse_state = ParseState::new(syntax);
+    let mut scope_stack = ScopeStack::new();
+    let default_fg = theme.settings.foreground.unwrap_or(syntect::highlighting::Color::BLACK);
     let mut out = Vec::new();
+
     for line in code.lines() {
-        if let Ok(tokens) = hl.highlight_line(line, &SS) {
-            for (st, txt) in &tokens {
-                out.push((*st, txt.to_string()));
+        let Ok(ops) = parse_state.parse_line(line, &SS) else {
+            continue;
+        };
+
+        for (text, op) in ScopeRegionIterator::new(&ops, line) {
+            // Apply the operation to update the scope stack for this region.
+            let _ = scope_stack.apply(op);
+
+            if text.is_empty() {
+                continue;
             }
+
+            let style = highlighter.style_for_stack(scope_stack.as_slice());
+            let bits = style.font_style.bits();
+            let fg = style.foreground;
+
+            // Tokens whose style matches the theme default get a plain-text
+            // variable name so they can be themed independently.
+            let name = if fg == default_fg && bits == 0 {
+                "default".to_string()
+            } else {
+                scope_css_name(scope_stack.as_slice())
+            };
+
+            out.push((name, bits, text.to_string()));
         }
+
+        // Append a newline separator with the default look.
         out.push((
-            syntect::highlighting::Style {
-                foreground: theme.settings.foreground.unwrap_or(SynColor::BLACK),
-                background: SynColor::WHITE,
-                font_style: FontStyle::empty(),
-            },
+            "default".to_string(),
+            0,
             "\n".into(),
         ));
     }
+
     out
 }
 
