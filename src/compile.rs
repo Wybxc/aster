@@ -140,36 +140,15 @@ pub fn compile_document(entry: &Path, project_root: &Path, inputs: Dict) -> Resu
 pub fn run(entry: &Path, project_root: &Path, inputs: Dict) -> Result<String> {
     let mut doc = compile_document(entry, project_root, inputs)?;
 
-    let style_css = highlight::rehighlight(&mut doc);
+    highlight::rehighlight(&mut doc);
 
     let raw = typst_html::html(&doc, &HtmlOptions::default())
         .map_err(|_| anyhow::anyhow!("failed to encode HTML"))?;
 
-    Ok(finalize_html(&raw, &style_css))
-}
-
-/// Produce the final page HTML: embed the generated stylesheet inside `<head>`
-/// and strip the doctype.
-fn finalize_html(raw: &str, css: &str) -> String {
-    if css.is_empty() {
-        return raw
-            .strip_prefix("<!DOCTYPE html>")
-            .unwrap_or(raw)
-            .to_owned();
-    }
-    if let Some(pos) = raw.find("</head>") {
-        let mut buf = String::with_capacity(raw.len() + css.len());
-        buf.push_str(&raw[..pos]);
-        buf.push_str(css);
-        buf.push_str(&raw[pos..]);
-        buf.strip_prefix("<!DOCTYPE html>")
-            .unwrap_or(&buf)
-            .to_owned()
-    } else {
-        // No <head> element found; fall back to appending after the page.
-        let html = raw.strip_prefix("<!DOCTYPE html>").unwrap_or(raw);
-        format!("{html}{css}")
-    }
+    Ok(raw
+        .strip_prefix("<!DOCTYPE html>")
+        .unwrap_or(&raw)
+        .to_owned())
 }
 
 // ---------------------------------------------------------------------------

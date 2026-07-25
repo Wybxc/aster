@@ -1,4 +1,3 @@
-use std::fmt::Write;
 use std::sync::LazyLock;
 
 use syntect::easy::HighlightLines;
@@ -17,12 +16,11 @@ const TOKEN_THEME: &str = "InspiredGitHub";
 
 type Rgb = (u8, u8, u8);
 
-/// Find every `<code data-lang="X">` in the document, tokenise it, replace its
-/// children with `<span class="hl-N">` and return a `<style>` block that maps
-/// each class to a CSS custom property.
+/// Find every `<code data-lang="X">` in the document and replace its children
+/// with `<span style="color:var(--hl-N)">` tokens.
 ///
-/// The generated CSS uses `var(--hl-N)` instead of hardcoded hex values so
-/// that users can supply their own theme via CSS variables:
+/// Users define the `--hl-N` CSS variables in their own stylesheet to control
+/// syntax highlighting colors for both light and dark mode:
 ///
 /// ```css
 /// :root {
@@ -36,7 +34,7 @@ type Rgb = (u8, u8, u8);
 ///   }
 /// }
 /// ```
-pub fn rehighlight(doc: &mut HtmlDocument) -> String {
+pub fn rehighlight(doc: &mut HtmlDocument) {
     let theme = &THEMES.themes[TOKEN_THEME];
     let mut cls: Vec<(Rgb, u8)> = Vec::new();
 
@@ -45,35 +43,6 @@ pub fn rehighlight(doc: &mut HtmlDocument) -> String {
             walk(e, theme, &mut cls);
         }
     }
-
-    if cls.is_empty() {
-        return String::new();
-    }
-
-    let mut style = String::from("<style>\n");
-    for (i, &((r, g, b), bits)) in cls.iter().enumerate() {
-        let _ = write!(style, ".hl-{i}{{color:var(--hl-{i},#{r:02x}{g:02x}{b:02x})");
-        if bits & 1 != 0 {
-            style.push_str(";font-weight:bold");
-        }
-        if bits & 2 != 0 {
-            style.push_str(";font-style:italic");
-        }
-        style.push_str("}\n");
-    }
-    style.push_str("@media(prefers-color-scheme:dark){\n");
-    for (i, &((r, g, b), bits)) in cls.iter().enumerate() {
-        let _ = write!(style, ".hl-{i}{{color:var(--hl-{i}-dark,#{r:02x}{g:02x}{b:02x})");
-        if bits & 1 != 0 {
-            style.push_str(";font-weight:bold");
-        }
-        if bits & 2 != 0 {
-            style.push_str(";font-style:italic");
-        }
-        style.push_str("}\n");
-    }
-    style.push_str("}\n</style>\n");
-    style
 }
 
 fn walk(elem: &mut HtmlElement, theme: &Theme, cls: &mut Vec<(Rgb, u8)>) {
@@ -104,9 +73,16 @@ fn walk(elem: &mut HtmlElement, theme: &Theme, cls: &mut Vec<(Rgb, u8)>) {
                     cls.len() - 1
                 });
 
+            let mut style = format!("color:var(--hl-{idx})");
+            if bits & 1 != 0 {
+                style.push_str(";font-weight:bold");
+            }
+            if bits & 2 != 0 {
+                style.push_str(";font-style:italic");
+            }
+
             let mut span = HtmlElement::new(typst_html::tag::span);
-            span.attrs
-                .push(typst_html::attr::class, format!("hl-{idx}"));
+            span.attrs.push(typst_html::attr::style, style);
             span.children
                 .push(HtmlNode::Text(txt.clone().into(), Span::detached()));
             new_children.push(HtmlNode::Element(span));
