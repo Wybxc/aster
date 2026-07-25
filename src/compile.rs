@@ -144,11 +144,7 @@ pub fn compile_document(entry: &Path, project_root: &Path, inputs: Dict) -> Resu
 /// Unlike [`compile_document`] which renders to [`HtmlDocument`], this
 /// function stops after evaluation so the result can be embedded as
 /// `Value::Content` in another document's `sys.inputs`.
-pub fn compile_content(
-    entry: &Path,
-    project_root: &Path,
-    inputs: Dict,
-) -> Result<Content> {
+pub fn compile_content(entry: &Path, project_root: &Path, inputs: Dict) -> Result<Content> {
     let library = build_library(inputs);
     let world = build_world(entry, project_root, &library);
 
@@ -169,12 +165,8 @@ pub fn compile_content(
         &source,
     )
     .map_err(|diags| {
-        let mut msg = String::from("evaluation failed");
-        for d in &diags {
-            use std::fmt::Write;
-            let _ = write!(msg, "\n  {d:?}");
-        }
-        anyhow::anyhow!("{msg}")
+        emit_diags(&world, &diags);
+        anyhow::anyhow!("evaluation failed")
     })?;
 
     Ok(module.content())
