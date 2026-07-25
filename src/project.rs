@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use anyhow::{Context, Result, bail};
 use typst::foundations::{Dict, Str, Value};
 
 /// Search upward from `dir` for an `aster.toml` file.
@@ -70,15 +71,16 @@ pub fn page_output_path(page: &Path, root: &Path) -> Option<PathBuf> {
 
 /// Parse `aster.toml` at the given path and return a [`Dict`] suitable for
 /// `sys.inputs`.
-pub fn parse_config(path: &Path) -> Result<Dict, String> {
-    let content = std::fs::read_to_string(path).map_err(|e| format!("failed to read: {e}"))?;
+pub fn parse_config(path: &Path) -> Result<Dict> {
+    let content = std::fs::read_to_string(path)
+        .with_context(|| format!("failed to read {}", path.display()))?;
     let table: toml::Table = content
         .parse()
-        .map_err(|e| format!("failed to parse: {e}"))?;
+        .with_context(|| format!("failed to parse {}", path.display()))?;
     let value = toml::Value::Table(table);
     match toml_to_typst(&value) {
         Value::Dict(d) => Ok(d),
-        _ => Err("unexpected value type from toml conversion".to_owned()),
+        _ => bail!("unexpected value type from toml conversion"),
     }
 }
 

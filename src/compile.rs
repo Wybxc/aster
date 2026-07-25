@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use termcolor::{ColorChoice, StandardStream};
 use typst::diag::{FileError, SourceDiagnostic};
 use typst::foundations::{Bytes, Datetime, Dict, Duration};
@@ -117,11 +117,7 @@ fn build_world(entry: &Path, project_root: &Path, library: &Library) -> CompileW
 // content entries).  Diagnostics are printed to stderr automatically.
 // ---------------------------------------------------------------------------
 
-pub fn compile_document(
-    entry: &Path,
-    project_root: &Path,
-    inputs: Dict,
-) -> Result<HtmlDocument, String> {
+pub fn compile_document(entry: &Path, project_root: &Path, inputs: Dict) -> Result<HtmlDocument> {
     let library = build_library(inputs);
     let world = build_world(entry, project_root, &library);
 
@@ -132,7 +128,7 @@ pub fn compile_document(
         Ok(doc) => Ok(doc),
         Err(errors) => {
             emit_diags(&world, &errors);
-            Err("compilation failed".to_owned())
+            bail!("compilation failed");
         }
     }
 }
@@ -142,8 +138,7 @@ pub fn compile_document(
 // ---------------------------------------------------------------------------
 
 pub fn run(entry: &Path, project_root: &Path, inputs: Dict) -> Result<String> {
-    let mut doc = compile_document(entry, project_root, inputs)
-        .map_err(|_| anyhow::anyhow!("compilation failed"))?;
+    let mut doc = compile_document(entry, project_root, inputs)?;
 
     let style_css = highlight::rehighlight(&mut doc);
 

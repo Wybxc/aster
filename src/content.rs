@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use anyhow::{Context, Result, bail};
 use typst::foundations::{Array, Dict, Str, Value};
 use typst_html::{HtmlDocument, HtmlNode};
 
@@ -24,7 +25,7 @@ pub enum ContentNode {
 }
 
 impl ContentNode {
-    fn from_body(doc: &HtmlDocument) -> Result<Vec<ContentNode>, String> {
+    fn from_body(doc: &HtmlDocument) -> Result<Vec<ContentNode>> {
         let root = doc.root();
         for child in &root.children {
             if let HtmlNode::Element(e) = child
@@ -36,23 +37,22 @@ impl ContentNode {
         Ok(Vec::new())
     }
 
-    fn from_node(node: &HtmlNode) -> Result<Option<ContentNode>, String> {
+    fn from_node(node: &HtmlNode) -> Result<Option<ContentNode>> {
         match node {
             HtmlNode::Element(elem) => Self::from_element(elem).map(Some),
             HtmlNode::Text(text, _) => Ok(Some(ContentNode::Text {
                 value: text.to_string(),
             })),
-            HtmlNode::Frame(_) => Err(
+            HtmlNode::Frame(_) => bail!(
                 "frame-based content is not supported in content collections; \
                  avoid html.frame() in collection entries"
-                    .to_owned(),
             ),
             // Introspection tags carry no DOM — skip silently.
             HtmlNode::Tag(_) => Ok(None),
         }
     }
 
-    fn collect(nodes: &[HtmlNode]) -> Result<Vec<ContentNode>, String> {
+    fn collect(nodes: &[HtmlNode]) -> Result<Vec<ContentNode>> {
         let mut out = Vec::new();
         for node in nodes {
             if let Some(n) = Self::from_node(node)? {
@@ -62,7 +62,7 @@ impl ContentNode {
         Ok(out)
     }
 
-    fn from_element(elem: &typst_html::HtmlElement) -> Result<ContentNode, String> {
+    fn from_element(elem: &typst_html::HtmlElement) -> Result<ContentNode> {
         let mut attrs = BTreeMap::new();
         for (attr, value) in &elem.attrs.0 {
             attrs.insert(attr.resolve().to_string(), value.to_string());
@@ -138,29 +138,29 @@ pub fn load_collections(
     content_dir: &Path,
     project_root: &Path,
     config_inputs: Dict,
-) -> Result<Value, String> {
-    let typ_files = crate::project::find_typ_files(content_dir)
-        .map_err(|e| format!("failed to scan content directory: {e}"))?;
+) -> Result<Value> {
+    let typ_files =
+        crate::project::find_typ_files(content_dir).context("failed to scan content directory")?;
     // Collect entries per collection.
     let mut cols: BTreeMap<String, Vec<ContentEntry>> = BTreeMap::new();
 
     for path in &typ_files {
-        let relative = path.strip_prefix(content_dir).map_err(|_| "path error")?;
+        let relative = path.strip_prefix(content_dir).context("path error")?;
 
         // A valid entry is at least content/<collection>/<file>.typ.
         if relative.components().count() < 2 {
-            return Err(format!(
+            bail!(
                 "entry {:?} is not inside a collection subdirectory; \
                  expected content/<collection>/.../<id>.typ",
                 path.display()
-            ));
+            );
         }
 
         let mut components = relative.components();
         let collection = components
             .next()
             .map(|c| c.as_os_str().to_string_lossy().to_string())
-            .ok_or_else(|| "entry not inside a collection directory".to_owned())?;
+            .context("entry not inside a collection directory")?;
 
         let id = {
             let mut p = PathBuf::new();
@@ -233,8 +233,7 @@ fn compile_content_entry(
     entry: &Path,
     project_root: &Path,
     inputs: Dict,
-) -> Result<Vec<ContentNode>, String> {
-    let doc: HtmlDocument =
-        compile::compile_document(entry, project_root, inputs).map_err(|e| format!("{e:#}"))?;
+) -> Result<Vec<ContentNode>> {
+    let doc = compile::compile_document(entry, project_root, inputs)?;
     ContentNode::from_body(&doc)
 }

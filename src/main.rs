@@ -55,8 +55,8 @@ fn build(project_dir: Option<std::path::PathBuf>) -> Result<()> {
         }
     };
 
-    let config = project::parse_config(&root.join("aster.toml"))
-        .map_err(|e| anyhow::anyhow!("failed to parse aster.toml: {e}"))?;
+    let config =
+        project::parse_config(&root.join("aster.toml")).context("failed to parse aster.toml")?;
 
     let result = pipeline::build(&root, config)?;
     if result.has_errors {
