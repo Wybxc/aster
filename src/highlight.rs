@@ -4,35 +4,29 @@ use syntect::easy::ScopeRegionIterator;
 use syntect::highlighting::{Highlighter, Theme, ThemeSet};
 use syntect::parsing::{ParseState, Scope, ScopeStack, SyntaxSet};
 use typst::ecow::EcoVec;
-use typst::syntax::Span;
+use typst::syntax::{LinkedNode, Span, SyntaxNode, parse_code, parse_math};
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 
 static SS: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
 static THEMES: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
 
-/// Theme used for internal tokenization (determines token boundaries and
-/// font style bits only — actual colors are deferred to CSS variables).
+/// Theme used for internal tokenization.
 const TOKEN_THEME: &str = "InspiredGitHub";
 
+/// Languages that Typst can parse with its own AST.
+/// We replicate Typst's `ThemedHighlighter` approach for these.
+const TYPST_LANGS: &[&str] = &["typ", "typst", "typc", "typm"];
+
 /// Find every `<code data-lang="X">` in the document and replace its children
-/// with `<span style="color:var(--hl-{scope})">` tokens, where `{scope}` is a
-/// semantic name derived from syntect's scope stack.
+/// with `<span style="color:var(--hl-{scope})">` tokens.
 ///
-/// Users define the `--hl-{scope}` CSS variables in their own stylesheet to
-/// control colors for both light and dark mode:
+/// - For Typst languages (`typ`, `typst`, `typc`, `typm`): uses Typst's own
+///   syntax parser + `ThemedHighlighter` scope resolution, but with CSS
+///   variable output.
+/// - For all other languages: uses syntect for tokenisation + scope names.
 ///
-/// ```css
-/// :root {
-///   --hl-keyword-control: #d73a49;
-///   --hl-string-quoted: #6f42c1;
-/// }
-/// @media (prefers-color-scheme: dark) {
-///   :root {
-///     --hl-keyword-control: #f97583;
-///     --hl-string-quoted: #b392f0;
-///   }
-/// }
-/// ```
+/// Users define `--hl-{scope}` CSS variables in their stylesheet to control
+/// colours for both light and dark mode.
 pub fn rehighlight(doc: &mut HtmlDocument) {
     let theme = &THEMES.themes[TOKEN_THEME];
 
@@ -43,11 +37,7 @@ pub fn rehighlight(doc: &mut HtmlDocument) {
     }
 }
 
-/// Derive a semantic CSS variable suffix from a scope stack.
-///
-/// Iterates the stack bottom-up (most specific first), returning the first
-/// non-source, non-meta scope's first two dot-separated segments joined by a
-/// hyphen.  Falls back to `"default"`.
+/// Derive a semantic CSS variable suffix from a slice of scopes.
 fn scope_css_name(scopes: &[Scope]) -> String {
     for scope in scopes.iter().rev() {
         let s = scope.to_string();
@@ -72,7 +62,11 @@ fn walk(elem: &mut HtmlElement, theme: &Theme) {
             return;
         }
 
-        let tokens = do_highlight(&raw, &lang, theme);
+        let tokens = if TYPST_LANGS.contains(&lang.as_str()) {
+            do_typst_highlight(&raw, &lang, theme)
+        } else {
+            do_syntect_highlight(&raw, &lang, theme)
+        };
 
         let mut new_children: EcoVec<HtmlNode> = EcoVec::new();
         for (scope_name, bits, txt) in &tokens {
@@ -101,13 +95,11 @@ fn walk(elem: &mut HtmlElement, theme: &Theme) {
     }
 }
 
-/// Tokenise `code` using syntect's lower-level API, returning
-/// `(css_var_suffix, font_style_bits, token_text)` tuples.
-///
-/// Uses `Highlighter` + `ParseState` + `ScopeStack` directly instead of the
-/// easy `HighlightLines` wrapper, so we retain scope information for semantic
-/// CSS variable naming.
-fn do_highlight(
+// ---------------------------------------------------------------------------
+// Syntect-based highlighting (all non-Typst languages)
+// ---------------------------------------------------------------------------
+
+fn do_syntect_highlight(
     code: &str,
     lang: &str,
     theme: &Theme,
@@ -129,9 +121,7 @@ fn do_highlight(
         };
 
         for (text, op) in ScopeRegionIterator::new(&ops, line) {
-            // Apply the operation to update the scope stack for this region.
             let _ = scope_stack.apply(op);
-
             if text.is_empty() {
                 continue;
             }
@@ -140,8 +130,6 @@ fn do_highlight(
             let bits = style.font_style.bits();
             let fg = style.foreground;
 
-            // Tokens whose style matches the theme default get a plain-text
-            // variable name so they can be themed independently.
             let name = if fg == default_fg && bits == 0 {
                 "default".to_string()
             } else {
@@ -151,15 +139,80 @@ fn do_highlight(
             out.push((name, bits, text.to_string()));
         }
 
-        // Append a newline separator with the default look.
-        out.push((
-            "default".to_string(),
-            0,
-            "\n".into(),
-        ));
+        out.push(("default".to_string(), 0, "\n".into()));
     }
 
     out
+}
+
+// ---------------------------------------------------------------------------
+// Typst-native highlighting (typ, typst, typc, typm)
+// Replicates Typst's `ThemedHighlighter` approach but outputs CSS var names.
+// ---------------------------------------------------------------------------
+
+fn do_typst_highlight(
+    code: &str,
+    lang: &str,
+    theme: &Theme,
+) -> Vec<(String, u8, String)> {
+    let root: SyntaxNode = match lang {
+        "typc" => parse_code(code),
+        "typm" => parse_math(code),
+        _ => typst::syntax::parse(code),
+    };
+
+    let highlighter = Highlighter::new(theme);
+    let mut tokens = Vec::new();
+    let mut scopes: Vec<Scope> = Vec::new();
+
+    walk_typst_node(code, &LinkedNode::new(&root), &highlighter, &mut scopes, &mut tokens);
+
+    // The AST walker emits leaf-node text preserving newlines inside the node
+    // range.  To keep clean line structure we split tokens at newline
+    // boundaries so each line is independent (matching the syntect path).
+    let mut out: Vec<(String, u8, String)> = Vec::new();
+    for (name, bits, text) in &tokens {
+        for (i, segment) in text.split('\n').enumerate() {
+            if i > 0 {
+                out.push((name.clone(), *bits, "\n".into()));
+            }
+            if !segment.is_empty() {
+                out.push((name.clone(), *bits, segment.to_string()));
+            }
+        }
+    }
+    out
+}
+
+fn walk_typst_node(
+    code: &str,
+    node: &LinkedNode,
+    highlighter: &Highlighter,
+    scopes: &mut Vec<Scope>,
+    tokens: &mut Vec<(String, u8, String)>,
+) {
+    if node.children().len() == 0 {
+        let text = &code[node.range()];
+        if !text.is_empty() {
+            let style = highlighter.style_for_stack(scopes.as_slice());
+            let bits = style.font_style.bits();
+            let name = scope_css_name(scopes.as_slice());
+            tokens.push((name, bits, text.to_string()));
+        }
+        return;
+    }
+
+    for child in node.children() {
+        let mut child_scopes = scopes.clone();
+        if let Some(tag) = typst::syntax::highlight(&child)
+            && let Ok(s) = Scope::new(tag.tm_scope())
+        {
+            child_scopes.push(s);
+        }
+        std::mem::swap(&mut child_scopes, scopes);
+        walk_typst_node(code, &child, highlighter, scopes, tokens);
+        std::mem::swap(&mut child_scopes, scopes);
+    }
 }
 
 fn collect_text(nodes: &[HtmlNode]) -> String {

@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
-syntect = { version = "5.3", features = ["default-themes", "dump-load"] }
+syntect = { version = "5.3", features = ["default-syntaxes", "default-themes", "dump-load"] }
 toml = "1.1"
 typst = "0.15.1"
 typst-html = "0.15.1"
