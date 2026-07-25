@@ -34,22 +34,5 @@
     .at(id, default: none)
 }
 
-// Render an entry's body by reconstructing HTML elements.
-#let render-nodes(nodes) = {
-  for node in nodes {
-    if node.kind == "text" {
-      node.value
-    } else if node.kind == "element" {
-      if node.void {
-        html.elem(node.tag, attrs: node.attrs)
-      } else {
-        html.elem(node.tag, attrs: node.attrs)[
-          #render-nodes(node.children)
-        ]
-      }
-    }
-  }
-}
-
-// Render a content entry to HTML content.
-#let render(entry) = render-nodes(entry.rendered)
+// Render a content entry's body (stored as native Typst Content).
+#let render(entry) = entry.body

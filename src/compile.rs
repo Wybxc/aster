@@ -2,8 +2,10 @@ use std::path::Path;
 
 use anyhow::{Result, bail};
 use termcolor::{ColorChoice, StandardStream};
+use typst::comemo::Track;
 use typst::diag::{FileError, SourceDiagnostic};
-use typst::foundations::{Bytes, Datetime, Dict, Duration};
+use typst::engine::{Route, Sink, Traced};
+use typst::foundations::{Bytes, Content, Datetime, Dict, Duration};
 use typst::syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
@@ -131,6 +133,51 @@ pub fn compile_document(entry: &Path, project_root: &Path, inputs: Dict) -> Resu
             bail!("compilation failed");
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Compile a file to raw Content (for content entries embedded in sys.inputs).
+// ---------------------------------------------------------------------------
+
+/// Compile a single file and return its raw evaluated `Content`.
+///
+/// Unlike [`compile_document`] which renders to [`HtmlDocument`], this
+/// function stops after evaluation so the result can be embedded as
+/// `Value::Content` in another document's `sys.inputs`.
+pub fn compile_content(
+    entry: &Path,
+    project_root: &Path,
+    inputs: Dict,
+) -> Result<Content> {
+    let library = build_library(inputs);
+    let world = build_world(entry, project_root, &library);
+
+    let source = world
+        .source(world.main())
+        .map_err(|e| anyhow::anyhow!("failed to load source: {e}"))?;
+
+    let mut sink = Sink::new();
+    let traced = Traced::default();
+    let lazy_library = LazyHash::new(library.clone());
+
+    let module = typst_eval::eval(
+        (&world as &dyn World).track(),
+        &lazy_library,
+        traced.track(),
+        sink.track_mut(),
+        Route::default().track(),
+        &source,
+    )
+    .map_err(|diags| {
+        let mut msg = String::from("evaluation failed");
+        for d in &diags {
+            use std::fmt::Write;
+            let _ = write!(msg, "\n  {d:?}");
+        }
+        anyhow::anyhow!("{msg}")
+    })?;
+
+    Ok(module.content())
 }
 
 // ---------------------------------------------------------------------------
