@@ -1,10 +1,14 @@
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
+use typst::comemo::Track;
 use typst::ecow::EcoVec;
-use typst::foundations::{Array, Dict, Str, Value};
-use typst_html::{HtmlDocument, HtmlNode};
+use typst::foundations::{Array, Dict, Output, Str, Value};
+use typst::model::LateLinkResolver;
+use typst_html::{HtmlDocument, HtmlFrame, HtmlNode};
+use typst_svg::svg_in_html;
 
 use crate::compile;
 
@@ -120,19 +124,75 @@ fn body_to_values(doc: &HtmlDocument) -> Result<EcoVec<Value>> {
         if let HtmlNode::Element(e) = child
             && e.tag == typst_html::tag::body
         {
-            return nodes_to_values(&e.children);
+            return nodes_to_values(&e.children, doc);
         }
     }
     Ok(EcoVec::new())
+}
+
+/// Render a laid-out frame to an inline data-URI SVG `<img>` element value.
+///
+/// Uses the document's introspector to resolve any late links inside the
+/// frame (typically there are none for content entries).
+fn frame_to_img(frame: &HtmlFrame, doc: &HtmlDocument) -> Value {
+    let introspector = Output::introspector(doc);
+    let resolver = LateLinkResolver::new(None, introspector);
+    let svg = svg_in_html(
+        &frame.inner,
+        frame.text_size,
+        false,
+        frame.id.as_deref(),
+        "",
+        &frame.anchors,
+        resolver.track(),
+    );
+
+    // Build a data URI for the SVG.
+    let mut src = String::from("data:image/svg+xml,");
+    for b in svg.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9'
+            | b'-' | b'.' | b'_' | b'~'
+            | b'/' | b':' | b';' | b'='
+            | b'?' | b'&' | b'!' | b'@'
+            | b'$' | b'+' | b',' => src.push(b as char),
+            b' ' => src.push_str("%20"),
+            b'#' => src.push_str("%23"),
+            b'%' => src.push_str("%25"),
+            b'<' => src.push_str("%3C"),
+            b'>' => src.push_str("%3E"),
+            b'"' => src.push_str("%22"),
+            b'\'' => src.push_str("%27"),
+            b'(' => src.push_str("%28"),
+            b')' => src.push_str("%29"),
+            _ => {
+                let _ = write!(src, "%{b:02X}");
+            }
+        }
+    }
+
+    Value::Dict(Dict::from_iter([
+        (Str::from("kind"), Value::Str(Str::from("element"))),
+        (Str::from("tag"), Value::Str(Str::from("img"))),
+        (
+            Str::from("attrs"),
+            Value::Dict(Dict::from_iter([
+                (Str::from("src"), Value::Str(Str::from(src))),
+                (Str::from("alt"), Value::Str(Str::from(""))),
+            ])),
+        ),
+        (Str::from("children"), Value::Array(Array::new())),
+        (Str::from("void"), Value::Bool(true)),
+    ]))
 }
 
 /// Convert a slice of `HtmlNode`s to `Vec<Value>` (recursive).
 ///
 /// - `Element` → `{kind: "element", tag, attrs, children, void}`
 /// - `Text` → `{kind: "text", value}`
-/// - `Frame` → error (unsupported)
-/// - `Tag` → `None` → silently skipped
-fn nodes_to_values(nodes: &[HtmlNode]) -> Result<EcoVec<Value>> {
+/// - `Frame` → inline `<img>` with SVG data URI
+/// - `Tag` → silently skipped
+fn nodes_to_values(nodes: &[HtmlNode], doc: &HtmlDocument) -> Result<EcoVec<Value>> {
     let mut out = EcoVec::with_capacity(nodes.len());
     for node in nodes {
         match node {
@@ -143,14 +203,17 @@ fn nodes_to_values(nodes: &[HtmlNode]) -> Result<EcoVec<Value>> {
                     let v = v.clone();
                     (Str::from(k.as_str()), Value::Str(v.into()))
                 }));
-                let children = nodes_to_values(&elem.children)?;
+                let children = nodes_to_values(&elem.children, doc)?;
                 let void = typst_html::tag::is_void(elem.tag);
 
                 out.push(Value::Dict(Dict::from_iter([
-                    (Str::from("kind"), Value::Str("element".into())),
-                    (Str::from("tag"), Value::Str(tag.as_str().into())),
+                    (Str::from("kind"), Value::Str(Str::from("element"))),
+                    (Str::from("tag"), Value::Str(Str::from(tag.as_str()))),
                     (Str::from("attrs"), Value::Dict(attrs)),
-                    (Str::from("children"), Value::Array(Array::from(children))),
+                    (
+                        Str::from("children"),
+                        Value::Array(Array::from(children)),
+                    ),
                     (Str::from("void"), Value::Bool(void)),
                 ])));
             }
@@ -160,10 +223,9 @@ fn nodes_to_values(nodes: &[HtmlNode]) -> Result<EcoVec<Value>> {
                     (Str::from("value"), Value::Str(Str::from(text.as_str()))),
                 ])));
             }
-            HtmlNode::Frame(_) => bail!(
-                "frame-based content is not supported in content collections; \
-                 avoid html.frame() in collection entries"
-            ),
+            HtmlNode::Frame(frame) => {
+                out.push(frame_to_img(frame, doc));
+            }
             // Introspection tags carry no DOM — skip silently.
             HtmlNode::Tag(_) => {}
         }
