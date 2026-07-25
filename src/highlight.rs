@@ -11,22 +11,38 @@ use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 static SS: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
 static THEMES: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
 
-const DEFAULT_LIGHT: &str = "InspiredGitHub";
-const DEFAULT_DARK: &str = "base16-ocean.dark";
+/// Theme used for internal tokenization (determines token boundaries and
+/// font style bits only — actual colors are deferred to CSS variables).
+const TOKEN_THEME: &str = "InspiredGitHub";
 
 type Rgb = (u8, u8, u8);
 
-/// Find every `<code data-lang="X">` in the document, re‑highlight it with
-/// syntect using both themes, replace its children with `<span class="hl-N">`,
-/// and return a `<style>` block string (to be appended after serialization).
+/// Find every `<code data-lang="X">` in the document, tokenise it, replace its
+/// children with `<span class="hl-N">` and return a `<style>` block that maps
+/// each class to a CSS custom property.
+///
+/// The generated CSS uses `var(--hl-N)` instead of hardcoded hex values so
+/// that users can supply their own theme via CSS variables:
+///
+/// ```css
+/// :root {
+///   --hl-0: #d73a49;
+///   --hl-1: #6f42c1;
+/// }
+/// @media (prefers-color-scheme: dark) {
+///   :root {
+///     --hl-0: #f97583;
+///     --hl-1: #b392f0;
+///   }
+/// }
+/// ```
 pub fn rehighlight(doc: &mut HtmlDocument) -> String {
-    let light = &THEMES.themes[DEFAULT_LIGHT];
-    let dark = &THEMES.themes[DEFAULT_DARK];
-    let mut cls: Vec<(Rgb, Rgb, u8)> = Vec::new();
+    let theme = &THEMES.themes[TOKEN_THEME];
+    let mut cls: Vec<(Rgb, u8)> = Vec::new();
 
     for child in doc.root_mut().children.make_mut().iter_mut() {
         if let HtmlNode::Element(e) = child {
-            walk(e, light, dark, &mut cls);
+            walk(e, theme, &mut cls);
         }
     }
 
@@ -35,32 +51,32 @@ pub fn rehighlight(doc: &mut HtmlDocument) -> String {
     }
 
     let mut style = String::from("<style>\n");
-    for (i, &((lr, lg, lb), _, bits)) in cls.iter().enumerate() {
-        let mut s = format!("color:#{lr:02x}{lg:02x}{lb:02x}");
+    for (i, &((r, g, b), bits)) in cls.iter().enumerate() {
+        let _ = write!(style, ".hl-{i}{{color:var(--hl-{i},#{r:02x}{g:02x}{b:02x})");
         if bits & 1 != 0 {
-            s.push_str(";font-weight:bold");
+            style.push_str(";font-weight:bold");
         }
         if bits & 2 != 0 {
-            s.push_str(";font-style:italic");
+            style.push_str(";font-style:italic");
         }
-        let _ = writeln!(style, ".hl-{i}{{{s}}}");
+        style.push_str("}\n");
     }
     style.push_str("@media(prefers-color-scheme:dark){\n");
-    for (i, &(_, (dr, dg, db), bits)) in cls.iter().enumerate() {
-        let mut s = format!("color:#{dr:02x}{dg:02x}{db:02x}");
+    for (i, &((r, g, b), bits)) in cls.iter().enumerate() {
+        let _ = write!(style, ".hl-{i}{{color:var(--hl-{i}-dark,#{r:02x}{g:02x}{b:02x})");
         if bits & 1 != 0 {
-            s.push_str(";font-weight:bold");
+            style.push_str(";font-weight:bold");
         }
         if bits & 2 != 0 {
-            s.push_str(";font-style:italic");
+            style.push_str(";font-style:italic");
         }
-        let _ = writeln!(style, ".hl-{i}{{{s}}}");
+        style.push_str("}\n");
     }
     style.push_str("}\n</style>\n");
     style
 }
 
-fn walk(elem: &mut HtmlElement, light: &Theme, dark: &Theme, cls: &mut Vec<(Rgb, Rgb, u8)>) {
+fn walk(elem: &mut HtmlElement, theme: &Theme, cls: &mut Vec<(Rgb, u8)>) {
     if elem.tag == typst_html::tag::code
         && let Some(lang) = elem
             .attrs
@@ -73,33 +89,27 @@ fn walk(elem: &mut HtmlElement, light: &Theme, dark: &Theme, cls: &mut Vec<(Rgb,
             return;
         }
 
-        let ltokens = do_highlight(&raw, &lang, light);
-        let dtokens = do_highlight(&raw, &lang, dark);
+        let tokens = do_highlight(&raw, &lang, theme);
 
         let mut new_children: EcoVec<HtmlNode> = EcoVec::new();
-        for ((ls, ltxt), (ds, _)) in ltokens.iter().zip(dtokens.iter()) {
-            let lfg = (ls.foreground.r, ls.foreground.g, ls.foreground.b);
-            let dfg = (ds.foreground.r, ds.foreground.g, ds.foreground.b);
-            let bits = ls.font_style.bits() | ds.font_style.bits();
+        for (st, txt) in &tokens {
+            let fg = (st.foreground.r, st.foreground.g, st.foreground.b);
+            let bits = st.font_style.bits();
 
             let idx = cls
                 .iter()
-                .position(|&(l, d, b)| l == lfg && d == dfg && b == bits)
+                .position(|&(f, b)| f == fg && b == bits)
                 .unwrap_or_else(|| {
-                    cls.push((lfg, dfg, bits));
+                    cls.push((fg, bits));
                     cls.len() - 1
                 });
 
-            if lfg == (0, 0, 0) && dfg == (0, 0, 0) && bits == 0 {
-                new_children.push(HtmlNode::Text(ltxt.clone().into(), Span::detached()));
-            } else {
-                let mut span = HtmlElement::new(typst_html::tag::span);
-                span.attrs
-                    .push(typst_html::attr::class, format!("hl-{idx}"));
-                span.children
-                    .push(HtmlNode::Text(ltxt.clone().into(), Span::detached()));
-                new_children.push(HtmlNode::Element(span));
-            }
+            let mut span = HtmlElement::new(typst_html::tag::span);
+            span.attrs
+                .push(typst_html::attr::class, format!("hl-{idx}"));
+            span.children
+                .push(HtmlNode::Text(txt.clone().into(), Span::detached()));
+            new_children.push(HtmlNode::Element(span));
         }
         elem.children = new_children;
         return;
@@ -107,7 +117,7 @@ fn walk(elem: &mut HtmlElement, light: &Theme, dark: &Theme, cls: &mut Vec<(Rgb,
 
     for child in elem.children.make_mut().iter_mut() {
         if let HtmlNode::Element(e) = child {
-            walk(e, light, dark, cls);
+            walk(e, theme, cls);
         }
     }
 }
