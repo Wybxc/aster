@@ -145,10 +145,7 @@ pub fn run(entry: &Path, project_root: &Path, inputs: Dict) -> Result<String> {
     let raw = typst_html::html(&doc, &HtmlOptions::default())
         .map_err(|_| anyhow::anyhow!("failed to encode HTML"))?;
 
-    Ok(raw
-        .strip_prefix("<!DOCTYPE html>")
-        .unwrap_or(&raw)
-        .to_owned())
+    Ok(raw.to_owned())
 }
 
 // ---------------------------------------------------------------------------
