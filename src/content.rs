@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
+use typst::ecow::EcoVec;
 use typst::foundations::{Array, Dict, Str, Value};
 use typst_html::{HtmlDocument, HtmlNode};
 
@@ -25,7 +26,7 @@ pub fn load_collections(
     let typ_files =
         crate::project::find_typ_files(content_dir).context("failed to scan content directory")?;
     // Collect rendered body values per collection.
-    let mut cols: BTreeMap<String, Vec<(String, PathBuf, Vec<Value>)>> = BTreeMap::new();
+    let mut cols: BTreeMap<String, Vec<(String, PathBuf, EcoVec<Value>)>> = BTreeMap::new();
 
     for path in &typ_files {
         let relative = path.strip_prefix(content_dir).context("path error")?;
@@ -107,83 +108,64 @@ pub fn load_collections(
 // ---------------------------------------------------------------------------
 
 /// Compile a single content entry to body DOM values.
-fn compile_content_entry(
-    entry: &Path,
-    project_root: &Path,
-    inputs: Dict,
-) -> Result<Vec<Value>> {
+fn compile_content_entry(entry: &Path, project_root: &Path, inputs: Dict) -> Result<EcoVec<Value>> {
     let doc = compile::compile_document(entry, project_root, inputs)?;
     body_to_values(&doc)
 }
 
 /// Extract the children of `<body>` and convert each to a Typst `Value`.
-fn body_to_values(doc: &HtmlDocument) -> Result<Vec<Value>> {
+fn body_to_values(doc: &HtmlDocument) -> Result<EcoVec<Value>> {
     let root = doc.root();
     for child in &root.children {
         if let HtmlNode::Element(e) = child
             && e.tag == typst_html::tag::body
         {
-            return html_nodes_to_values(&e.children);
+            return nodes_to_values(&e.children);
         }
     }
-    Ok(Vec::new())
+    Ok(EcoVec::new())
 }
 
-/// Convert one `HtmlNode` to a Typst `Value`.
+/// Convert a slice of `HtmlNode`s to `Vec<Value>` (recursive).
 ///
 /// - `Element` → `{kind: "element", tag, attrs, children, void}`
 /// - `Text` → `{kind: "text", value}`
 /// - `Frame` → error (unsupported)
-/// - `Tag` → `None` (silently skipped)
-fn html_node_to_value(node: &HtmlNode) -> Result<Option<Value>> {
-    match node {
-        HtmlNode::Element(elem) => {
-            let mut attrs = BTreeMap::new();
-            for (attr, value) in &elem.attrs.0 {
-                attrs.insert(attr.resolve().to_string(), value.to_string());
-            }
-
-            let void = typst_html::tag::is_void(elem.tag);
-            let children = html_nodes_to_values(&elem.children)?;
-
-            let attrs_dict = Value::Dict(Dict::from_iter(
-                attrs
-                    .into_iter()
-                    .map(|(k, v)| (Str::from(k), Value::Str(Str::from(v)))),
-            ));
-
-            let children_arr = Value::Array(Array::from_iter(children));
-
-            Ok(Some(Value::Dict(Dict::from_iter([
-                (Str::from("kind"), Value::Str(Str::from("element"))),
-                (
-                    Str::from("tag"),
-                    Value::Str(Str::from(elem.tag.resolve().as_str())),
-                ),
-                (Str::from("attrs"), attrs_dict),
-                (Str::from("children"), children_arr),
-                (Str::from("void"), Value::Bool(void)),
-            ]))))
-        }
-        HtmlNode::Text(text, _) => Ok(Some(Value::Dict(Dict::from_iter([
-            (Str::from("kind"), Value::Str(Str::from("text"))),
-            (Str::from("value"), Value::Str(Str::from(text.as_str()))),
-        ])))),
-        HtmlNode::Frame(_) => bail!(
-            "frame-based content is not supported in content collections; \
-             avoid html.frame() in collection entries"
-        ),
-        // Introspection tags carry no DOM — skip silently.
-        HtmlNode::Tag(_) => Ok(None),
-    }
-}
-
-/// Convert a slice of `HtmlNode`s to a `Vec<Value>`.
-fn html_nodes_to_values(nodes: &[HtmlNode]) -> Result<Vec<Value>> {
-    let mut out = Vec::new();
+/// - `Tag` → `None` → silently skipped
+fn nodes_to_values(nodes: &[HtmlNode]) -> Result<EcoVec<Value>> {
+    let mut out = EcoVec::with_capacity(nodes.len());
     for node in nodes {
-        if let Some(v) = html_node_to_value(node)? {
-            out.push(v);
+        match node {
+            HtmlNode::Element(elem) => {
+                let tag = elem.tag.resolve();
+                let attrs = Dict::from_iter(elem.attrs.0.iter().map(|(k, v)| {
+                    let k = k.resolve();
+                    let v = v.clone();
+                    (Str::from(k.as_str()), Value::Str(v.into()))
+                }));
+                let children = nodes_to_values(&elem.children)?;
+                let void = typst_html::tag::is_void(elem.tag);
+
+                out.push(Value::Dict(Dict::from_iter([
+                    (Str::from("kind"), Value::Str("element".into())),
+                    (Str::from("tag"), Value::Str(tag.as_str().into())),
+                    (Str::from("attrs"), Value::Dict(attrs)),
+                    (Str::from("children"), Value::Array(Array::from(children))),
+                    (Str::from("void"), Value::Bool(void)),
+                ])));
+            }
+            HtmlNode::Text(text, _) => {
+                out.push(Value::Dict(Dict::from_iter([
+                    (Str::from("kind"), Value::Str(Str::from("text"))),
+                    (Str::from("value"), Value::Str(Str::from(text.as_str()))),
+                ])));
+            }
+            HtmlNode::Frame(_) => bail!(
+                "frame-based content is not supported in content collections; \
+                 avoid html.frame() in collection entries"
+            ),
+            // Introspection tags carry no DOM — skip silently.
+            HtmlNode::Tag(_) => {}
         }
     }
     Ok(out)
