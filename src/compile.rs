@@ -127,13 +127,13 @@ impl CompileContext {
         }
     }
 
-    /// Compile a page and return its serialized HTML string.
-    pub fn page(
+    /// Compile a page, returning both the [`HtmlDocument`] and serialized HTML.
+    pub fn page_with_doc(
         &self,
         entry: &Path,
         project_root: &Path,
         library: &LazyHash<Library>,
-    ) -> Result<String> {
+    ) -> Result<(HtmlDocument, String)> {
         let mut doc = self.document(entry, project_root, library)?;
 
         highlight::rehighlight(&mut doc);
@@ -141,7 +141,35 @@ impl CompileContext {
         let raw = typst_html::html(&doc, &HtmlOptions::default())
             .map_err(|_| anyhow::anyhow!("failed to encode HTML"))?;
 
-        Ok(raw.to_owned())
+        Ok((doc, raw.to_owned()))
+    }
+}
+
+/// Extract the `href` values of every `<link rel="stylesheet">` in the
+/// document (used to determine which CSS entry points the page needs).
+pub fn extract_css_refs(doc: &HtmlDocument) -> Vec<String> {
+    let mut refs = Vec::new();
+    walk_links(doc.root(), &mut refs);
+    refs
+}
+
+fn walk_links(elem: &typst_html::HtmlElement, refs: &mut Vec<String>) {
+    if elem.tag == typst_html::tag::link {
+        let is_stylesheet = elem.attrs.0.iter().any(|(a, v)| {
+            *a.resolve() == *"rel" && v.as_str() == "stylesheet"
+        });
+        if is_stylesheet
+            && let Some(href) = elem.attrs.0.iter().find_map(|(a, v)| {
+                (*a.resolve() == *"href").then(|| v.to_string())
+            })
+        {
+            refs.push(href);
+        }
+    }
+    for child in &elem.children {
+        if let typst_html::HtmlNode::Element(e) = child {
+            walk_links(e, refs);
+        }
     }
 }
 

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -27,7 +28,8 @@ fn empty_aster() -> Value {
 /// 1. Load content collections (Phase 1) — uses `config` as inputs
 /// 2. Assemble final Typst inputs (config + `_aster` protocol)
 /// 3. Compile all page templates and write output (Phase 2) — uses final inputs
-/// 4. Report success / failure
+/// 4. Bundle CSS, hash filenames, update HTML refs (Phase 3)
+/// 5. Report success / failure
 pub fn build(root: &Path, config: Dict) -> Result<BuildResult> {
     // World builder — fonts scanned once for the whole project.
     let builder = compile::CompileContext::new(root);
@@ -68,20 +70,19 @@ pub fn build(root: &Path, config: Dict) -> Result<BuildResult> {
         outputs: Vec::new(),
     };
 
+    // Collect CSS references across all pages.
+    let mut css_refs: Vec<String> = Vec::new();
+    // Store (output_path, html_content) pairs for post-CSS updates.
+    let mut page_outputs: Vec<(PathBuf, String)> = Vec::new();
+
     for entry in &entries {
         let output =
             crate::project::page_output_path(entry, root).expect("file must be under src/");
 
-        match builder.page(entry, root, &page_library) {
-            Ok(html) => {
-                if let Some(parent) = output.parent() {
-                    std::fs::create_dir_all(parent).with_context(|| {
-                        format!("failed to create directory {}", parent.display())
-                    })?;
-                }
-                std::fs::write(&output, &html)
-                    .with_context(|| format!("failed to write {}", output.display()))?;
-                result.outputs.push(output);
+        match builder.page_with_doc(entry, root, &page_library) {
+            Ok((doc, html)) => {
+                css_refs.extend(compile::extract_css_refs(&doc));
+                page_outputs.push((output, html));
             }
             Err(_) => {
                 result.has_errors = true;
@@ -90,10 +91,41 @@ pub fn build(root: &Path, config: Dict) -> Result<BuildResult> {
     }
 
     // --- Phase 3: CSS assets ---
-    crate::css::run(
+    let css_map = crate::css::run(
         &crate::project::src_dir(root),
         &crate::project::output_dir(root),
+        &css_refs,
     )?;
 
+    // --- Phase 4: write pages, updating CSS hrefs with hashed names ---
+    for (output, html) in &page_outputs {
+        let html = if css_map.is_empty() {
+            html.clone()
+        } else {
+            apply_css_map(html, &css_map)
+        };
+
+        if let Some(parent) = output.parent() {
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("failed to create directory {}", parent.display()))?;
+        }
+        std::fs::write(output, &html)
+            .with_context(|| format!("failed to write {}", output.display()))?;
+        result.outputs.push(output.clone());
+    }
+
     Ok(result)
+}
+
+/// Replace every `href="{name}.css"` with `href="{hashed_name}.css"` in the
+/// HTML, where `{name}.css` appears as a key in `map`.
+fn apply_css_map(html: &str, map: &HashMap<String, String>) -> String {
+    let mut result = html.to_owned();
+    for (orig, hashed) in map {
+        // Replace href="style.css" → href="style.a1b2.css"
+        let old = format!("href=\"{orig}\"");
+        let new = format!("href=\"{hashed}\"");
+        result = result.replace(&old, &new);
+    }
+    result
 }

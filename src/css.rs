@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -5,54 +6,22 @@ use lightningcss::bundler::{Bundler, FileProvider};
 use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions};
 use lightningcss::targets::Browsers;
 
-/// Process CSS files referenced by page templates.
+/// Bundle each CSS entry point, compute a content hash, write the result to
+/// `dist_dir` with the hash embedded in the filename (e.g. `style.a1b2c3d4.css`),
+/// and return a mapping from original relative path → hashed filename.
 ///
-/// Scans `src_dir` for `.css` files, filters to those referenced by
-/// `allowed_refs` (relative paths like `"style.css"`), bundles each with
-/// lightningcss (`@import` resolution), minifies, and writes to `dist_dir`.
-///
-/// Returns the list of written output paths.
-pub fn run(src_dir: &Path, dist_dir: &Path) -> Result<Vec<PathBuf>> {
-    //
-    // Collect CSS references from page HTML
-    //
-    // Look for <link rel="stylesheet" href="..."> in every HTML file under
-    // dist_dir so we only bundle CSS that pages actually use.
-    let allowed_refs = {
-        let mut refs = Vec::new();
-        if let Ok(entries) = std::fs::read_dir(dist_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().is_some_and(|ext| ext == "html") {
-                    let html = match std::fs::read_to_string(&path) {
-                        Ok(h) => h,
-                        Err(_) => continue,
-                    };
-                    for (i, _) in html.match_indices("rel=\"stylesheet\"") {
-                        // Walk backwards to find the enclosing <link.
-                        let before = &html[..i];
-                        if let Some(link_start) = before.rfind('<') {
-                            let link = &html[link_start..];
-                            // Find href="..." inside this <link>.
-                            if let Some(href_pos) = link.find("href=\"") {
-                                let start = href_pos + 6;
-                                if let Some(end) = link[start..].find('"') {
-                                    refs.push(link[start..start + end].to_string());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        refs
-    };
-
-    let mut outputs = Vec::new();
+/// Only files whose `src_dir`-relative path appears in `allowed_refs` are
+/// processed (they must be directly referenced by page templates).
+pub fn run(
+    src_dir: &Path,
+    dist_dir: &Path,
+    allowed_refs: &[String],
+) -> Result<HashMap<String, String>> {
+    let mut mapping = HashMap::new();
 
     let all_files = collect_css_files(src_dir);
     if all_files.is_empty() {
-        return Ok(outputs);
+        return Ok(mapping);
     }
 
     for entry in &all_files {
@@ -62,24 +31,32 @@ pub fn run(src_dir: &Path, dist_dir: &Path) -> Result<Vec<PathBuf>> {
             .to_string_lossy()
             .into_owned();
 
-        // Skip files not referenced by any page template.
         if !allowed_refs.contains(&relative) {
             continue;
         }
 
-        let output = dist_dir.join(&relative);
         let css = bundle_file(entry)?;
 
+        // Content hash for cache busting (using seahash, same approach as Trunk).
+        let hash = format!("{:016x}", seahash::hash(css.as_bytes()));
+
+        // Insert hash before extension: style.css → style.{hash}.css
+        let stem = entry.file_stem().unwrap_or_default();
+        let ext = entry.extension().unwrap_or_default();
+        let hashed_name = format!("{stem}.{hash}.{ext}", stem = stem.to_string_lossy(), ext = ext.to_string_lossy());
+
+        let output = dist_dir.join(&hashed_name);
         if let Some(parent) = output.parent() {
             std::fs::create_dir_all(parent)
                 .with_context(|| format!("failed to create directory {}", parent.display()))?;
         }
         std::fs::write(&output, &css)
             .with_context(|| format!("failed to write {}", output.display()))?;
-        outputs.push(output);
+
+        mapping.insert(relative, hashed_name);
     }
 
-    Ok(outputs)
+    Ok(mapping)
 }
 
 /// Bundle a single CSS entry point (resolve `@import`, prefix, minify).
