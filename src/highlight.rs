@@ -1,3 +1,4 @@
+use std::convert::Infallible;
 use std::sync::LazyLock;
 
 use syntect::easy::ScopeRegionIterator;
@@ -6,6 +7,8 @@ use syntect::parsing::{ParseState, Scope, ScopeStack, SyntaxSet};
 use typst::ecow::{EcoVec, eco_format, eco_vec};
 use typst::syntax::{LinkedNode, Span, SyntaxNode, parse_code, parse_math};
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
+
+use crate::document::WalkControl;
 
 static SS: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
 static THEMES: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
@@ -30,11 +33,50 @@ const TYPST_LANGS: &[&str] = &["typ", "typst", "typc", "typm"];
 pub fn rehighlight(doc: &mut HtmlDocument) {
     let theme = &THEMES.themes[TOKEN_THEME];
 
-    for child in doc.root_mut().children.make_mut().iter_mut() {
-        if let HtmlNode::Element(e) = child {
-            walk(e, theme);
+    crate::document::walk_mut::<Infallible>(doc.root_mut(), &mut |elem| {
+        if elem.tag == typst_html::tag::code
+            && let Some(lang) = elem
+                .attrs
+                .0
+                .iter()
+                .find_map(|(a, v)| (*a.resolve() == *"data-lang").then(|| v.clone()))
+        {
+            let raw = collect_text(&elem.children).trim().to_owned();
+            if raw.is_empty() {
+                return Ok(WalkControl::SkipChildren);
+            }
+
+            let tokens = if TYPST_LANGS.contains(&lang.as_str()) {
+                do_typst_highlight(&raw, &lang, theme)
+            } else {
+                do_syntect_highlight(&raw, &lang, theme)
+            };
+
+            let mut new_children: EcoVec<HtmlNode> = EcoVec::new();
+            for (scope_name, bits, txt) in &tokens {
+                let mut style = eco_format!("color:var(--hl-{scope_name})");
+                if bits & 1 != 0 {
+                    style.push_str(";font-weight:bold");
+                }
+                if bits & 2 != 0 {
+                    style.push_str(";font-style:italic");
+                }
+
+                let span = HtmlElement::new(typst_html::tag::span)
+                    .with_attr(typst_html::attr::style, style)
+                    .with_children(eco_vec![HtmlNode::Text(
+                        txt.clone().into(),
+                        Span::detached()
+                    )]);
+                new_children.push(HtmlNode::Element(span));
+            }
+            elem.children = new_children;
+            return Ok(WalkControl::SkipChildren);
         }
-    }
+
+        Ok(WalkControl::Continue)
+    })
+    .unwrap();
 }
 
 /// Derive a semantic CSS variable suffix from a slice of scopes.
@@ -47,54 +89,6 @@ fn scope_css_name(scopes: &[Scope]) -> String {
         }
     }
     "default".to_string()
-}
-
-fn walk(elem: &mut HtmlElement, theme: &Theme) {
-    if elem.tag == typst_html::tag::code
-        && let Some(lang) = elem
-            .attrs
-            .0
-            .iter()
-            .find_map(|(a, v)| (*a.resolve() == *"data-lang").then(|| v.clone()))
-    {
-        let raw = collect_text(&elem.children).trim().to_owned();
-        if raw.is_empty() {
-            return;
-        }
-
-        let tokens = if TYPST_LANGS.contains(&lang.as_str()) {
-            do_typst_highlight(&raw, &lang, theme)
-        } else {
-            do_syntect_highlight(&raw, &lang, theme)
-        };
-
-        let mut new_children: EcoVec<HtmlNode> = EcoVec::new();
-        for (scope_name, bits, txt) in &tokens {
-            let mut style = eco_format!("color:var(--hl-{scope_name})");
-            if bits & 1 != 0 {
-                style.push_str(";font-weight:bold");
-            }
-            if bits & 2 != 0 {
-                style.push_str(";font-style:italic");
-            }
-
-            let span = HtmlElement::new(typst_html::tag::span)
-                .with_attr(typst_html::attr::style, style)
-                .with_children(eco_vec![HtmlNode::Text(
-                    txt.clone().into(),
-                    Span::detached()
-                )]);
-            new_children.push(HtmlNode::Element(span));
-        }
-        elem.children = new_children;
-        return;
-    }
-
-    for child in elem.children.make_mut().iter_mut() {
-        if let HtmlNode::Element(e) = child {
-            walk(e, theme);
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------

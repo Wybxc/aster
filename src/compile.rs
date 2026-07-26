@@ -11,7 +11,7 @@ use typst::syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
 use typst::{Feature, Features, Library, LibraryExt, World};
-use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
+use typst_html::HtmlDocument;
 use typst_kit::diagnostics::{self, DiagnosticFormat, DiagnosticWorld};
 use typst_kit::downloader::SystemDownloader;
 use typst_kit::files::{FileStore, FsRoot, SystemFiles};
@@ -135,47 +135,38 @@ impl CompileContext {
 /// Currently each page that references `style.css` bundles it independently.
 /// A dedup layer (cache the hashed name per href) can be added later.
 pub fn process_css_refs(doc: &mut HtmlDocument, src_dir: &Path, dist_dir: &Path) -> Result<()> {
-    walk_and_bundle(doc.root_mut(), src_dir, dist_dir)
-}
+    crate::document::walk_mut(doc.root_mut(), &mut |e| {
+        if e.tag == typst_html::tag::link {
+            let rel = e
+                .attrs
+                .0
+                .iter()
+                .find(|(a, _)| *a.resolve() == *"rel")
+                .map(|(_, v)| v.clone());
 
-fn walk_and_bundle(elem: &mut HtmlElement, src_dir: &Path, dist_dir: &Path) -> Result<()> {
-    if elem.tag == typst_html::tag::link {
-        // Read rel and href attributes (immutable pass first).
-        let rel = elem
-            .attrs
-            .0
-            .iter()
-            .find(|(a, _)| *a.resolve() == *"rel")
-            .map(|(_, v)| v.clone());
+            let href = e
+                .attrs
+                .0
+                .iter()
+                .find(|(a, _)| *a.resolve() == *"href")
+                .map(|(_, v)| v.clone());
 
-        let href = elem
-            .attrs
-            .0
-            .iter()
-            .find(|(a, _)| *a.resolve() == *"href")
-            .map(|(_, v)| v.clone());
-
-        let Some(rel) = rel else { return Ok(()) };
-        let Some(href) = href else { return Ok(()) };
-
-        // Try to bundle; unrecognised rel values (e.g. "stylesheet")
-        // return `None` and the element is left untouched.
-        if let Some(result) = crate::loader::try_bundle(&rel, &href, src_dir, dist_dir)? {
-            for (a, v) in elem.attrs.0.make_mut().iter_mut() {
-                if *a.resolve() == *"href" {
-                    *v = result.href.clone().into();
-                } else if *a.resolve() == *"rel" {
-                    *v = result.rel.clone().into();
+            if let (Some(rel), Some(href)) = (rel, href) {
+                // Try to bundle; unrecognised rel values (e.g. "stylesheet")
+                // return `None` and the element is left untouched.
+                if let Some(result) = crate::loader::try_bundle(&rel, &href, src_dir, dist_dir)? {
+                    for (a, v) in e.attrs.0.make_mut().iter_mut() {
+                        if *a.resolve() == *"href" {
+                            *v = result.href.clone().into();
+                        } else if *a.resolve() == *"rel" {
+                            *v = result.rel.clone().into();
+                        }
+                    }
                 }
             }
         }
-    }
-    for child in elem.children.make_mut().iter_mut() {
-        if let HtmlNode::Element(e) = child {
-            walk_and_bundle(e, src_dir, dist_dir)?;
-        }
-    }
-    Ok(())
+        Ok(crate::document::WalkControl::Continue)
+    })
 }
 
 // ---------------------------------------------------------------------------
