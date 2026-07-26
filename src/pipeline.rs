@@ -1,11 +1,12 @@
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use typst::foundations::{Dict, Str, Value};
 use typst::utils::LazyHash;
+use typst_html::{HtmlDocument, HtmlOptions};
 
 use crate::compile;
+use crate::highlight;
 
 /// Result of a complete Aster project build.
 pub struct BuildResult {
@@ -27,9 +28,9 @@ fn empty_aster() -> Value {
 ///
 /// 1. Load content collections (Phase 1) — uses `config` as inputs
 /// 2. Assemble final Typst inputs (config + `_aster` protocol)
-/// 3. Compile all page templates and write output (Phase 2) — uses final inputs
-/// 4. Bundle CSS, hash filenames, update HTML refs (Phase 3)
-/// 5. Report success / failure
+/// 3. Compile page templates, bundle CSS inline, rehighlight, and write
+///    output (Phase 2) — uses final inputs
+/// 4. Report success / failure
 pub fn build(root: &Path, config: Dict) -> Result<BuildResult> {
     // World builder — fonts scanned once for the whole project.
     let builder = compile::CompileContext::new(root);
@@ -70,19 +71,23 @@ pub fn build(root: &Path, config: Dict) -> Result<BuildResult> {
         outputs: Vec::new(),
     };
 
-    // Collect CSS references across all pages.
-    let mut css_refs: Vec<String> = Vec::new();
-    // Store (output_path, html_content) pairs for post-CSS updates.
-    let mut page_outputs: Vec<(PathBuf, String)> = Vec::new();
+    let output_dir = crate::project::output_dir(root);
+    let mut page_docs: Vec<(PathBuf, HtmlDocument)> = Vec::new();
 
     for entry in &entries {
         let output =
             crate::project::page_output_path(entry, root).expect("file must be under src/");
 
-        match builder.page_with_doc(entry, root, &page_library) {
-            Ok((doc, html)) => {
-                css_refs.extend(compile::extract_css_refs(&doc));
-                page_outputs.push((output, html));
+        match builder.document(entry, root, &page_library) {
+            Ok(mut doc) => {
+                // CSS bundling with content hashing happens inline during DOM
+                // traversal — each `<link rel="stylesheet">` is bundled through
+                // lightningcss, written to dist/ with a hash in the filename,
+                // and the href is updated in-place.
+                if compile::process_css_refs(&mut doc, &src_dir, &output_dir).is_err() {
+                    result.has_errors = true;
+                }
+                page_docs.push((output, doc));
             }
             Err(_) => {
                 result.has_errors = true;
@@ -90,42 +95,20 @@ pub fn build(root: &Path, config: Dict) -> Result<BuildResult> {
         }
     }
 
-    // --- Phase 3: CSS assets ---
-    let css_map = crate::css::run(
-        &crate::project::src_dir(root),
-        &crate::project::output_dir(root),
-        &css_refs,
-    )?;
+    for (output, doc) in &mut page_docs {
+        highlight::rehighlight(doc);
 
-    // --- Phase 4: write pages, updating CSS hrefs with hashed names ---
-    for (output, html) in &page_outputs {
-        let html = if css_map.is_empty() {
-            html.clone()
-        } else {
-            apply_css_map(html, &css_map)
-        };
+        let raw = typst_html::html(doc, &HtmlOptions::default())
+            .map_err(|_| anyhow::anyhow!("failed to encode HTML"))?;
 
         if let Some(parent) = output.parent() {
             std::fs::create_dir_all(parent)
                 .with_context(|| format!("failed to create directory {}", parent.display()))?;
         }
-        std::fs::write(output, &html)
+        std::fs::write(&*output, &raw)
             .with_context(|| format!("failed to write {}", output.display()))?;
         result.outputs.push(output.clone());
     }
 
     Ok(result)
-}
-
-/// Replace every `href="{name}.css"` with `href="{hashed_name}.css"` in the
-/// HTML, where `{name}.css` appears as a key in `map`.
-fn apply_css_map(html: &str, map: &HashMap<String, String>) -> String {
-    let mut result = html.to_owned();
-    for (orig, hashed) in map {
-        // Replace href="style.css" → href="style.a1b2.css"
-        let old = format!("href=\"{orig}\"");
-        let new = format!("href=\"{hashed}\"");
-        result = result.replace(&old, &new);
-    }
-    result
 }
