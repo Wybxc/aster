@@ -23,6 +23,9 @@ pub fn load_collections(
 ) -> Result<Value> {
     let typ_files =
         crate::project::find_typ_files(content_dir).context("failed to scan content directory")?;
+
+    // Shared compilation env (fonts scanned once, reused for every entry).
+    let shared = compile::SharedCompile::new(config_inputs, project_root);
     let mut cols: BTreeMap<String, Vec<(String, PathBuf, Value)>> = BTreeMap::new();
 
     for path in &typ_files {
@@ -51,7 +54,7 @@ pub fn load_collections(
             p.to_string_lossy().to_string()
         };
 
-        let body = compile::compile_content(path, project_root, config_inputs.clone())?;
+        let body = shared.compile_content(path, project_root)?;
         cols.entry(collection.clone())
             .or_default()
             .push((id, path.clone(), Value::Content(body)));

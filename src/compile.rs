@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::Arc;
 
 use anyhow::{Result, bail};
 use termcolor::{ColorChoice, StandardStream};
@@ -20,14 +21,62 @@ use typst_kit::packages::SystemPackages;
 use crate::highlight;
 
 // ---------------------------------------------------------------------------
+// Shared compilation environment
+// ---------------------------------------------------------------------------
+
+/// Shared resources (fonts, file store, library) reused across multiple
+/// compile calls for the same project.
+///
+/// Fonts are the most expensive part — discovered once.
+pub struct SharedCompile {
+    library: LazyHash<Library>,
+    fonts: Arc<FontStore>,
+    files: Arc<FileStore<SystemFiles>>,
+}
+
+impl SharedCompile {
+    /// Build everything for one project root.
+    pub fn new(inputs: Dict, project_root: &Path) -> Self {
+        let library = build_library(inputs);
+        let fonts = Arc::new(build_font_store());
+        let files = Arc::new(build_file_store(project_root));
+        let library = LazyHash::new(library);
+        Self { library, fonts, files }
+    }
+
+    /// Create a per-entry world reusing fonts, files, and library.
+    pub(crate) fn world(&self, entry: &Path, project_root: &Path) -> CompileWorld {
+        let vpath = VirtualPath::virtualize(project_root, entry)
+            .expect("entry must be inside project root");
+        let main = RootedPath::new(VirtualRoot::Project, vpath).intern();
+        CompileWorld {
+            library: LazyHash::new((*self.library).clone()),
+            fonts: Arc::clone(&self.fonts),
+            files: Arc::clone(&self.files),
+            main,
+        }
+    }
+
+    /// Convenience: compile a source file to raw [`Content`].
+    pub fn compile_content(&self, entry: &Path, project_root: &Path) -> Result<Content> {
+        compile_content_with(self, entry, project_root)
+    }
+
+    /// Convenience: compile a source file to an [`HtmlDocument`].
+    pub fn compile_document(&self, entry: &Path, project_root: &Path) -> Result<HtmlDocument> {
+        compile_document_with(self, entry, project_root)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // World adapter (private to this module)
 // ---------------------------------------------------------------------------
 
-/// A World that compiles a single project with package support.
-struct CompileWorld {
+/// A World that compiles a single file, sharing fonts/files via `Arc`.
+pub(crate) struct CompileWorld {
     library: LazyHash<Library>,
-    fonts: FontStore,
-    files: FileStore<SystemFiles>,
+    fonts: Arc<FontStore>,
+    files: Arc<FileStore<SystemFiles>>,
     main: FileId,
 }
 
@@ -79,11 +128,10 @@ impl DiagnosticWorld for CompileWorld {
 }
 
 // ---------------------------------------------------------------------------
-// Library & world construction
+// Construction helpers
 // ---------------------------------------------------------------------------
 
-/// Build library with the HTML feature enabled and optional inputs from
-/// `aster.toml`.
+/// Build library with the HTML feature enabled.
 fn build_library(inputs: Dict) -> Library {
     let features: Features = [Feature::Html].into_iter().collect();
     Library::builder()
@@ -92,37 +140,33 @@ fn build_library(inputs: Dict) -> Library {
         .build()
 }
 
-/// Build a fresh world for the given entry point.
-fn build_world(entry: &Path, project_root: &Path, library: &Library) -> CompileWorld {
-    let vpath =
-        VirtualPath::virtualize(project_root, entry).expect("entry must be inside project root");
-    let main = RootedPath::new(VirtualRoot::Project, vpath).intern();
-
-    let mut fonts = FontStore::new();
-    fonts.extend(typst_kit::fonts::system());
-
+/// Build a file store for the project root.
+fn build_file_store(project_root: &Path) -> FileStore<SystemFiles> {
     let downloader = SystemDownloader::new("aster/0.1.0");
     let packages = SystemPackages::new(downloader);
     let project = FsRoot::new(project_root.to_owned());
     let system_files = SystemFiles::new(project, packages);
+    FileStore::new(system_files)
+}
 
-    CompileWorld {
-        library: LazyHash::new(library.clone()),
-        fonts,
-        files: FileStore::new(system_files),
-        main,
-    }
+/// Build and cache system fonts (expensive — scans ~2s).
+fn build_font_store() -> FontStore {
+    let mut fonts = FontStore::new();
+    fonts.extend(typst_kit::fonts::system());
+    fonts
 }
 
 // ---------------------------------------------------------------------------
-// Low-level: compile a single file into an HtmlDocument (shared by pages and
-// content entries).  Diagnostics are printed to stderr automatically.
+// Low-level: compile a single file into an HtmlDocument.
 // ---------------------------------------------------------------------------
 
-pub fn compile_document(entry: &Path, project_root: &Path, inputs: Dict) -> Result<HtmlDocument> {
-    let library = build_library(inputs);
-    let world = build_world(entry, project_root, &library);
-
+/// Compile a file to [`HtmlDocument`] using the shared environment.
+fn compile_document_with(
+    shared: &SharedCompile,
+    entry: &Path,
+    project_root: &Path,
+) -> Result<HtmlDocument> {
+    let world = shared.world(entry, project_root);
     let warned = typst::compile::<HtmlDocument>(&world);
     emit_diags(&world, &warned.warnings);
 
@@ -139,14 +183,14 @@ pub fn compile_document(entry: &Path, project_root: &Path, inputs: Dict) -> Resu
 // Compile a file to raw Content (for content entries embedded in sys.inputs).
 // ---------------------------------------------------------------------------
 
-/// Compile a single file and return its raw evaluated `Content`.
-///
-/// Unlike [`compile_document`] which renders to [`HtmlDocument`], this
-/// function stops after evaluation so the result can be embedded as
-/// `Value::Content` in another document's `sys.inputs`.
-pub fn compile_content(entry: &Path, project_root: &Path, inputs: Dict) -> Result<Content> {
-    let library = build_library(inputs);
-    let world = build_world(entry, project_root, &library);
+/// Compile a file and return its raw evaluated `Content` using the shared
+/// environment.
+fn compile_content_with(
+    shared: &SharedCompile,
+    entry: &Path,
+    project_root: &Path,
+) -> Result<Content> {
+    let world = shared.world(entry, project_root);
 
     let source = world
         .source(world.main())
@@ -154,11 +198,10 @@ pub fn compile_content(entry: &Path, project_root: &Path, inputs: Dict) -> Resul
 
     let mut sink = Sink::new();
     let traced = Traced::default();
-    let lazy_library = LazyHash::new(library.clone());
 
     let module = typst_eval::eval(
         (&world as &dyn World).track(),
-        &lazy_library,
+        &shared.library,
         traced.track(),
         sink.track_mut(),
         Route::default().track(),
@@ -177,7 +220,8 @@ pub fn compile_content(entry: &Path, project_root: &Path, inputs: Dict) -> Resul
 // ---------------------------------------------------------------------------
 
 pub fn run(entry: &Path, project_root: &Path, inputs: Dict) -> Result<String> {
-    let mut doc = compile_document(entry, project_root, inputs)?;
+    let shared = SharedCompile::new(inputs, project_root);
+    let mut doc = shared.compile_document(entry, project_root)?;
 
     highlight::rehighlight(&mut doc);
 
