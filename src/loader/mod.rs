@@ -36,3 +36,4 @@ pub fn try_bundle(
 }
 
 pub mod css;
+pub mod image;

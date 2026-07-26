@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use termcolor::{ColorChoice, StandardStream};
 use typst::comemo::Track;
 use typst::diag::{FileError, SourceDiagnostic};
@@ -169,86 +169,32 @@ pub fn process_css_refs(doc: &mut HtmlDocument, src_dir: &Path, dist_dir: &Path)
     })
 }
 
-// ---------------------------------------------------------------------------
-// Image extraction: data URI → separate file with content hash
-// ---------------------------------------------------------------------------
-
-/// Minimum decoded size (bytes) below which a data URI stays inline.
-const IMAGE_EXTRACT_THRESHOLD: usize = 1024;
-
 /// Walk all `<img>` elements.  For each one whose `src` is a data URI larger
-/// than [`IMAGE_EXTRACT_THRESHOLD`], decode, write to `dist_dir` with a
-/// content-hashed filename, and replace the `src` attribute.
+/// than the threshold, extract to a content-hashed file and rewrite src.
 pub fn process_images(doc: &mut HtmlDocument, dist_dir: &Path) -> Result<()> {
     use crate::document::WalkControl;
-    use base64::Engine;
 
     crate::document::walk_mut(doc.root_mut(), &mut |e| {
         if e.tag == typst_html::tag::img {
-            // Find the src attribute value.
-            let src = e.attrs.0.iter().find_map(|(a, v)| {
-                (*a.resolve() == *"src").then(|| v.clone())
-            });
-            let Some(src) = src else { return Ok(WalkControl::Continue) };
-
-            // Only process data URIs.
-            let Some(data) = src.strip_prefix("data:") else {
+            let src = e
+                .attrs
+                .0
+                .iter()
+                .find_map(|(a, v)| (*a.resolve() == *"src").then(|| v.clone()));
+            let Some(src) = src else {
                 return Ok(WalkControl::Continue);
             };
 
-            // Parse: data:[<mediatype>][;base64],<data>
-            let Some((header, encoded)) = data.split_once(',') else {
-                return Ok(WalkControl::Continue);
-            };
-
-            let is_base64 = header.contains(";base64");
-            if !is_base64 {
-                return Ok(WalkControl::Continue);
-            }
-
-            let mediatype = header.trim_end_matches(";base64");
-            let decoded = base64::engine::general_purpose::STANDARD
-                .decode(encoded.trim_end())
-                .context("failed to decode base64 image data")?;
-
-            if decoded.len() < IMAGE_EXTRACT_THRESHOLD {
-                return Ok(WalkControl::Continue);
-            }
-
-            let hash = format!("{:016x}", seahash::hash(&decoded));
-            let ext = media_type_to_ext(mediatype);
-            let filename = format!("{hash}.{ext}");
-            let output = dist_dir.join(&filename);
-
-            if let Some(parent) = output.parent() {
-                std::fs::create_dir_all(parent)
-                    .context("failed to create dist directory")?;
-            }
-            std::fs::write(&output, &decoded)
-                .with_context(|| format!("failed to write {}", output.display()))?;
-
-            // Replace src attribute in-place.
-            for (a, v) in e.attrs.0.make_mut().iter_mut() {
-                if *a.resolve() == *"src" {
-                    *v = filename.clone().into();
+            if let Some(new_src) = crate::loader::image::try_extract(&src, dist_dir)? {
+                for (a, v) in e.attrs.0.make_mut().iter_mut() {
+                    if *a.resolve() == *"src" {
+                        *v = new_src.clone().into();
+                    }
                 }
             }
         }
         Ok(WalkControl::Continue)
     })
-}
-
-/// Map a MIME type string (e.g. `"image/png"`) to a file extension.
-fn media_type_to_ext(mediatype: &str) -> &'static str {
-    match mediatype {
-        "image/png" => "png",
-        "image/jpeg" | "image/jpg" => "jpg",
-        "image/gif" => "gif",
-        "image/svg+xml" => "svg",
-        "image/webp" => "webp",
-        "image/avif" => "avif",
-        _ => "bin",
-    }
 }
 // ---------------------------------------------------------------------------
 // World adapter
