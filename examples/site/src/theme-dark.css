@@ -1,0 +1,17 @@
+@media (prefers-color-scheme: dark) {
+  :root {
+    --hl-default: #e1e4e8;
+    --hl-keyword-operator: #f97583;
+    --hl-keyword-typst: #f97583;
+    --hl-keyword-control: #f97583;
+    --hl-string-quoted: #79b8ff;
+    --hl-string-quoted-double: #79b8ff;
+    --hl-comment-line: #959da5;
+    --hl-comment-typst: #959da5;
+    --hl-constant-numeric: #b392f0;
+    --hl-entity-name: #79b8ff;
+    --hl-entity-name-function: #79b8ff;
+    --hl-punctuation-typst: #e1e4e8;
+    --hl-markup-raw: #e1e4e8;
+  }
+}

@@ -1,5 +1,6 @@
 mod compile;
 mod content;
+mod css;
 mod highlight;
 mod pipeline;
 mod project;

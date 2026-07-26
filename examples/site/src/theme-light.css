@@ -1,0 +1,15 @@
+:root {
+  --hl-default: #24292e;
+  --hl-keyword-operator: #d73a49;
+  --hl-keyword-typst: #d73a49;
+  --hl-keyword-control: #d73a49;
+  --hl-string-quoted: #032f62;
+  --hl-string-quoted-double: #032f62;
+  --hl-comment-line: #6a737d;
+  --hl-comment-typst: #6a737d;
+  --hl-constant-numeric: #6f42c1;
+  --hl-entity-name: #005cc5;
+  --hl-entity-name-function: #005cc5;
+  --hl-punctuation-typst: #24292e;
+  --hl-markup-raw: #24292e;
+}

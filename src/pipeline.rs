@@ -89,5 +89,11 @@ pub fn build(root: &Path, config: Dict) -> Result<BuildResult> {
         }
     }
 
+    // --- Phase 3: CSS assets ---
+    crate::css::run(
+        &crate::project::src_dir(root),
+        &crate::project::output_dir(root),
+    )?;
+
     Ok(result)
 }
