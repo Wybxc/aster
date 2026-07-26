@@ -5,24 +5,69 @@ use lightningcss::bundler::{Bundler, FileProvider};
 use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions};
 use lightningcss::targets::Browsers;
 
-/// Discover every `.css` file under `src_dir`, bundle + prefix + minify each,
-/// and write results to `dist_dir` preserving relative paths.
+/// Process CSS files referenced by page templates.
+///
+/// Scans `src_dir` for `.css` files, filters to those referenced by
+/// `allowed_refs` (relative paths like `"style.css"`), bundles each with
+/// lightningcss (`@import` resolution), minifies, and writes to `dist_dir`.
 ///
 /// Returns the list of written output paths.
 pub fn run(src_dir: &Path, dist_dir: &Path) -> Result<Vec<PathBuf>> {
+    //
+    // Collect CSS references from page HTML
+    //
+    // Look for <link rel="stylesheet" href="..."> in every HTML file under
+    // dist_dir so we only bundle CSS that pages actually use.
+    let allowed_refs = {
+        let mut refs = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(dist_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().is_some_and(|ext| ext == "html") {
+                    let html = match std::fs::read_to_string(&path) {
+                        Ok(h) => h,
+                        Err(_) => continue,
+                    };
+                    for (i, _) in html.match_indices("rel=\"stylesheet\"") {
+                        // Walk backwards to find the enclosing <link.
+                        let before = &html[..i];
+                        if let Some(link_start) = before.rfind('<') {
+                            let link = &html[link_start..];
+                            // Find href="..." inside this <link>.
+                            if let Some(href_pos) = link.find("href=\"") {
+                                let start = href_pos + 6;
+                                if let Some(end) = link[start..].find('"') {
+                                    refs.push(link[start..start + end].to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        refs
+    };
+
     let mut outputs = Vec::new();
 
-    let entries = collect_css_files(src_dir);
-    if entries.is_empty() {
+    let all_files = collect_css_files(src_dir);
+    if all_files.is_empty() {
         return Ok(outputs);
     }
 
-    for entry in &entries {
+    for entry in &all_files {
         let relative = entry
             .strip_prefix(src_dir)
-            .expect("file must be under src/");
-        let output = dist_dir.join(relative);
+            .expect("file must be under src/")
+            .to_string_lossy()
+            .into_owned();
 
+        // Skip files not referenced by any page template.
+        if !allowed_refs.contains(&relative) {
+            continue;
+        }
+
+        let output = dist_dir.join(&relative);
         let css = bundle_file(entry)?;
 
         if let Some(parent) = output.parent() {
