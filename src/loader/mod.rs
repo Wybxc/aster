@@ -9,8 +9,8 @@ use anyhow::Result;
 /// match wins.  A catch-all [`URLLoader`] at the end ensures every href is
 /// handled.
 pub trait BundleLoader {
-    /// Whether this loader can handle `href`.
-    fn can_handle(&self, href: &str) -> bool;
+    /// Whether this loader can handle `href` within `src_dir`.
+    fn can_handle(&self, href: &str, src_dir: &Path) -> bool;
     /// Bundle the resource at `href` (relative to `src_dir`), write the result
     /// to `dist_dir`, and return the new href value for the DOM.
     fn bundle(&self, href: &str, src_dir: &Path, dist_dir: &Path) -> Result<String>;
@@ -25,7 +25,7 @@ pub trait BundleLoader {
 pub struct URLLoader;
 
 impl BundleLoader for URLLoader {
-    fn can_handle(&self, _href: &str) -> bool {
+    fn can_handle(&self, _href: &str, _src_dir: &Path) -> bool {
         true
     }
     fn bundle(&self, href: &str, _src_dir: &Path, _dist_dir: &Path) -> Result<String> {

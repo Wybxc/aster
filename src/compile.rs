@@ -130,7 +130,7 @@ impl CompileContext {
 /// find the first [`BundleLoader`] whose `can_handle` matches its `href`,
 /// call `bundle` to transform the resource, and update the `href` in-place.
 ///
-/// The [`PassthroughLoader`] should usually be the last entry so that
+/// The [`URLLoader`] should usually be the last entry so that
 /// unrecognised hrefs are left unchanged rather than causing an error.
 ///
 /// # Dedup
@@ -163,7 +163,7 @@ fn walk_and_bundle(
             if *a.resolve() == *"href" {
                 let loader = loaders
                     .iter()
-                    .find(|l| l.can_handle(v.as_str()))
+                    .find(|l| l.can_handle(v.as_str(), src_dir))
                     .ok_or_else(|| anyhow::anyhow!("no loader for '{}'", v.as_str()))?;
                 let hashed = loader.bundle(v.as_str(), src_dir, dist_dir)?;
                 *v = hashed.into();

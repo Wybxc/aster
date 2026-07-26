@@ -14,8 +14,8 @@ use crate::loader::BundleLoader;
 pub struct CssLoader;
 
 impl BundleLoader for CssLoader {
-    fn can_handle(&self, href: &str) -> bool {
-        href.ends_with(".css")
+    fn can_handle(&self, href: &str, src_dir: &Path) -> bool {
+        href.ends_with(".css") && src_dir.join(href).exists()
     }
     fn bundle(&self, href: &str, src_dir: &Path, dist_dir: &Path) -> Result<String> {
         bundle_relative(href, src_dir, dist_dir)
