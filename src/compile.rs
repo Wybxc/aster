@@ -126,53 +126,53 @@ impl CompileContext {
     }
 }
 
-/// Walk all `<link rel="stylesheet">` elements in the document.  For each one,
-/// find the first [`BundleLoader`] whose `can_handle` matches its `href`,
-/// call `bundle` to transform the resource, and update the `href` in-place.
-///
-/// The [`URLLoader`] should usually be the last entry so that
-/// unrecognised hrefs are left unchanged rather than causing an error.
+/// Walk all `<link>` elements in the document.  For each one, read the `rel`
+/// and `href` attributes and call [`crate::loader::try_bundle`].  Elements
+/// whose `rel` is not recognised are left untouched.
 ///
 /// # Dedup
 ///
 /// Currently each page that references `style.css` bundles it independently.
 /// A dedup layer (cache the hashed name per href) can be added later.
-pub fn process_css_refs(
-    doc: &mut HtmlDocument,
-    src_dir: &Path,
-    dist_dir: &Path,
-    loaders: &[&dyn crate::loader::BundleLoader],
-) -> Result<()> {
-    walk_and_bundle(doc.root_mut(), src_dir, dist_dir, loaders)
+pub fn process_css_refs(doc: &mut HtmlDocument, src_dir: &Path, dist_dir: &Path) -> Result<()> {
+    walk_and_bundle(doc.root_mut(), src_dir, dist_dir)
 }
 
-fn walk_and_bundle(
-    elem: &mut HtmlElement,
-    src_dir: &Path,
-    dist_dir: &Path,
-    loaders: &[&dyn crate::loader::BundleLoader],
-) -> Result<()> {
-    if elem.tag == typst_html::tag::link
-        && elem
+fn walk_and_bundle(elem: &mut HtmlElement, src_dir: &Path, dist_dir: &Path) -> Result<()> {
+    if elem.tag == typst_html::tag::link {
+        // Read rel and href attributes (immutable pass first).
+        let rel = elem
             .attrs
             .0
             .iter()
-            .any(|(a, v)| *a.resolve() == *"rel" && v.as_str() == "stylesheet")
-    {
-        for (a, v) in elem.attrs.0.make_mut().iter_mut() {
-            if *a.resolve() == *"href" {
-                let loader = loaders
-                    .iter()
-                    .find(|l| l.can_handle(v.as_str(), src_dir))
-                    .ok_or_else(|| anyhow::anyhow!("no loader for '{}'", v.as_str()))?;
-                let hashed = loader.bundle(v.as_str(), src_dir, dist_dir)?;
-                *v = hashed.into();
+            .find(|(a, _)| *a.resolve() == *"rel")
+            .map(|(_, v)| v.clone());
+
+        let href = elem
+            .attrs
+            .0
+            .iter()
+            .find(|(a, _)| *a.resolve() == *"href")
+            .map(|(_, v)| v.clone());
+
+        let Some(rel) = rel else { return Ok(()) };
+        let Some(href) = href else { return Ok(()) };
+
+        // Try to bundle; unrecognised rel values (e.g. "stylesheet")
+        // return `None` and the element is left untouched.
+        if let Some(result) = crate::loader::try_bundle(&rel, &href, src_dir, dist_dir)? {
+            for (a, v) in elem.attrs.0.make_mut().iter_mut() {
+                if *a.resolve() == *"href" {
+                    *v = result.href.clone().into();
+                } else if *a.resolve() == *"rel" {
+                    *v = result.rel.clone().into();
+                }
             }
         }
     }
     for child in elem.children.make_mut().iter_mut() {
         if let HtmlNode::Element(e) = child {
-            walk_and_bundle(e, src_dir, dist_dir, loaders)?;
+            walk_and_bundle(e, src_dir, dist_dir)?;
         }
     }
     Ok(())

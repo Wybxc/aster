@@ -7,7 +7,6 @@ use typst_html::{HtmlDocument, HtmlOptions};
 
 use crate::compile;
 use crate::highlight;
-use crate::loader::{BundleLoader, CssLoader, URLLoader};
 
 /// Result of a complete Aster project build.
 pub struct BuildResult {
@@ -75,21 +74,15 @@ pub fn build(root: &Path, config: Dict) -> Result<BuildResult> {
     let output_dir = crate::project::output_dir(root);
     let mut page_docs: Vec<(PathBuf, HtmlDocument)> = Vec::new();
 
-    // Loaders are tried in order; the first whose `can_handle` matches the
-    // href is used.  CssLoader recognises `.css`, URLLoader is the catch-all
-    // (keeps external URLs and unrecognised types unchanged).
-    let loaders: [&dyn BundleLoader; 2] = [&CssLoader, &URLLoader];
-
     for entry in &entries {
         let output =
             crate::project::page_output_path(entry, root).expect("file must be under src/");
 
         match builder.document(entry, root, &page_library) {
             Ok(mut doc) => {
-                // Each `<link rel="stylesheet">` href is dispatched through the
-                // loader chain — currently CSS gets bundled with content hashing
-                // and everything else passes through unchanged.
-                if compile::process_css_refs(&mut doc, &src_dir, &output_dir, &loaders).is_err() {
+                // Walk `<link>` elements, dispatch each by `rel` to a handler
+                // (e.g. `rel="stylesheet"` → CSS bundler with content hashing).
+                if compile::process_css_refs(&mut doc, &src_dir, &output_dir).is_err() {
                     result.has_errors = true;
                 }
                 page_docs.push((output, doc));

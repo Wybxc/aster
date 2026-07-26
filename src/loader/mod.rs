@@ -2,40 +2,37 @@ use std::path::Path;
 
 use anyhow::Result;
 
-/// A strategy for processing a resource referenced by `<link href="...">`.
+/// The result of bundling a `<link>` resource: the new attribute values
+/// that should replace the original element's `href` and `rel`.
+pub struct BundleResult {
+    pub href: String,
+    pub rel: String,
+}
+
+/// Try to bundle the resource referenced by `<link rel="..." href="...">`.
 ///
-/// Each implementation checks `can_handle` to decide whether it should
-/// process a given `href`.  When multiple loaders are registered, the first
-/// match wins.  A catch-all [`URLLoader`] at the end ensures every href is
-/// handled.
-pub trait BundleLoader {
-    /// Whether this loader can handle `href` within `src_dir`.
-    fn can_handle(&self, href: &str, src_dir: &Path) -> bool;
-    /// Bundle the resource at `href` (relative to `src_dir`), write the result
-    /// to `dist_dir`, and return the new href value for the DOM.
-    fn bundle(&self, href: &str, src_dir: &Path, dist_dir: &Path) -> Result<String>;
-}
-
-// ---------------------------------------------------------------------------
-// URL loader — passes through external URLs unchanged
-// ---------------------------------------------------------------------------
-
-/// Passes through the `href` unchanged (catch-all for external URLs and
-/// resource types that don't need transformation).
-pub struct URLLoader;
-
-impl BundleLoader for URLLoader {
-    fn can_handle(&self, _href: &str, _src_dir: &Path) -> bool {
-        true
-    }
-    fn bundle(&self, href: &str, _src_dir: &Path, _dist_dir: &Path) -> Result<String> {
-        Ok(href.to_owned())
+/// Returns `Ok(None)` when `rel` is not recognised — the caller should
+/// leave the element untouched.  Recognised `rel` values and their effect:
+///
+/// | `rel`  | Outcome |
+/// |--------|---------|
+/// | `"css"` | CSS bundled through lightningcss, content-hashed filename, `rel` rewritten to `"stylesheet"` |
+pub fn try_bundle(
+    rel: &str,
+    href: &str,
+    src_dir: &Path,
+    dist_dir: &Path,
+) -> Result<Option<BundleResult>> {
+    match rel {
+        "css" => {
+            let hashed = css::bundle_relative(href, src_dir, dist_dir)?;
+            Ok(Some(BundleResult {
+                href: hashed,
+                rel: "stylesheet".to_owned(),
+            }))
+        }
+        _ => Ok(None),
     }
 }
-
-// ---------------------------------------------------------------------------
-// Sub-modules
-// ---------------------------------------------------------------------------
 
 pub mod css;
-pub use css::CssLoader;

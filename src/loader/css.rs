@@ -5,31 +5,13 @@ use lightningcss::bundler::{Bundler, FileProvider};
 use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions};
 use lightningcss::targets::Browsers;
 
-use crate::loader::BundleLoader;
-
-/// Bundles CSS files through lightningcss with content hashing.
-///
-/// Matches hrefs ending in `.css`.  The bundled output is written to
-/// `dist_dir/{stem}.{hash}.{ext}` and the hashed filename is returned.
-pub struct CssLoader;
-
-impl BundleLoader for CssLoader {
-    fn can_handle(&self, href: &str, src_dir: &Path) -> bool {
-        href.ends_with(".css") && src_dir.join(href).exists()
-    }
-    fn bundle(&self, href: &str, src_dir: &Path, dist_dir: &Path) -> Result<String> {
-        bundle_relative(href, src_dir, dist_dir)
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
 /// Bundle a single CSS file referenced by its `href` (relative to `src_dir`),
 /// write the result to `dist_dir` with a content hash in the filename,
 /// and return the hashed filename.
-fn bundle_relative(href: &str, src_dir: &Path, dist_dir: &Path) -> Result<String> {
+///
+/// The existence check and dispatch happen in [`super::LinkAsset::from_link`],
+/// so this function can assume the file exists.
+pub(super) fn bundle_relative(href: &str, src_dir: &Path, dist_dir: &Path) -> Result<String> {
     let entry = src_dir.join(href);
     let css = bundle_file(&entry)?;
 

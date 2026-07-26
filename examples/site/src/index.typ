@@ -12,7 +12,7 @@
     #html.meta(name: "viewport", content: "width=device-width, initial-scale=1")
     #html.title("Aster Sample Site")
     #html.elem("link", attrs: (
-      "rel": "stylesheet",
+      "rel": "css",
       "href": "style.css",
     ))
   ]
