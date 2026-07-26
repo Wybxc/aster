@@ -2,9 +2,9 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
+use typst::Library;
 use typst::foundations::{Dict, Str, Value};
 use typst::utils::LazyHash;
-use typst::Library;
 
 use crate::compile;
 
@@ -21,7 +21,7 @@ use crate::compile;
 pub fn load_collections(
     content_dir: &Path,
     project_root: &Path,
-    shared: &compile::SharedCompile,
+    builder: &compile::CompileContext,
     library: &LazyHash<Library>,
 ) -> Result<Value> {
     let typ_files =
@@ -55,7 +55,7 @@ pub fn load_collections(
             p.to_string_lossy().to_string()
         };
 
-        let body = shared.compile_content(path, project_root, library)?;
+        let body = builder.content(path, project_root, library)?;
         cols.entry(collection.clone())
             .or_default()
             .push((id, path.clone(), Value::Content(body)));

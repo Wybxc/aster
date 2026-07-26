@@ -29,20 +29,17 @@ fn empty_aster() -> Value {
 /// 3. Compile all page templates and write output (Phase 2) — uses final inputs
 /// 4. Report success / failure
 pub fn build(root: &Path, config: Dict) -> Result<BuildResult> {
-    // Shared compilation env (fonts scanned once for the whole project).
-    let shared = compile::SharedCompile::new(root);
+    // World builder — fonts scanned once for the whole project.
+    let builder = compile::CompileContext::new(root);
 
     // --- Phase 1: content collections (config inputs only) ---
     let content_library = LazyHash::new(compile::build_library(config.clone()));
 
     let content_dir = crate::project::content_dir(root);
     let aster_value = if content_dir.is_dir() {
-        match crate::content::load_collections(&content_dir, root, &shared, &content_library) {
+        match crate::content::load_collections(&content_dir, root, &builder, &content_library) {
             Ok(v) => v,
-            Err(err) => {
-                eprintln!("warning: failed to load content collections: {err}");
-                empty_aster()
-            }
+            Err(err) => bail!("error: failed to load content collections: {err}"),
         }
     } else {
         empty_aster()
@@ -75,7 +72,7 @@ pub fn build(root: &Path, config: Dict) -> Result<BuildResult> {
         let output =
             crate::project::page_output_path(entry, root).expect("file must be under src/");
 
-        match compile::run(entry, root, &shared, &page_library) {
+        match builder.page(entry, root, &page_library) {
             Ok(html) => {
                 if let Some(parent) = output.parent() {
                     std::fs::create_dir_all(parent).with_context(|| {
