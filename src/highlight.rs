@@ -41,7 +41,7 @@ pub fn rehighlight(doc: &mut HtmlDocument) {
                 .iter()
                 .find_map(|(a, v)| (*a.resolve() == *"data-lang").then(|| v.clone()))
         {
-            let raw = collect_text(&elem.children).trim().to_owned();
+            let raw = collect_text(elem);
             if raw.is_empty() {
                 return Ok(WalkControl::SkipChildren);
             }
@@ -212,14 +212,16 @@ fn walk_typst_node(
     }
 }
 
-fn collect_text(nodes: &[HtmlNode]) -> String {
+/// Collect the text content of all descendant `HtmlNode::Text` nodes
+/// under the given element.
+fn collect_text(elem: &HtmlElement) -> String {
     let mut out = String::new();
-    for node in nodes {
-        match node {
-            HtmlNode::Text(t, _) => out.push_str(t),
-            HtmlNode::Element(e) => out.push_str(&collect_text(&e.children)),
-            _ => {}
+    crate::document::walk(elem, &mut |el| {
+        for child in &el.children {
+            if let HtmlNode::Text(t, _) = child {
+                out.push_str(t.as_str());
+            }
         }
-    }
+    });
     out
 }

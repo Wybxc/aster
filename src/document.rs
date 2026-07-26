@@ -1,11 +1,24 @@
 use typst_html::{HtmlElement, HtmlNode};
 
+/// Recursively visit every descendant `HtmlElement` depth-first (immutable).
+///
+/// Unlike [`walk_mut`], this does not support `SkipChildren` or error
+/// propagation — it always visits the full subtree.
+pub fn walk(elem: &HtmlElement, f: &mut dyn FnMut(&HtmlElement)) {
+    f(elem);
+    for child in &elem.children {
+        if let HtmlNode::Element(e) = child {
+            walk(e, f);
+        }
+    }
+}
+
 /// Signal returned by the callback passed to [`walk_mut`] to control
 /// whether children of the current element should be visited.
 pub enum WalkControl {
     /// Continue recursion into children.
     Continue,
-    /// Skip the current element's children.
+    /// Skip the current element's subtree.
     SkipChildren,
 }
 
