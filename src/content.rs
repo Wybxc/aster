@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use typst::foundations::{Dict, Str, Value};
+use typst::utils::LazyHash;
+use typst::Library;
 
 use crate::compile;
 
@@ -19,13 +21,12 @@ use crate::compile;
 pub fn load_collections(
     content_dir: &Path,
     project_root: &Path,
-    config_inputs: Dict,
+    shared: &compile::SharedCompile,
+    library: &LazyHash<Library>,
 ) -> Result<Value> {
     let typ_files =
         crate::project::find_typ_files(content_dir).context("failed to scan content directory")?;
 
-    // Shared compilation env (fonts scanned once, reused for every entry).
-    let shared = compile::SharedCompile::new(config_inputs, project_root);
     let mut cols: BTreeMap<String, Vec<(String, PathBuf, Value)>> = BTreeMap::new();
 
     for path in &typ_files {
@@ -54,7 +55,7 @@ pub fn load_collections(
             p.to_string_lossy().to_string()
         };
 
-        let body = shared.compile_content(path, project_root)?;
+        let body = shared.compile_content(path, project_root, library)?;
         cols.entry(collection.clone())
             .or_default()
             .push((id, path.clone(), Value::Content(body)));

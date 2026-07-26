@@ -2,6 +2,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use typst::foundations::{Dict, Str, Value};
+use typst::utils::LazyHash;
+
+use crate::compile;
 
 /// Result of a complete Aster project build.
 pub struct BuildResult {
@@ -21,15 +24,20 @@ fn empty_aster() -> Value {
 
 /// Execute the full Aster build lifecycle.
 ///
-/// 1. Load content collections (Phase 1)
+/// 1. Load content collections (Phase 1) — uses `config` as inputs
 /// 2. Assemble final Typst inputs (config + `_aster` protocol)
-/// 3. Compile all page templates and write output (Phase 2)
+/// 3. Compile all page templates and write output (Phase 2) — uses final inputs
 /// 4. Report success / failure
 pub fn build(root: &Path, config: Dict) -> Result<BuildResult> {
-    // --- Phase 1: content collections ---
+    // Shared compilation env (fonts scanned once for the whole project).
+    let shared = compile::SharedCompile::new(root);
+
+    // --- Phase 1: content collections (config inputs only) ---
+    let content_library = LazyHash::new(compile::build_library(config.clone()));
+
     let content_dir = crate::project::content_dir(root);
     let aster_value = if content_dir.is_dir() {
-        match crate::content::load_collections(&content_dir, root, config.clone()) {
+        match crate::content::load_collections(&content_dir, root, &shared, &content_library) {
             Ok(v) => v,
             Err(err) => {
                 eprintln!("warning: failed to load content collections: {err}");
@@ -41,13 +49,13 @@ pub fn build(root: &Path, config: Dict) -> Result<BuildResult> {
     };
 
     // --- Assemble final inputs (config + _aster) ---
-    let final_inputs = {
+    let page_library = {
         let mut data: Vec<(Str, Value)> = config.into_iter().collect();
         data.push((Str::from("_aster"), aster_value));
-        Dict::from_iter(data)
+        LazyHash::new(compile::build_library(Dict::from_iter(data)))
     };
 
-    // --- Phase 2: pages ---
+    // --- Phase 2: pages (config + _aster inputs) ---
     let src_dir = crate::project::src_dir(root);
     if !src_dir.is_dir() {
         bail!("src/ directory not found in project");
@@ -67,7 +75,7 @@ pub fn build(root: &Path, config: Dict) -> Result<BuildResult> {
         let output =
             crate::project::page_output_path(entry, root).expect("file must be under src/");
 
-        match crate::compile::run(entry, root, final_inputs.clone()) {
+        match compile::run(entry, root, &shared, &page_library) {
             Ok(html) => {
                 if let Some(parent) = output.parent() {
                     std::fs::create_dir_all(parent).with_context(|| {
