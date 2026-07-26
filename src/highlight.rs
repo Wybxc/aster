@@ -1,4 +1,3 @@
-use std::convert::Infallible;
 use std::sync::LazyLock;
 
 use syntect::easy::ScopeRegionIterator;
@@ -6,9 +5,9 @@ use syntect::highlighting::{Highlighter, Theme, ThemeSet};
 use syntect::parsing::{ParseState, Scope, ScopeStack, SyntaxSet};
 use typst::ecow::{EcoVec, eco_format, eco_vec};
 use typst::syntax::{LinkedNode, Span, SyntaxNode, parse_code, parse_math};
-use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
+use typst_html::{HtmlElement, HtmlNode};
 
-use crate::document::WalkControl;
+use crate::document::{ElementProcessor, WalkControl};
 
 static SS: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
 static THEMES: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
@@ -20,63 +19,64 @@ const TOKEN_THEME: &str = "InspiredGitHub";
 /// We replicate Typst's `ThemedHighlighter` approach for these.
 const TYPST_LANGS: &[&str] = &["typ", "typst", "typc", "typm"];
 
-/// Find every `<code data-lang="X">` in the document and replace its children
-/// with `<span style="color:var(--hl-{scope})">` tokens.
-///
-/// - For Typst languages (`typ`, `typst`, `typc`, `typm`): uses Typst's own
-///   syntax parser + `ThemedHighlighter` scope resolution, but with CSS
-///   variable output.
-/// - For all other languages: uses syntect for tokenisation + scope names.
-///
-/// Users define `--hl-{scope}` CSS variables in their stylesheet to control
-/// colours for both light and dark mode.
-pub fn rehighlight(doc: &mut HtmlDocument) {
-    let theme = &THEMES.themes[TOKEN_THEME];
+/// [`ElementProcessor`] that syntax-highlights `<code data-lang="...">` blocks.
+pub struct HighlightProcessor;
 
-    crate::document::walk_mut::<Infallible>(doc.root_mut(), &mut |elem| {
-        if elem.tag == typst_html::tag::code
-            && let Some(lang) = elem
+impl ElementProcessor for HighlightProcessor {
+    fn matches(&self, elem: &HtmlElement) -> bool {
+        elem.tag == typst_html::tag::code
+            && elem
                 .attrs
                 .0
                 .iter()
-                .find_map(|(a, v)| (*a.resolve() == *"data-lang").then(|| v.clone()))
+                .any(|(a, _v)| *a.resolve() == *"data-lang")
+    }
+
+    fn process(&self, elem: &mut HtmlElement) -> anyhow::Result<WalkControl> {
+        let theme = &THEMES.themes[TOKEN_THEME];
+        let lang = match elem
+            .attrs
+            .0
+            .iter()
+            .find(|(a, _)| *a.resolve() == *"data-lang")
+            .map(|(_, v)| v.clone())
         {
-            let raw = collect_text(elem);
-            if raw.is_empty() {
-                return Ok(WalkControl::SkipChildren);
-            }
+            Some(l) => l,
+            None => return Ok(WalkControl::Continue),
+        };
 
-            let tokens = if TYPST_LANGS.contains(&lang.as_str()) {
-                do_typst_highlight(&raw, &lang, theme)
-            } else {
-                do_syntect_highlight(&raw, &lang, theme)
-            };
-
-            let mut new_children: EcoVec<HtmlNode> = EcoVec::new();
-            for (scope_name, bits, txt) in &tokens {
-                let mut style = eco_format!("color:var(--hl-{scope_name})");
-                if bits & 1 != 0 {
-                    style.push_str(";font-weight:bold");
-                }
-                if bits & 2 != 0 {
-                    style.push_str(";font-style:italic");
-                }
-
-                let span = HtmlElement::new(typst_html::tag::span)
-                    .with_attr(typst_html::attr::style, style)
-                    .with_children(eco_vec![HtmlNode::Text(
-                        txt.clone().into(),
-                        Span::detached()
-                    )]);
-                new_children.push(HtmlNode::Element(span));
-            }
-            elem.children = new_children;
+        let raw = collect_text(elem);
+        if raw.is_empty() {
             return Ok(WalkControl::SkipChildren);
         }
 
-        Ok(WalkControl::Continue)
-    })
-    .unwrap();
+        let tokens = if TYPST_LANGS.contains(&lang.as_str()) {
+            do_typst_highlight(&raw, &lang, theme)
+        } else {
+            do_syntect_highlight(&raw, &lang, theme)
+        };
+
+        let mut new_children: EcoVec<HtmlNode> = EcoVec::new();
+        for (scope_name, bits, txt) in &tokens {
+            let mut style = eco_format!("color:var(--hl-{scope_name})");
+            if bits & 1 != 0 {
+                style.push_str(";font-weight:bold");
+            }
+            if bits & 2 != 0 {
+                style.push_str(";font-style:italic");
+            }
+
+            let span = HtmlElement::new(typst_html::tag::span)
+                .with_attr(typst_html::attr::style, style)
+                .with_children(eco_vec![HtmlNode::Text(
+                    txt.clone().into(),
+                    Span::detached()
+                )]);
+            new_children.push(HtmlNode::Element(span));
+        }
+        elem.children = new_children;
+        Ok(WalkControl::SkipChildren)
+    }
 }
 
 /// Derive a semantic CSS variable suffix from a slice of scopes.

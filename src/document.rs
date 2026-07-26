@@ -1,4 +1,5 @@
-use typst_html::{HtmlElement, HtmlNode};
+use anyhow::Result;
+use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 
 /// Recursively visit every descendant `HtmlElement` depth-first (immutable).
 ///
@@ -42,4 +43,29 @@ pub fn walk_mut<E>(
         }
     }
     Ok(())
+}
+
+/// A processor that matches and transforms individual [`HtmlElement`] nodes.
+///
+/// Implementations are registered via [`process_all`], which runs them in a
+/// single DOM traversal.  Each processor is called for every element where
+/// [`matches`](Self::matches) returns `true`.
+pub trait ElementProcessor {
+    /// Whether this processor should handle `elem`.
+    fn matches(&self, elem: &HtmlElement) -> bool;
+    /// Transform `elem`.  Return [`WalkControl::SkipChildren`] to stop
+    /// recursion into the element's subtree.
+    fn process(&self, elem: &mut HtmlElement) -> Result<WalkControl>;
+}
+
+/// Run a set of [`ElementProcessor`]s on the document in a single traversal.
+pub fn process_all(doc: &mut HtmlDocument, processors: &[&dyn ElementProcessor]) -> Result<()> {
+    walk_mut(doc.root_mut(), &mut |elem| {
+        for p in processors {
+            if p.matches(elem) && matches!(p.process(elem)?, WalkControl::SkipChildren) {
+                return Ok(WalkControl::SkipChildren);
+            }
+        }
+        Ok(WalkControl::Continue)
+    })
 }

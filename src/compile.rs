@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Result, bail};
@@ -126,75 +126,28 @@ impl CompileContext {
     }
 }
 
-/// Walk all `<link>` elements in the document.  For each one, read the `rel`
-/// and `href` attributes and call [`crate::loader::try_bundle`].  Elements
-/// whose `rel` is not recognised are left untouched.
-///
-/// # Dedup
-///
-/// Currently each page that references `style.css` bundles it independently.
-/// A dedup layer (cache the hashed name per href) can be added later.
-pub fn process_css_refs(doc: &mut HtmlDocument, src_dir: &Path, dist_dir: &Path) -> Result<()> {
-    crate::document::walk_mut(doc.root_mut(), &mut |e| {
-        if e.tag == typst_html::tag::link {
-            let rel = e
-                .attrs
-                .0
-                .iter()
-                .find(|(a, _)| *a.resolve() == *"rel")
-                .map(|(_, v)| v.clone());
-
-            let href = e
-                .attrs
-                .0
-                .iter()
-                .find(|(a, _)| *a.resolve() == *"href")
-                .map(|(_, v)| v.clone());
-
-            if let (Some(rel), Some(href)) = (rel, href) {
-                // Try to bundle; unrecognised rel values (e.g. "stylesheet")
-                // return `None` and the element is left untouched.
-                if let Some(result) = crate::loader::try_bundle(&rel, &href, src_dir, dist_dir)? {
-                    for (a, v) in e.attrs.0.make_mut().iter_mut() {
-                        if *a.resolve() == *"href" {
-                            *v = result.href.clone().into();
-                        } else if *a.resolve() == *"rel" {
-                            *v = result.rel.clone().into();
-                        }
-                    }
-                }
-            }
-        }
-        Ok(crate::document::WalkControl::Continue)
-    })
+/// Shared context required by the document processing pipeline steps.
+pub struct ProcessingContext {
+    pub src_dir: PathBuf,
+    pub dist_dir: PathBuf,
 }
 
-/// Walk all `<img>` elements.  For each one whose `src` is a data URI larger
-/// than the threshold, extract to a content-hashed file and rewrite src.
-pub fn process_images(doc: &mut HtmlDocument, dist_dir: &Path) -> Result<()> {
-    use crate::document::WalkControl;
+/// Run the full document pipeline in a single DOM traversal: bundle CSS,
+/// extract data URI images, and syntax-highlight code blocks.
+pub fn process_document(doc: &mut HtmlDocument, ctx: &ProcessingContext) -> Result<()> {
+    use crate::document::ElementProcessor;
 
-    crate::document::walk_mut(doc.root_mut(), &mut |e| {
-        if e.tag == typst_html::tag::img {
-            let src = e
-                .attrs
-                .0
-                .iter()
-                .find_map(|(a, v)| (*a.resolve() == *"src").then(|| v.clone()));
-            let Some(src) = src else {
-                return Ok(WalkControl::Continue);
-            };
+    let css = crate::loader::css::CssProcessor {
+        src_dir: ctx.src_dir.clone(),
+        dist_dir: ctx.dist_dir.clone(),
+    };
+    let img = crate::loader::image::ImageProcessor {
+        dist_dir: ctx.dist_dir.clone(),
+    };
+    let hl = crate::highlight::HighlightProcessor;
 
-            if let Some(new_src) = crate::loader::image::try_extract(&src, dist_dir)? {
-                for (a, v) in e.attrs.0.make_mut().iter_mut() {
-                    if *a.resolve() == *"src" {
-                        *v = new_src.clone().into();
-                    }
-                }
-            }
-        }
-        Ok(WalkControl::Continue)
-    })
+    let processors: [&dyn ElementProcessor; 3] = [&css, &img, &hl];
+    crate::document::process_all(doc, &processors)
 }
 // ---------------------------------------------------------------------------
 // World adapter

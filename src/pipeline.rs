@@ -6,7 +6,6 @@ use typst::utils::LazyHash;
 use typst_html::{HtmlDocument, HtmlOptions};
 
 use crate::compile;
-use crate::highlight;
 
 /// Result of a complete Aster project build.
 pub struct BuildResult {
@@ -28,8 +27,8 @@ fn empty_aster() -> Value {
 ///
 /// 1. Load content collections (Phase 1) — uses `config` as inputs
 /// 2. Assemble final Typst inputs (config + `_aster` protocol)
-/// 3. Compile page templates, bundle CSS inline, rehighlight, and write
-///    output (Phase 2) — uses final inputs
+/// 3. Compile page templates, run the document pipeline (CSS bundling,
+///    image extraction, syntax highlighting), and write output (Phase 2)
 /// 4. Report success / failure
 pub fn build(root: &Path, config: Dict) -> Result<BuildResult> {
     // World builder — fonts scanned once for the whole project.
@@ -80,12 +79,11 @@ pub fn build(root: &Path, config: Dict) -> Result<BuildResult> {
 
         match builder.document(entry, root, &page_library) {
             Ok(mut doc) => {
-                // Bundle CSS (rel="css" → lightningcss) and extract data URI
-                // images that exceed the size threshold.
-                if compile::process_css_refs(&mut doc, &src_dir, &output_dir).is_err() {
-                    result.has_errors = true;
-                }
-                if compile::process_images(&mut doc, &output_dir).is_err() {
+                let ctx = compile::ProcessingContext {
+                    src_dir: src_dir.clone(),
+                    dist_dir: output_dir.clone(),
+                };
+                if compile::process_document(&mut doc, &ctx).is_err() {
                     result.has_errors = true;
                 }
                 page_docs.push((output, doc));
@@ -96,9 +94,7 @@ pub fn build(root: &Path, config: Dict) -> Result<BuildResult> {
         }
     }
 
-    for (output, doc) in &mut page_docs {
-        highlight::rehighlight(doc);
-
+    for (output, doc) in &page_docs {
         let raw = typst_html::html(doc, &HtmlOptions::default())
             .map_err(|_| anyhow::anyhow!("failed to encode HTML"))?;
 
@@ -106,7 +102,7 @@ pub fn build(root: &Path, config: Dict) -> Result<BuildResult> {
             std::fs::create_dir_all(parent)
                 .with_context(|| format!("failed to create directory {}", parent.display()))?;
         }
-        std::fs::write(&*output, &raw)
+        std::fs::write(output, &raw)
             .with_context(|| format!("failed to write {}", output.display()))?;
         result.outputs.push(output.clone());
     }

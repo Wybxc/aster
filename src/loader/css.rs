@@ -1,9 +1,12 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use lightningcss::bundler::{Bundler, FileProvider};
 use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions};
 use lightningcss::targets::Browsers;
+use typst_html::HtmlElement;
+
+use crate::document::{ElementProcessor, WalkControl};
 
 /// Bundle a single CSS file referenced by its `href` (relative to `src_dir`),
 /// write the result to `dist_dir` with a content hash in the filename,
@@ -35,6 +38,45 @@ pub(super) fn bundle_relative(href: &str, src_dir: &Path, dist_dir: &Path) -> Re
         .with_context(|| format!("failed to write {}", output.display()))?;
 
     Ok(hashed_name)
+}
+
+/// Processor that bundles `<link rel="css">` references through lightningcss.
+pub struct CssProcessor {
+    pub src_dir: PathBuf,
+    pub dist_dir: PathBuf,
+}
+
+impl ElementProcessor for CssProcessor {
+    fn matches(&self, elem: &HtmlElement) -> bool {
+        if elem.tag != typst_html::tag::link {
+            return false;
+        }
+        elem.attrs
+            .0
+            .iter()
+            .any(|(a, v)| *a.resolve() == *"rel" && v.as_str() == "css")
+    }
+
+    fn process(&self, elem: &mut HtmlElement) -> Result<WalkControl> {
+        let href = elem
+            .attrs
+            .0
+            .iter()
+            .find_map(|(a, v)| (*a.resolve() == *"href").then(|| v.clone()));
+        let Some(href) = href else {
+            return Ok(WalkControl::Continue);
+        };
+
+        let new_href = bundle_relative(&href, &self.src_dir, &self.dist_dir)?;
+        for (a, v) in elem.attrs.0.make_mut().iter_mut() {
+            if *a.resolve() == *"href" {
+                *v = new_href.clone().into();
+            } else if *a.resolve() == *"rel" {
+                *v = "stylesheet".into();
+            }
+        }
+        Ok(WalkControl::Continue)
+    }
 }
 
 /// Bundle a single CSS entry point (resolve `@import`, prefix, minify).
