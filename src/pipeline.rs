@@ -80,9 +80,12 @@ pub fn build(root: &Path, config: Dict) -> Result<BuildResult> {
 
         match builder.document(entry, root, &page_library) {
             Ok(mut doc) => {
-                // Walk `<link>` elements, dispatch each by `rel` to a handler
-                // (e.g. `rel="stylesheet"` → CSS bundler with content hashing).
+                // Bundle CSS (rel="css" → lightningcss) and extract data URI
+                // images that exceed the size threshold.
                 if compile::process_css_refs(&mut doc, &src_dir, &output_dir).is_err() {
+                    result.has_errors = true;
+                }
+                if compile::process_images(&mut doc, &output_dir).is_err() {
                     result.has_errors = true;
                 }
                 page_docs.push((output, doc));
