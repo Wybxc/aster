@@ -16,10 +16,6 @@ use typst_kit::packages::SystemPackages;
 
 use crate::world::{CompileWorld, emit_diags};
 
-// ---------------------------------------------------------------------------
-// Compilation context
-// ---------------------------------------------------------------------------
-
 /// Reusable compilation context for a project.
 ///
 /// Holds the expensive shared state (fonts, file store) so that per-entry

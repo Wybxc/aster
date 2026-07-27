@@ -33,10 +33,6 @@ pub fn find_typ_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
     Ok(files)
 }
 
-// ---------------------------------------------------------------------------
-// Project layout
-// ---------------------------------------------------------------------------
-
 /// The page templates directory (`<root>/src`).
 pub fn src_dir(root: &Path) -> PathBuf {
     root.join("src")

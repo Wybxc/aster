@@ -8,10 +8,6 @@ use typst::utils::LazyHash;
 
 use crate::compile;
 
-// ---------------------------------------------------------------------------
-// Top-level: discover & compile all entries → collections Dict
-// ---------------------------------------------------------------------------
-
 /// Discover every `.typ` file under `content/`, compile each one and return
 /// the `_aster` protocol value.
 ///

@@ -76,10 +76,6 @@ pub fn process_all(doc: &mut HtmlDocument, processors: &[&dyn ElementProcessor])
     })
 }
 
-// ---------------------------------------------------------------------------
-// Pipeline orchestration
-// ---------------------------------------------------------------------------
-
 /// Directory layout shared by the document processing pipeline.
 pub struct ProcessingContext {
     pub src_dir: PathBuf,

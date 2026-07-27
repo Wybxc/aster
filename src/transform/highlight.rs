@@ -90,10 +90,6 @@ fn scope_css_name(scopes: &[Scope]) -> String {
     "default".to_string()
 }
 
-// ---------------------------------------------------------------------------
-// Syntect-based highlighting (all non-Typst languages)
-// ---------------------------------------------------------------------------
-
 /// Collect the text content of all descendant `HtmlNode::Text` nodes
 /// under the given element.
 fn collect_text(elem: &HtmlElement) -> String {
@@ -108,6 +104,7 @@ fn collect_text(elem: &HtmlElement) -> String {
     out
 }
 
+/// Highlight code using syntect (all non-Typst languages).
 fn do_syntect_highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(String, u8, String)> {
     let syntax = SS
         .find_syntax_by_token(lang)
@@ -153,10 +150,7 @@ fn do_syntect_highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(String, u
     out
 }
 
-// ---------------------------------------------------------------------------
-// Typst-native highlighting (typ, typst, typc, typm)
-// ---------------------------------------------------------------------------
-
+/// Highlight code using Typst's native AST (languages: typ, typst, typc, typm).
 fn do_typst_highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(String, u8, String)> {
     let root: SyntaxNode = match lang {
         "typc" => parse_code(code),

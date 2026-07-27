@@ -69,10 +69,6 @@ impl DiagnosticWorld for CompileWorld {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Library construction
-// ---------------------------------------------------------------------------
-
 /// Build a [`Library`] with the HTML feature enabled and the given `sys.inputs`.
 pub fn build_library(inputs: Dict) -> Library {
     let features: Features = [Feature::Html].into_iter().collect();
@@ -81,10 +77,6 @@ pub fn build_library(inputs: Dict) -> Library {
         .with_features(features)
         .build()
 }
-
-// ---------------------------------------------------------------------------
-// Diagnostic printing
-// ---------------------------------------------------------------------------
 
 /// Print Typst diagnostics to stderr using the given [`DiagnosticWorld`].
 pub fn emit_diags(world: &impl DiagnosticWorld, diags: &[SourceDiagnostic]) {
