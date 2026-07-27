@@ -143,7 +143,9 @@ dependencies = [
  "typst-eval",
  "typst-html",
  "typst-kit",
+ "typst-library",
  "typst-svg",
+ "walkdir",
 ]
 
 [[package]]

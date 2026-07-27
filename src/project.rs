@@ -1,59 +1,91 @@
 use std::path::{Path, PathBuf};
 
-/// Search upward from `dir` for an `aster.toml` file.
-pub fn find_root(dir: &Path) -> Option<PathBuf> {
-    let mut current = Some(dir);
-    while let Some(path) = current {
-        if path.join("aster.toml").exists() {
-            return Some(path.to_owned());
-        }
-        current = path.parent();
-    }
-    None
+use anyhow::{Result, bail};
+use walkdir::WalkDir;
+
+/// A discovered Aster project root, managing all project paths.
+///
+/// Before building, the root is located by searching upward for
+/// `aster.toml` (via [`find`](Self::find)) or by explicit path
+/// (via [`new`](Self::new)).
+#[derive(Clone)]
+pub struct ProjectRoot {
+    root: PathBuf,
 }
 
-/// Collect all `.typ` files under `dir` (iterative, depth-first).
-///
-/// Propagates I/O errors from individual entries.
-pub fn find_typ_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
-    let mut files = Vec::new();
-    let mut stack = vec![dir.to_owned()];
-
-    while let Some(current) = stack.pop() {
-        for entry in std::fs::read_dir(&current)? {
-            let path = entry?.path();
-            if path.is_dir() {
-                stack.push(path);
-            } else if path.extension().is_some_and(|ext| ext == "typ") {
-                files.push(path);
+impl ProjectRoot {
+    /// Locate the nearest ancestor of `dir` that contains `aster.toml`.
+    pub fn find(dir: &Path) -> Option<Self> {
+        let mut current = Some(dir);
+        while let Some(path) = current {
+            if path.join("aster.toml").exists() {
+                return Some(Self {
+                    root: path.to_owned(),
+                });
             }
+            current = path.parent();
         }
+        None
     }
 
-    Ok(files)
-}
+    /// Create from an explicit path that must contain `aster.toml`.
+    pub fn new(root: PathBuf) -> Result<Self> {
+        if !root.join("aster.toml").exists() {
+            bail!("no aster.toml found in {:?}", root);
+        }
+        Ok(Self { root })
+    }
 
-/// The page templates directory (`<root>/src`).
-pub fn src_dir(root: &Path) -> PathBuf {
-    root.join("src")
-}
+    /// The project root path.
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
 
-/// The content collections directory (`<root>/content`).
-pub fn content_dir(root: &Path) -> PathBuf {
-    root.join("content")
-}
+    /// The page templates directory (`<root>/src`).
+    pub fn src_dir(&self) -> PathBuf {
+        self.root.join("src")
+    }
 
-/// The build output directory (`<root>/dist`).
-pub fn output_dir(root: &Path) -> PathBuf {
-    root.join("dist")
-}
+    /// The content collections directory (`<root>/content`).
+    pub fn content_dir(&self) -> PathBuf {
+        self.root.join("content")
+    }
 
-/// Compute the output HTML path for a page template.
-///
-/// Returns `Some(<root>/dist/<relative>.html)` when `page` is inside
-/// `src_dir(root)`, or `None` if it isn't.
-pub fn page_output_path(page: &Path, root: &Path) -> Option<PathBuf> {
-    let src = src_dir(root);
-    let relative = page.strip_prefix(&src).ok()?;
-    Some(output_dir(root).join(relative).with_extension("html"))
+    /// The build output directory (`<root>/dist`).
+    pub fn output_dir(&self) -> PathBuf {
+        self.root.join("dist")
+    }
+
+    /// Path to the project config file.
+    pub fn config_file(&self) -> PathBuf {
+        self.root.join("aster.toml")
+    }
+
+    /// Compute the output HTML path for a page template.
+    ///
+    /// Returns `Some(<root>/dist/<relative>.html)` when `page` is inside
+    /// `src_dir`, or `None` if it isn't.
+    pub fn page_output_path(&self, page: &Path) -> Option<PathBuf> {
+        let src = self.src_dir();
+        let relative = page.strip_prefix(&src).ok()?;
+        Some(self.output_dir().join(relative).with_extension("html"))
+    }
+
+    /// Iterate files in the `src/` directory.
+    pub fn walk_src(&self) -> impl Iterator<Item = PathBuf> {
+        WalkDir::new(self.src_dir())
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().is_file())
+            .map(|e| e.into_path())
+    }
+
+    /// Iterate files in the `content/` directory.
+    pub fn walk_content(&self) -> impl Iterator<Item = PathBuf> {
+        WalkDir::new(self.content_dir())
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().is_file())
+            .map(|e| e.into_path())
+    }
 }

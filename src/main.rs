@@ -36,7 +36,7 @@ fn main() -> Result<()> {
 }
 
 fn build(project_dir: Option<std::path::PathBuf>) -> Result<()> {
-    let root = match project_dir {
+    let project = match project_dir {
         Some(dir) => {
             let dir = if dir.is_absolute() {
                 dir
@@ -45,22 +45,19 @@ fn build(project_dir: Option<std::path::PathBuf>) -> Result<()> {
                     .context("failed to get current directory")?
                     .join(dir)
             };
-            if !dir.join("aster.toml").exists() {
-                bail!("no aster.toml found in {:?}", dir);
-            }
-            dir
+            project::ProjectRoot::new(dir)?
         }
         None => {
             let cwd = std::env::current_dir().context("failed to get current directory")?;
-            project::find_root(&cwd)
+            project::ProjectRoot::find(&cwd)
                 .context("no aster.toml found in current or parent directories")?
         }
     };
 
     let config =
-        config::parse_config(&root.join("aster.toml")).context("failed to parse aster.toml")?;
+        config::parse_config(&project.config_file()).context("failed to parse aster.toml")?;
 
-    let result = pipeline::build(&root, config)?;
+    let result = pipeline::build(&project, config)?;
     if result.has_errors {
         bail!("some files failed to compile");
     }

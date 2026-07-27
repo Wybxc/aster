@@ -1,14 +1,15 @@
 use std::collections::BTreeMap;
 use std::ops::ControlFlow;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use typst::Library;
-use typst::foundations::{Content, Dict, Str, Value};
+use typst::foundations::{Content, Dict, Str, Value, dict};
 use typst::introspection::MetadataElem;
 use typst::utils::LazyHash;
 
 use crate::compile;
+use crate::project::ProjectRoot;
 
 /// Discover every `.typ` file under `content/`, compile each one and return
 /// the `_aster` protocol value.
@@ -17,18 +18,20 @@ use crate::compile;
 /// metadata set via `#metadata(...) <frontmatter>` is extracted into a
 /// separate `metadata` dict on the entry.
 pub fn load_collections(
-    content_dir: &Path,
-    project_root: &Path,
+    project: &ProjectRoot,
     builder: &compile::CompileContext,
     library: &LazyHash<Library>,
 ) -> Result<Value> {
-    let typ_files =
-        crate::project::find_typ_files(content_dir).context("failed to scan content directory")?;
+    let content_dir = project.content_dir();
+    let typ_files: Vec<_> = project
+        .walk_content()
+        .filter(|p| p.extension().is_some_and(|ext| ext == "typ"))
+        .collect();
 
     let mut cols: BTreeMap<String, Vec<(String, PathBuf, Content)>> = BTreeMap::new();
 
     for path in &typ_files {
-        let relative = path.strip_prefix(content_dir).context("path error")?;
+        let relative = path.strip_prefix(&content_dir).context("path error")?;
 
         if relative.components().count() < 2 {
             bail!(
@@ -53,68 +56,51 @@ pub fn load_collections(
             p.to_string_lossy().to_string()
         };
 
-        let body = builder.content(path, project_root, library)?;
+        let body = builder.content(path, project, library)?;
         cols.entry(collection.clone())
             .or_default()
             .push((id, path.clone(), body));
     }
 
     // Build the nested Dict.
-    let mut collections_dict = BTreeMap::<String, Dict>::new();
+    let mut collections = Dict::new();
     for (col_name, entries) in &cols {
-        let mut entry_map = BTreeMap::<Str, Value>::new();
+        let mut entry = Dict::new();
         for (id, file_path, body) in entries {
-            let metadata = extract_frontmatter(body);
-            let entry_dict = Dict::from_iter([
-                (Str::from("id"), Value::Str(Str::from(id.as_str()))),
-                (
-                    Str::from("collection"),
-                    Value::Str(Str::from(col_name.as_str())),
-                ),
-                (
-                    Str::from("file-path"),
-                    Value::Str(Str::from(file_path.to_string_lossy().as_ref())),
-                ),
-                (Str::from("body"), Value::Content(body.clone())),
-                (Str::from("metadata"), Value::Dict(metadata)),
-            ]);
-            entry_map.insert(Str::from(id.as_str()), Value::Dict(entry_dict));
+            let metadata = frontmatter(body).unwrap_or_default();
+            entry.insert(
+                Str::from(id.as_str()),
+                Value::Dict(dict! {
+                    "id" => id.as_str(),
+                    "collection" => col_name.as_str(),
+                    "file-path" => file_path.to_string_lossy().as_ref(),
+                    "body" => body.clone(),
+                    "metadata" => metadata,
+                }),
+            );
         }
-        collections_dict.insert(col_name.clone(), Dict::from_iter(entry_map));
+        collections.insert(Str::from(col_name.as_str()), Value::Dict(entry));
     }
 
-    let mut outer = BTreeMap::<Str, Value>::new();
-    for (k, v) in collections_dict {
-        outer.insert(Str::from(k), Value::Dict(v));
-    }
-
-    let aster_payload = Dict::from_iter([
-        (Str::from("protocol"), Value::Int(1)),
-        (
-            Str::from("collections"),
-            Value::Dict(Dict::from_iter(outer)),
-        ),
-    ]);
-    Ok(Value::Dict(aster_payload))
+    Ok(Value::Dict(dict! {
+        "protocol" => 1,
+        "collections" => collections,
+    }))
 }
 
-/// Walk the content tree looking for `#metadata(...) <frontmatter>` elements
-/// and merge their values into a single dict.
-fn extract_frontmatter(content: &Content) -> Dict {
-    let mut merged = BTreeMap::<Str, Value>::new();
-    let _ = content.traverse(&mut |element| -> ControlFlow<()> {
-        if element
-            .label()
-            .is_some_and(|l| *l.resolve() == *"frontmatter")
-            && element.is::<MetadataElem>()
-            && let Some(meta) = element.to_packed::<MetadataElem>()
-            && let Value::Dict(dict) = &meta.value
-        {
-            for (k, v) in dict.iter() {
-                merged.insert(k.clone(), v.clone());
+fn frontmatter(content: &Content) -> Option<Dict> {
+    content
+        .traverse(&mut |element| {
+            if element
+                .label()
+                .is_some_and(|l| *l.resolve() == *"frontmatter")
+                && let Some(meta) = element.to_packed::<MetadataElem>()
+                && let Value::Dict(dict) = &meta.value
+            {
+                ControlFlow::Break(dict.clone())
+            } else {
+                ControlFlow::Continue(())
             }
-        }
-        ControlFlow::Continue(())
-    });
-    Dict::from_iter(merged)
+        })
+        .break_value()
 }

@@ -1,10 +1,11 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use typst::foundations::{Dict, Str, Value};
 use typst::utils::LazyHash;
 use typst_html::{HtmlDocument, HtmlOptions};
 
+use crate::project::ProjectRoot;
 use crate::{compile, transform, world};
 
 /// Result of a complete Aster project build.
@@ -30,16 +31,15 @@ fn empty_aster() -> Value {
 /// 3. Compile page templates, run the document pipeline (CSS bundling,
 ///    image extraction, syntax highlighting), and write output (Phase 2)
 /// 4. Report success / failure
-pub fn build(root: &Path, config: Dict) -> Result<BuildResult> {
+pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
     // World builder — fonts scanned once for the whole project.
-    let builder = compile::CompileContext::new(root);
+    let builder = compile::CompileContext::new(project);
 
     // --- Phase 1: content collections (config inputs only) ---
     let content_library = LazyHash::new(world::build_library(config.clone()));
 
-    let content_dir = crate::project::content_dir(root);
-    let aster_value = if content_dir.is_dir() {
-        match crate::content::load_collections(&content_dir, root, &builder, &content_library) {
+    let aster_value = if project.content_dir().is_dir() {
+        match crate::content::load_collections(project, &builder, &content_library) {
             Ok(v) => v,
             Err(err) => bail!("error: failed to load content collections: {err}"),
         }
@@ -55,12 +55,14 @@ pub fn build(root: &Path, config: Dict) -> Result<BuildResult> {
     };
 
     // --- Phase 2: pages (config + _aster inputs) ---
-    let src_dir = crate::project::src_dir(root);
-    if !src_dir.is_dir() {
+    if !project.src_dir().is_dir() {
         bail!("src/ directory not found in project");
     }
 
-    let entries = crate::project::find_typ_files(&src_dir).context("failed to scan src/")?;
+    let entries: Vec<_> = project
+        .walk_src()
+        .filter(|p| p.extension().is_some_and(|ext| ext == "typ"))
+        .collect();
     if entries.is_empty() {
         bail!("no .typ files found in src/");
     }
@@ -70,14 +72,16 @@ pub fn build(root: &Path, config: Dict) -> Result<BuildResult> {
         outputs: Vec::new(),
     };
 
-    let output_dir = crate::project::output_dir(root);
+    let src_dir = project.src_dir();
+    let output_dir = project.output_dir();
     let mut page_docs: Vec<(PathBuf, HtmlDocument)> = Vec::new();
 
     for entry in &entries {
-        let output =
-            crate::project::page_output_path(entry, root).expect("file must be under src/");
+        let output = project
+            .page_output_path(entry)
+            .expect("file must be under src/");
 
-        match builder.document(entry, root, &page_library) {
+        match builder.document(entry, project, &page_library) {
             Ok(mut doc) => {
                 let ctx = transform::ProcessingContext {
                     src_dir: src_dir.clone(),

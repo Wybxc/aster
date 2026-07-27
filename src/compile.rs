@@ -14,6 +14,7 @@ use typst_kit::files::{FileStore, FsRoot, SystemFiles};
 use typst_kit::fonts::FontStore;
 use typst_kit::packages::SystemPackages;
 
+use crate::project::ProjectRoot;
 use crate::world::{CompileWorld, emit_diags};
 
 /// Reusable compilation context for a project.
@@ -33,7 +34,7 @@ pub struct CompileContext {
 
 impl CompileContext {
     /// Build shared resources for one project root.
-    pub fn new(project_root: &Path) -> Self {
+    pub fn new(project: &ProjectRoot) -> Self {
         let fonts = Arc::new({
             let mut fonts = FontStore::new();
             fonts.extend(typst_kit::fonts::system());
@@ -42,8 +43,8 @@ impl CompileContext {
         let files = Arc::new({
             let downloader = SystemDownloader::new("aster/0.1.0");
             let packages = SystemPackages::new(downloader);
-            let project = FsRoot::new(project_root.to_owned());
-            let system_files = SystemFiles::new(project, packages);
+            let fs_root = FsRoot::new(project.root().to_owned());
+            let system_files = SystemFiles::new(fs_root, packages);
             FileStore::new(system_files)
         });
         Self { fonts, files }
@@ -53,10 +54,10 @@ impl CompileContext {
     pub(crate) fn world(
         &self,
         entry: &Path,
-        project_root: &Path,
+        project: &ProjectRoot,
         library: &LazyHash<Library>,
     ) -> CompileWorld {
-        let vpath = VirtualPath::virtualize(project_root, entry)
+        let vpath = VirtualPath::virtualize(project.root(), entry)
             .expect("entry must be inside project root");
         let main = RootedPath::new(VirtualRoot::Project, vpath).intern();
         CompileWorld {
@@ -71,10 +72,10 @@ impl CompileContext {
     pub fn content(
         &self,
         entry: &Path,
-        project_root: &Path,
+        project: &ProjectRoot,
         library: &LazyHash<Library>,
     ) -> Result<Content> {
-        let world = self.world(entry, project_root, library);
+        let world = self.world(entry, project, library);
 
         let source = world
             .source(world.main())
@@ -103,10 +104,10 @@ impl CompileContext {
     pub fn document(
         &self,
         entry: &Path,
-        project_root: &Path,
+        project: &ProjectRoot,
         library: &LazyHash<Library>,
     ) -> Result<HtmlDocument> {
-        let world = self.world(entry, project_root, library);
+        let world = self.world(entry, project, library);
         let warned = typst::compile::<HtmlDocument>(&world);
         emit_diags(&world, &warned.warnings);
 
