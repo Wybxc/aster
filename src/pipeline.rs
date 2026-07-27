@@ -5,9 +5,7 @@ use typst::foundations::{Dict, Str, Value};
 use typst::utils::LazyHash;
 use typst_html::{HtmlDocument, HtmlOptions};
 
-use crate::compile;
-use crate::transform;
-use crate::world;
+use crate::{compile, transform, world};
 
 /// Result of a complete Aster project build.
 pub struct BuildResult {
