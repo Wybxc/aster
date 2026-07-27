@@ -1,9 +1,11 @@
 use std::collections::BTreeMap;
+use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use typst::Library;
-use typst::foundations::{Dict, Str, Value};
+use typst::foundations::{Content, Dict, Str, Value};
+use typst::introspection::MetadataElem;
 use typst::utils::LazyHash;
 
 use crate::compile;
@@ -11,9 +13,9 @@ use crate::compile;
 /// Discover every `.typ` file under `content/`, compile each one and return
 /// the `_aster` protocol value.
 ///
-/// Each entry's body is stored as `Value::Content(content)`, i.e. raw Typst
-/// content.  Page templates receive this via `sys.inputs._aster` and can
-/// render it directly with `#post.body`.
+/// Each entry's body is stored as `Value::Content(content)`.  Frontmatter
+/// metadata set via `#metadata(...) <frontmatter>` is extracted into a
+/// separate `metadata` dict on the entry.
 pub fn load_collections(
     content_dir: &Path,
     project_root: &Path,
@@ -23,7 +25,7 @@ pub fn load_collections(
     let typ_files =
         crate::project::find_typ_files(content_dir).context("failed to scan content directory")?;
 
-    let mut cols: BTreeMap<String, Vec<(String, PathBuf, Value)>> = BTreeMap::new();
+    let mut cols: BTreeMap<String, Vec<(String, PathBuf, Content)>> = BTreeMap::new();
 
     for path in &typ_files {
         let relative = path.strip_prefix(content_dir).context("path error")?;
@@ -54,14 +56,15 @@ pub fn load_collections(
         let body = builder.content(path, project_root, library)?;
         cols.entry(collection.clone())
             .or_default()
-            .push((id, path.clone(), Value::Content(body)));
+            .push((id, path.clone(), body));
     }
 
     // Build the nested Dict.
     let mut collections_dict = BTreeMap::<String, Dict>::new();
     for (col_name, entries) in &cols {
         let mut entry_map = BTreeMap::<Str, Value>::new();
-        for (id, file_path, body_value) in entries {
+        for (id, file_path, body) in entries {
+            let metadata = extract_frontmatter(body);
             let entry_dict = Dict::from_iter([
                 (Str::from("id"), Value::Str(Str::from(id.as_str()))),
                 (
@@ -72,7 +75,8 @@ pub fn load_collections(
                     Str::from("file-path"),
                     Value::Str(Str::from(file_path.to_string_lossy().as_ref())),
                 ),
-                (Str::from("body"), body_value.clone()),
+                (Str::from("body"), Value::Content(body.clone())),
+                (Str::from("metadata"), Value::Dict(metadata)),
             ]);
             entry_map.insert(Str::from(id.as_str()), Value::Dict(entry_dict));
         }
@@ -92,4 +96,25 @@ pub fn load_collections(
         ),
     ]);
     Ok(Value::Dict(aster_payload))
+}
+
+/// Walk the content tree looking for `#metadata(...) <frontmatter>` elements
+/// and merge their values into a single dict.
+fn extract_frontmatter(content: &Content) -> Dict {
+    let mut merged = BTreeMap::<Str, Value>::new();
+    let _ = content.traverse(&mut |element| -> ControlFlow<()> {
+        if element.label().map_or(false, |l| *l.resolve() == *"frontmatter")
+            && element.is::<MetadataElem>()
+        {
+            if let Some(meta) = element.to_packed::<MetadataElem>() {
+                if let Value::Dict(dict) = &meta.value {
+                    for (k, v) in dict.iter() {
+                        merged.insert(k.clone(), v.clone());
+                    }
+                }
+            }
+        }
+        ControlFlow::Continue(())
+    });
+    Dict::from_iter(merged)
 }

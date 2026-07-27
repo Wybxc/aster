@@ -27,6 +27,13 @@
 
     #for post in posts {
       html.article[
+        #let meta = post.metadata
+        #if meta != (:) {
+          html.p[
+            #meta.at("title", default: "Untitled") \
+            Published: #meta.at("date", default: "unknown")
+          ]
+        }
         #render(post)
       ]
     }

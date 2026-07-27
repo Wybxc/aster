@@ -1,3 +1,9 @@
+#metadata((
+  title: "Hello, Aster!",
+  date: "2024-03-15",
+  tags: ("typst", "aster", "hello"),
+)) <frontmatter>
+
 = Hello, Aster!
 
 This is the first post in this sample site.
