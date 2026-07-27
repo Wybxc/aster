@@ -81,15 +81,16 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
                 Ok(content) => {
                     let routes = route::extract(&content);
                     if routes.is_empty() {
-                        static_entries.push(entry);
+                        eprintln!(
+                            "warning: {} has `[slug]` pattern but no `<route>` metadata",
+                            entry.display()
+                        );
                     } else {
                         route_entries.push((entry, routes));
                     }
                 }
-                Err(_) => {
-                    // Probe failed — treat as a regular static page.
-                    result.has_errors = true;
-                    static_entries.push(entry);
+                Err(e) => {
+                    bail!("failed to probe {}: {e:#}", entry.display());
                 }
             }
         } else {
