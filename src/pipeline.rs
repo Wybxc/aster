@@ -114,7 +114,8 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
                     src_dir: src_dir.clone(),
                     dist_dir: output_dir.clone(),
                 };
-                if transform::process_document(&mut doc, &ctx).is_err() {
+                if let Err(err) = transform::process_document(&mut doc, &ctx) {
+                    eprintln!("error: post-processing failed: {err:#}");
                     result.has_errors = true;
                 }
                 page_docs.push((output, doc));
@@ -145,7 +146,8 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
                         src_dir: src_dir.clone(),
                         dist_dir: output_dir.clone(),
                     };
-                    if transform::process_document(&mut doc, &ctx).is_err() {
+                    if let Err(err) = transform::process_document(&mut doc, &ctx) {
+                        eprintln!("error: post-processing failed: {err:#}");
                         result.has_errors = true;
                     }
                     page_docs.push((output, doc));
