@@ -4,9 +4,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use typst::Library;
-use typst::foundations::{Content, Dict, Label, Selector, Str, Value};
+use typst::foundations::{Content, Dict, Str, Value};
 use typst::introspection::MetadataElem;
-use typst::utils::{LazyHash, PicoStr};
+use typst::utils::LazyHash;
 
 use crate::compile;
 
@@ -101,13 +101,12 @@ pub fn load_collections(
 /// Walk the content tree looking for `#metadata(...) <frontmatter>` elements
 /// and merge their values into a single dict.
 fn extract_frontmatter(content: &Content) -> Dict {
-    let label =
-        Label::new(PicoStr::constant("frontmatter")).expect("label 'frontmatter' is not empty");
-    let selector = Selector::Label(label);
-
     let mut merged = BTreeMap::<Str, Value>::new();
     let _ = content.traverse(&mut |element| -> ControlFlow<()> {
-        if selector.matches(&element, None)
+        if element
+            .label()
+            .is_some_and(|l| *l.resolve() == *"frontmatter")
+            && element.is::<MetadataElem>()
             && let Some(meta) = element.to_packed::<MetadataElem>()
             && let Value::Dict(dict) = &meta.value
         {
