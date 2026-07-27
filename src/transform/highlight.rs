@@ -7,7 +7,7 @@ use typst::ecow::{EcoVec, eco_format, eco_vec};
 use typst::syntax::{LinkedNode, Span, SyntaxNode, parse_code, parse_math};
 use typst_html::{HtmlElement, HtmlNode};
 
-use crate::document::{ElementProcessor, WalkControl};
+use super::{ElementProcessor, WalkControl};
 
 static SS: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
 static THEMES: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
@@ -16,11 +16,10 @@ static THEMES: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
 const TOKEN_THEME: &str = "InspiredGitHub";
 
 /// Languages that Typst can parse with its own AST.
-/// We replicate Typst's `ThemedHighlighter` approach for these.
 const TYPST_LANGS: &[&str] = &["typ", "typst", "typc", "typm"];
 
 /// [`ElementProcessor`] that syntax-highlights `<code data-lang="...">` blocks.
-pub struct HighlightProcessor;
+pub(super) struct HighlightProcessor;
 
 impl ElementProcessor for HighlightProcessor {
     fn matches(&self, elem: &HtmlElement) -> bool {
@@ -95,6 +94,20 @@ fn scope_css_name(scopes: &[Scope]) -> String {
 // Syntect-based highlighting (all non-Typst languages)
 // ---------------------------------------------------------------------------
 
+/// Collect the text content of all descendant `HtmlNode::Text` nodes
+/// under the given element.
+fn collect_text(elem: &HtmlElement) -> String {
+    let mut out = String::new();
+    super::walk(elem, &mut |el| {
+        for child in &el.children {
+            if let HtmlNode::Text(t, _) = child {
+                out.push_str(t.as_str());
+            }
+        }
+    });
+    out
+}
+
 fn do_syntect_highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(String, u8, String)> {
     let syntax = SS
         .find_syntax_by_token(lang)
@@ -142,7 +155,6 @@ fn do_syntect_highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(String, u
 
 // ---------------------------------------------------------------------------
 // Typst-native highlighting (typ, typst, typc, typm)
-// Replicates Typst's `ThemedHighlighter` approach but outputs CSS var names.
 // ---------------------------------------------------------------------------
 
 fn do_typst_highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(String, u8, String)> {
@@ -164,9 +176,6 @@ fn do_typst_highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(String, u8,
         &mut tokens,
     );
 
-    // The AST walker emits leaf-node text preserving newlines inside the node
-    // range.  To keep clean line structure we split tokens at newline
-    // boundaries so each line is independent (matching the syntect path).
     let mut out: Vec<(String, u8, String)> = Vec::new();
     for (name, bits, text) in &tokens {
         for (i, segment) in text.split('\n').enumerate() {
@@ -210,18 +219,4 @@ fn walk_typst_node(
         walk_typst_node(code, &child, highlighter, scopes, tokens);
         std::mem::swap(&mut child_scopes, scopes);
     }
-}
-
-/// Collect the text content of all descendant `HtmlNode::Text` nodes
-/// under the given element.
-fn collect_text(elem: &HtmlElement) -> String {
-    let mut out = String::new();
-    crate::document::walk(elem, &mut |el| {
-        for child in &el.children {
-            if let HtmlNode::Text(t, _) = child {
-                out.push_str(t.as_str());
-            }
-        }
-    });
-    out
 }

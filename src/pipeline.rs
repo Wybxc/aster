@@ -6,6 +6,8 @@ use typst::utils::LazyHash;
 use typst_html::{HtmlDocument, HtmlOptions};
 
 use crate::compile;
+use crate::transform;
+use crate::world;
 
 /// Result of a complete Aster project build.
 pub struct BuildResult {
@@ -35,7 +37,7 @@ pub fn build(root: &Path, config: Dict) -> Result<BuildResult> {
     let builder = compile::CompileContext::new(root);
 
     // --- Phase 1: content collections (config inputs only) ---
-    let content_library = LazyHash::new(compile::build_library(config.clone()));
+    let content_library = LazyHash::new(world::build_library(config.clone()));
 
     let content_dir = crate::project::content_dir(root);
     let aster_value = if content_dir.is_dir() {
@@ -51,7 +53,7 @@ pub fn build(root: &Path, config: Dict) -> Result<BuildResult> {
     let page_library = {
         let mut data: Vec<(Str, Value)> = config.into_iter().collect();
         data.push((Str::from("_aster"), aster_value));
-        LazyHash::new(compile::build_library(Dict::from_iter(data)))
+        LazyHash::new(world::build_library(Dict::from_iter(data)))
     };
 
     // --- Phase 2: pages (config + _aster inputs) ---
@@ -79,11 +81,11 @@ pub fn build(root: &Path, config: Dict) -> Result<BuildResult> {
 
         match builder.document(entry, root, &page_library) {
             Ok(mut doc) => {
-                let ctx = compile::ProcessingContext {
+                let ctx = transform::ProcessingContext {
                     src_dir: src_dir.clone(),
                     dist_dir: output_dir.clone(),
                 };
-                if compile::process_document(&mut doc, &ctx).is_err() {
+                if transform::process_document(&mut doc, &ctx).is_err() {
                     result.has_errors = true;
                 }
                 page_docs.push((output, doc));

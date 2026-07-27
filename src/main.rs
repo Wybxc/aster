@@ -1,10 +1,10 @@
 mod compile;
+mod config;
 mod content;
-mod document;
-mod highlight;
-mod loader;
 mod pipeline;
 mod project;
+mod transform;
+mod world;
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
@@ -58,7 +58,7 @@ fn build(project_dir: Option<std::path::PathBuf>) -> Result<()> {
     };
 
     let config =
-        project::parse_config(&root.join("aster.toml")).context("failed to parse aster.toml")?;
+        config::parse_config(&root.join("aster.toml")).context("failed to parse aster.toml")?;
 
     let result = pipeline::build(&root, config)?;
     if result.has_errors {

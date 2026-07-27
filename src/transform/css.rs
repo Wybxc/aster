@@ -6,15 +6,12 @@ use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions};
 use lightningcss::targets::Browsers;
 use typst_html::HtmlElement;
 
-use crate::document::{ElementProcessor, WalkControl};
+use super::{ElementProcessor, WalkControl};
 
 /// Bundle a single CSS file referenced by its `href` (relative to `src_dir`),
 /// write the result to `dist_dir` with a content hash in the filename,
 /// and return the hashed filename.
-///
-/// The existence check and dispatch happen in [`super::LinkAsset::from_link`],
-/// so this function can assume the file exists.
-pub(super) fn bundle_relative(href: &str, src_dir: &Path, dist_dir: &Path) -> Result<String> {
+fn bundle_relative(href: &str, src_dir: &Path, dist_dir: &Path) -> Result<String> {
     let entry = src_dir.join(href);
     let css = bundle_file(&entry)?;
 
@@ -41,7 +38,7 @@ pub(super) fn bundle_relative(href: &str, src_dir: &Path, dist_dir: &Path) -> Re
 }
 
 /// Processor that bundles `<link rel="css">` references through lightningcss.
-pub struct CssProcessor {
+pub(super) struct CssProcessor {
     pub src_dir: PathBuf,
     pub dist_dir: PathBuf,
 }

@@ -1,25 +1,23 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Result, bail};
-use termcolor::{ColorChoice, StandardStream};
 use typst::comemo::Track;
-use typst::diag::{FileError, SourceDiagnostic};
 use typst::engine::{Route, Sink, Traced};
-use typst::foundations::{Bytes, Content, Datetime, Dict, Duration};
-use typst::syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot};
-use typst::text::{Font, FontBook};
+use typst::foundations::Content;
+use typst::syntax::{RootedPath, VirtualPath, VirtualRoot};
 use typst::utils::LazyHash;
-use typst::{Feature, Features, Library, LibraryExt, World};
+use typst::{Library, World};
 use typst_html::HtmlDocument;
-use typst_kit::diagnostics::{self, DiagnosticFormat, DiagnosticWorld};
 use typst_kit::downloader::SystemDownloader;
 use typst_kit::files::{FileStore, FsRoot, SystemFiles};
 use typst_kit::fonts::FontStore;
 use typst_kit::packages::SystemPackages;
 
+use crate::world::{CompileWorld, emit_diags};
+
 // ---------------------------------------------------------------------------
-// World builder
+// Compilation context
 // ---------------------------------------------------------------------------
 
 /// Reusable compilation context for a project.
@@ -122,113 +120,6 @@ impl CompileContext {
                 emit_diags(&world, &errors);
                 bail!("compilation failed");
             }
-        }
-    }
-}
-
-/// Shared context required by the document processing pipeline steps.
-pub struct ProcessingContext {
-    pub src_dir: PathBuf,
-    pub dist_dir: PathBuf,
-}
-
-/// Run the full document pipeline in a single DOM traversal: bundle CSS,
-/// extract data URI images, and syntax-highlight code blocks.
-pub fn process_document(doc: &mut HtmlDocument, ctx: &ProcessingContext) -> Result<()> {
-    use crate::document::ElementProcessor;
-
-    let css = crate::loader::css::CssProcessor {
-        src_dir: ctx.src_dir.clone(),
-        dist_dir: ctx.dist_dir.clone(),
-    };
-    let img = crate::loader::image::ImageProcessor {
-        dist_dir: ctx.dist_dir.clone(),
-    };
-    let hl = crate::highlight::HighlightProcessor;
-
-    let processors: [&dyn ElementProcessor; 3] = [&css, &img, &hl];
-    crate::document::process_all(doc, &processors)
-}
-// ---------------------------------------------------------------------------
-// World adapter
-// ---------------------------------------------------------------------------
-
-pub(crate) struct CompileWorld {
-    library: LazyHash<Library>,
-    fonts: Arc<FontStore>,
-    files: Arc<FileStore<SystemFiles>>,
-    main: FileId,
-}
-
-impl World for CompileWorld {
-    fn library(&self) -> &LazyHash<Library> {
-        &self.library
-    }
-
-    fn book(&self) -> &LazyHash<FontBook> {
-        self.fonts.book()
-    }
-
-    fn main(&self) -> FileId {
-        self.main
-    }
-
-    fn source(&self, id: FileId) -> Result<Source, FileError> {
-        self.files.source(id)
-    }
-
-    fn file(&self, id: FileId) -> Result<Bytes, FileError> {
-        self.files.file(id)
-    }
-
-    fn font(&self, index: usize) -> Option<Font> {
-        self.fonts.font(index)
-    }
-
-    fn today(&self, _offset: Option<Duration>) -> Option<Datetime> {
-        None
-    }
-}
-
-impl DiagnosticWorld for CompileWorld {
-    fn name(&self, id: FileId) -> String {
-        let cwd = std::env::current_dir().ok();
-        self.files
-            .loader()
-            .resolve(id)
-            .ok()
-            .and_then(|p| {
-                cwd.as_ref()
-                    .and_then(|cwd| p.strip_prefix(cwd).ok())
-                    .map(|p| p.display().to_string())
-                    .or_else(|| Some(p.display().to_string()))
-            })
-            .unwrap_or_else(|| id.vpath().get_with_slash().to_string())
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Construction helpers
-// ---------------------------------------------------------------------------
-
-/// Build library with the HTML feature enabled and the given `sys.inputs`.
-pub fn build_library(inputs: Dict) -> Library {
-    let features: Features = [Feature::Html].into_iter().collect();
-    Library::builder()
-        .with_inputs(inputs)
-        .with_features(features)
-        .build()
-}
-
-// ---------------------------------------------------------------------------
-// Diagnostic printing
-// ---------------------------------------------------------------------------
-
-fn emit_diags(world: &impl DiagnosticWorld, diags: &[SourceDiagnostic]) {
-    let mut writer = StandardStream::stderr(ColorChoice::Auto);
-    if diagnostics::emit(&mut writer, world, diags.iter(), DiagnosticFormat::Human).is_err() {
-        for diag in diags {
-            eprintln!("error: {diag:?}");
         }
     }
 }

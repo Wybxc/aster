@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use base64::Engine;
 use typst_html::HtmlElement;
 
-use crate::document::{ElementProcessor, WalkControl};
+use super::{ElementProcessor, WalkControl};
 
 /// Minimum decoded size (bytes) below which a data URI stays inline.
 const IMAGE_EXTRACT_THRESHOLD: usize = 1024;
@@ -16,13 +16,11 @@ const IMAGE_EXTRACT_THRESHOLD: usize = 1024;
 /// content-hashed filename, and the new filename should replace the `src`.
 /// Returns `None` when the src is not a data URI, not base64, or too small
 /// to warrant extraction.
-pub fn try_extract(src: &str, dist_dir: &Path) -> Result<Option<String>> {
-    // Only process data URIs.
+fn try_extract(src: &str, dist_dir: &Path) -> Result<Option<String>> {
     let Some(data) = src.strip_prefix("data:") else {
         return Ok(None);
     };
 
-    // Parse: data:[<mediatype>][;base64],<data>
     let Some((header, encoded)) = data.split_once(',') else {
         return Ok(None);
     };
@@ -56,7 +54,7 @@ pub fn try_extract(src: &str, dist_dir: &Path) -> Result<Option<String>> {
 }
 
 /// Processor that extracts data URI images from `<img>` elements.
-pub struct ImageProcessor {
+pub(super) struct ImageProcessor {
     pub dist_dir: PathBuf,
 }
 
@@ -92,7 +90,7 @@ impl ElementProcessor for ImageProcessor {
     }
 }
 
-/// Map a MIME type string (e.g. `"image/png"`) to a file extension.
+/// Map a MIME type string to a file extension.
 fn media_type_to_ext(mediatype: &str) -> &'static str {
     match mediatype {
         "image/png" => "png",

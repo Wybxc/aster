@@ -1,3 +1,9 @@
+pub mod css;
+pub mod highlight;
+pub mod image;
+
+use std::path::PathBuf;
+
 use anyhow::Result;
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 
@@ -68,4 +74,30 @@ pub fn process_all(doc: &mut HtmlDocument, processors: &[&dyn ElementProcessor])
         }
         Ok(WalkControl::Continue)
     })
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline orchestration
+// ---------------------------------------------------------------------------
+
+/// Directory layout shared by the document processing pipeline.
+pub struct ProcessingContext {
+    pub src_dir: PathBuf,
+    pub dist_dir: PathBuf,
+}
+
+/// Run every built-in processor (CSS bundling, image extraction, syntax
+/// highlighting) in a single DOM traversal.
+pub fn process_document(doc: &mut HtmlDocument, ctx: &ProcessingContext) -> Result<()> {
+    let css = css::CssProcessor {
+        src_dir: ctx.src_dir.clone(),
+        dist_dir: ctx.dist_dir.clone(),
+    };
+    let img = image::ImageProcessor {
+        dist_dir: ctx.dist_dir.clone(),
+    };
+    let hl = highlight::HighlightProcessor;
+
+    let processors: [&dyn ElementProcessor; 3] = [&css, &img, &hl];
+    process_all(doc, &processors)
 }
