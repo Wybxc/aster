@@ -23,14 +23,12 @@ pub fn load_collections(
     library: &LazyHash<Library>,
 ) -> Result<Value> {
     let content_dir = project.content_dir();
-    let typ_files: Vec<_> = project
-        .walk_content()
-        .filter(|p| p.extension().is_some_and(|ext| ext == "typ"))
-        .collect();
-
     let mut cols: BTreeMap<String, Vec<(String, PathBuf, Content)>> = BTreeMap::new();
 
-    for path in &typ_files {
+    for path in project
+        .walk_content()
+        .filter(|p| p.extension().is_some_and(|ext| ext == "typ"))
+    {
         let relative = path.strip_prefix(&content_dir).context("path error")?;
 
         if relative.components().count() < 2 {
@@ -56,10 +54,10 @@ pub fn load_collections(
             p.to_string_lossy().to_string()
         };
 
-        let body = builder.content(path, project, library)?;
+        let body = builder.content(&path, project, library)?;
         cols.entry(collection.clone())
             .or_default()
-            .push((id, path.clone(), body));
+            .push((id, path, body));
     }
 
     // Build the nested Dict.

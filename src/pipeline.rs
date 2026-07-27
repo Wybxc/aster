@@ -59,14 +59,6 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
         bail!("src/ directory not found in project");
     }
 
-    let entries: Vec<_> = project
-        .walk_src()
-        .filter(|p| p.extension().is_some_and(|ext| ext == "typ"))
-        .collect();
-    if entries.is_empty() {
-        bail!("no .typ files found in src/");
-    }
-
     let mut result = BuildResult {
         has_errors: false,
         outputs: Vec::new(),
@@ -76,12 +68,15 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
     let output_dir = project.output_dir();
     let mut page_docs: Vec<(PathBuf, HtmlDocument)> = Vec::new();
 
-    for entry in &entries {
+    for entry in project
+        .walk_src()
+        .filter(|p| p.extension().is_some_and(|ext| ext == "typ"))
+    {
         let output = project
-            .page_output_path(entry)
+            .page_output_path(&entry)
             .expect("file must be under src/");
 
-        match builder.document(entry, project, &page_library) {
+        match builder.document(&entry, project, &page_library) {
             Ok(mut doc) => {
                 let ctx = transform::ProcessingContext {
                     src_dir: src_dir.clone(),
