@@ -3,6 +3,7 @@ mod config;
 mod content;
 mod pipeline;
 mod project;
+mod route;
 mod transform;
 mod world;
 

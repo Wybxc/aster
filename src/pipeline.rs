@@ -6,7 +6,7 @@ use typst::utils::LazyHash;
 use typst_html::{HtmlDocument, HtmlOptions};
 
 use crate::project::ProjectRoot;
-use crate::{compile, transform, world};
+use crate::{compile, route, transform, world};
 
 /// Result of a complete Aster project build.
 pub struct BuildResult {
@@ -26,11 +26,11 @@ fn empty_aster() -> Value {
 
 /// Execute the full Aster build lifecycle.
 ///
-/// 1. Load content collections (Phase 1) — uses `config` as inputs
-/// 2. Assemble final Typst inputs (config + `_aster` protocol)
-/// 3. Compile page templates, run the document pipeline (CSS bundling,
-///    image extraction, syntax highlighting), and write output (Phase 2)
-/// 4. Report success / failure
+/// 1. Load content collections (Phase 1) — uses config inputs
+/// 2. Assemble base Typst inputs (config + `_aster` protocol)
+/// 3. Probe dynamic templates (`[slug].typ`) for route declarations
+/// 4. Compile all pages — static once, dynamic once per route entry
+/// 5. Serialize and write output
 pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
     // World builder — fonts scanned once for the whole project.
     let builder = compile::CompileContext::new(project);
@@ -47,14 +47,12 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
         empty_aster()
     };
 
-    // --- Assemble final inputs (config + _aster) ---
-    let page_library = {
-        let mut data: Vec<(Str, Value)> = config.into_iter().collect();
-        data.push((Str::from("_aster"), aster_value));
-        LazyHash::new(world::build_library(Dict::from_iter(data)))
-    };
+    // Base Typst inputs — reused for both static and dynamic pages.
+    let mut base_inputs: Vec<(Str, Value)> = config.into_iter().collect();
+    base_inputs.push((Str::from("_aster"), aster_value));
 
-    // --- Phase 2: pages (config + _aster inputs) ---
+    let page_library = LazyHash::new(world::build_library(Dict::from_iter(base_inputs.clone())));
+
     if !project.src_dir().is_dir() {
         bail!("src/ directory not found in project");
     }
@@ -64,19 +62,53 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
         outputs: Vec::new(),
     };
 
-    let src_dir = project.src_dir();
-    let output_dir = project.output_dir();
-    let mut page_docs: Vec<(PathBuf, HtmlDocument)> = Vec::new();
+    // --- Probe phase: extract routes from [slug] templates ---
+    let mut static_entries: Vec<PathBuf> = Vec::new();
+    let mut route_entries: Vec<(PathBuf, Vec<route::ParamSet>)> = Vec::new();
 
     for entry in project
         .walk_src()
         .filter(|p| p.extension().is_some_and(|ext| ext == "typ"))
     {
+        let has_slug_param = entry
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .map_or(false, |s| s.contains('[') && s.contains(']'));
+
+        if has_slug_param {
+            // Probe: compile to Content, extract route metadata.
+            match builder.content(&entry, project, &page_library) {
+                Ok(content) => {
+                    let routes = route::extract(&content);
+                    if routes.is_empty() {
+                        static_entries.push(entry);
+                    } else {
+                        route_entries.push((entry, routes));
+                    }
+                }
+                Err(_) => {
+                    // Probe failed — treat as a regular static page.
+                    result.has_errors = true;
+                    static_entries.push(entry);
+                }
+            }
+        } else {
+            static_entries.push(entry);
+        }
+    }
+
+    // --- Render phase ---
+    let src_dir = project.src_dir();
+    let output_dir = project.output_dir();
+    let mut page_docs: Vec<(PathBuf, HtmlDocument)> = Vec::new();
+
+    // Static pages: compile once per template.
+    for entry in &static_entries {
         let output = project
-            .page_output_path(&entry)
+            .page_output_path(entry)
             .expect("file must be under src/");
 
-        match builder.document(&entry, project, &page_library) {
+        match builder.document(entry, project, &page_library) {
             Ok(mut doc) => {
                 let ctx = transform::ProcessingContext {
                     src_dir: src_dir.clone(),
@@ -93,6 +125,39 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
         }
     }
 
+    // Dynamic pages: compile once per route entry.
+    for (template, param_sets) in &route_entries {
+        for params in param_sets {
+            let mut route_inputs = base_inputs.clone();
+            for (name, value) in params {
+                route_inputs.push((
+                    Str::from(name.as_str()),
+                    Value::Str(Str::from(value.as_str())),
+                ));
+            }
+            let route_library = LazyHash::new(world::build_library(Dict::from_iter(route_inputs)));
+
+            let output = route::output_path(project, template, params);
+
+            match builder.document(template, project, &route_library) {
+                Ok(mut doc) => {
+                    let ctx = transform::ProcessingContext {
+                        src_dir: src_dir.clone(),
+                        dist_dir: output_dir.clone(),
+                    };
+                    if transform::process_document(&mut doc, &ctx).is_err() {
+                        result.has_errors = true;
+                    }
+                    page_docs.push((output, doc));
+                }
+                Err(_) => {
+                    result.has_errors = true;
+                }
+            }
+        }
+    }
+
+    // --- Serialize ---
     for (output, doc) in &page_docs {
         let raw = typst_html::html(doc, &HtmlOptions::default())
             .map_err(|_| anyhow::anyhow!("failed to encode HTML"))?;
