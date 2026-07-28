@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
+use typst::Library;
 use typst::foundations::{Dict, Str, Value};
 use typst::utils::LazyHash;
 use typst_html::{HtmlDocument, HtmlOptions};
@@ -63,33 +64,46 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
     };
 
     // --- Probe phase: extract routes from [slug] templates ---
-    let mut static_entries: Vec<PathBuf> = Vec::new();
-    let mut route_entries: Vec<(PathBuf, Vec<route::ParamSet>)> = Vec::new();
+    let mut queue: Vec<(PathBuf, PathBuf, LazyHash<Library>)> = Vec::new();
 
     for entry in project
         .walk_src()
         .filter(|p| p.extension().is_some_and(|ext| ext == "typ"))
     {
-        // Parse slug param names from the path (e.g. `[slug]` in the filename).
         let slug_params = route::parse_params(&entry);
 
         if slug_params.is_empty() {
-            // No slug params — always static.
-            static_entries.push(entry);
+            // No slug params — compile once with base inputs.
+            let output = project
+                .page_output_path(&entry)
+                .expect("file must be under src/");
+            queue.push((entry, output, page_library.clone()));
         } else {
-            // Probe: compile to Content, extract route values for these params.
-            match builder.content(&entry, project, &page_library) {
-                Ok(content) => {
-                    let routes = route::extract(&content);
-                    if routes.is_empty() {
-                        static_entries.push(entry);
-                    } else {
-                        route_entries.push((entry, routes));
-                    }
+            // Probe: compile to Content, extract route values.
+            let content = builder
+                .content(&entry, project, &page_library)
+                .with_context(|| {
+                    format!("failed to probe {}: compilation failed", entry.display())
+                })?;
+            let routes = route::extract(&content);
+            if routes.is_empty() {
+                eprintln!(
+                    "warning: {} has `[slug]` pattern but no `<route>` metadata",
+                    entry.display()
+                );
+            }
+
+            for params in routes {
+                let output = route::output_path(project, &entry, &params);
+                let mut inputs = base_inputs.clone();
+                for (name, value) in &params {
+                    inputs.push((
+                        Str::from(name.as_str()),
+                        Value::Str(Str::from(value.as_str())),
+                    ));
                 }
-                Err(e) => {
-                    bail!("failed to probe {}: {e:#}", entry.display());
-                }
+                let library = LazyHash::new(world::build_library(Dict::from_iter(inputs)));
+                queue.push((entry.clone(), output, library));
             }
         }
     }
@@ -97,54 +111,18 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
     // --- Render phase ---
     let mut page_docs: Vec<(PathBuf, HtmlDocument)> = Vec::new();
 
-    // Static pages: compile once per template.
-    for entry in &static_entries {
-        let output = project
-            .page_output_path(entry)
-            .expect("file must be under src/");
-
-        match builder.document(entry, project, &page_library) {
+    for (template, output, library) in &queue {
+        match builder.document(template, project, library) {
             Ok(mut doc) => {
                 let ctx = transform::ProcessingContext::new(project, output.clone());
                 if let Err(err) = transform::process_document(&mut doc, &ctx) {
                     eprintln!("error: post-processing failed: {err:#}");
                     result.has_errors = true;
                 }
-                page_docs.push((output, doc));
+                page_docs.push((output.clone(), doc));
             }
             Err(_) => {
                 result.has_errors = true;
-            }
-        }
-    }
-
-    // Dynamic pages: compile once per route entry.
-    for (template, param_sets) in &route_entries {
-        for params in param_sets {
-            let mut route_inputs = base_inputs.clone();
-            for (name, value) in params {
-                route_inputs.push((
-                    Str::from(name.as_str()),
-                    Value::Str(Str::from(value.as_str())),
-                ));
-            }
-            let route_library = LazyHash::new(world::build_library(Dict::from_iter(route_inputs)));
-
-            let output = route::output_path(project, template, params);
-
-            match builder.document(template, project, &route_library) {
-                Ok(mut doc) => {
-                    let ctx = transform::ProcessingContext::new(project, output.clone());
-
-                    if let Err(err) = transform::process_document(&mut doc, &ctx) {
-                        eprintln!("error: post-processing failed: {err:#}");
-                        result.has_errors = true;
-                    }
-                    page_docs.push((output, doc));
-                }
-                Err(_) => {
-                    result.has_errors = true;
-                }
             }
         }
     }
