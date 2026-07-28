@@ -98,10 +98,13 @@ impl ProcessingContext<'_> {
 
 /// Run every built-in processor in a single DOM traversal.
 pub fn process_document(doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> Result<()> {
-    let css = css::CssProcessor;
-    let img = image::ImageProcessor;
-    let hl = highlight::HighlightProcessor;
-
-    let processors: [&dyn ElementProcessor; 3] = [&css, &img, &hl];
-    process_all(doc, ctx, &processors)
+    process_all(
+        doc,
+        ctx,
+        &[
+            &css::CssProcessor,
+            &image::ImageProcessor,
+            &highlight::HighlightProcessor,
+        ],
+    )
 }

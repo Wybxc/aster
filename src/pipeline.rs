@@ -73,7 +73,7 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
         let has_slug_param = entry
             .file_stem()
             .and_then(|s| s.to_str())
-            .map_or(false, |s| s.contains('[') && s.contains(']'));
+            .is_some_and(|s| s.contains('[') && s.contains(']'));
 
         if has_slug_param {
             // Probe: compile to Content, extract route metadata.
