@@ -11,9 +11,9 @@ pub type ParamSet = Vec<(String, String)>;
 
 /// Extract parameter names from a template path.
 ///
-/// Extracts all `[name]` patterns from each path component's stem (without
-/// extension), matching Astro's convention. Supports multiple params within
-/// a single component, e.g. `[lang]-[version].typ` → `["lang", "version"]`.
+/// Extracts all `[name]` and `[...name]` (spread/rest) patterns from each
+/// path component's stem, matching Astro's convention. Supports multiple
+/// params within a single component, e.g. `[lang]-[version].typ` → `["lang", "version"]`.
 pub fn parse_params(path: &Path) -> Vec<String> {
     let mut params = Vec::new();
     for comp in path.components() {
@@ -26,7 +26,12 @@ pub fn parse_params(path: &Path) -> Vec<String> {
             if let Some(close) = s[open..].find(']') {
                 let close = open + close;
                 if close > open + 1 {
-                    params.push(s[open + 1..close].to_string());
+                    let raw = &s[open + 1..close];
+                    // Strip leading `..` for spread params (`[...slug]` → `slug`).
+                    let param = raw.strip_prefix("..").unwrap_or(raw);
+                    if !param.is_empty() {
+                        params.push(param.to_string());
+                    }
                 }
                 pos = close + 1;
             } else {
@@ -77,6 +82,8 @@ pub fn output_path(project: &ProjectRoot, template: &Path, params: &ParamSet) ->
         .expect("template must be under src/");
     let mut path_str = relative.to_string_lossy().to_string();
     for (name, value) in params {
+        // Replace spread form first to avoid partial matches.
+        path_str = path_str.replace(&format!("[...{}]", name), value);
         path_str = path_str.replace(&format!("[{}]", name), value);
     }
     project.output_dir().join(&path_str).with_extension("html")
