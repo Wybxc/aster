@@ -8,39 +8,14 @@ use typst_html::HtmlElement;
 
 use super::{ElementProcessor, WalkControl};
 
-/// Bundle a single CSS file referenced by its `href` (relative to `src_dir`),
-/// write the result to `dist_dir` with a content hash in the filename,
-/// and return the hashed filename.
-fn bundle_relative(href: &str, src_dir: &Path, dist_dir: &Path) -> Result<String> {
-    let entry = src_dir.join(href);
-    let css = bundle_file(&entry)?;
-
-    let hash = format!("{:016x}", seahash::hash(css.as_bytes()));
-
-    let path = Path::new(href);
-    let stem = path.file_stem().unwrap_or_default();
-    let ext = path.extension().unwrap_or_default();
-    let hashed_name = format!(
-        "{stem}.{hash}.{ext}",
-        stem = stem.to_string_lossy(),
-        ext = ext.to_string_lossy(),
-    );
-
-    let output = dist_dir.join(&hashed_name);
-    if let Some(parent) = output.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("failed to create directory {}", parent.display()))?;
-    }
-    std::fs::write(&output, &css)
-        .with_context(|| format!("failed to write {}", output.display()))?;
-
-    Ok(hashed_name)
-}
-
 /// Processor that bundles `<link rel="css">` references through lightningcss.
 pub(super) struct CssProcessor {
     pub src_dir: PathBuf,
     pub dist_dir: PathBuf,
+    /// The template's subdirectory within `src_dir` (e.g. `"blog"`).
+    pub template_subdir: PathBuf,
+    /// Absolute output path of the current page.
+    pub page_path: PathBuf,
 }
 
 impl ElementProcessor for CssProcessor {
@@ -64,10 +39,38 @@ impl ElementProcessor for CssProcessor {
             return Ok(WalkControl::Continue);
         };
 
-        let new_href = bundle_relative(&href, &self.src_dir, &self.dist_dir)?;
+        // Resolve the source CSS file relative to the template's directory.
+        let source = normalize(&self.src_dir.join(&self.template_subdir).join(href.as_str()));
+        let css = bundle_file(&source)?;
+
+        let hash = format!("{:016x}", seahash::hash(css.as_bytes()));
+        let h = href.as_str();
+        let stem = Path::new(h)
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy();
+        let ext = Path::new(h)
+            .extension()
+            .unwrap_or_default()
+            .to_string_lossy();
+        let hashed_name = format!("{stem}.{hash}.{ext}");
+
+        // Write the bundled CSS to dist_dir.
+        let css_output = self.dist_dir.join(&hashed_name);
+        if let Some(parent) = css_output.parent() {
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("failed to create directory {}", parent.display()))?;
+        }
+        std::fs::write(&css_output, &css)
+            .with_context(|| format!("failed to write {}", css_output.display()))?;
+
+        // Compute relative path from the page to the CSS file.
+        let page_dir = self.page_path.parent().expect("page has a parent");
+        let relative = relative_path(page_dir, &css_output);
+
         for (a, v) in elem.attrs.0.make_mut().iter_mut() {
             if *a.resolve() == *"href" {
-                *v = new_href.clone().into();
+                *v = relative.to_string_lossy().into();
             } else if *a.resolve() == *"rel" {
                 *v = "stylesheet".into();
             }
@@ -100,4 +103,35 @@ fn bundle_file(entry: &Path) -> Result<String> {
         .map_err(|e| anyhow::anyhow!("failed to serialize CSS: {e:#}"))?;
 
     Ok(result.code)
+}
+
+/// Resolve `..` components in a path without requiring the file to exist.
+fn normalize(path: &Path) -> PathBuf {
+    use std::path::Component;
+    let mut result = PathBuf::new();
+    for comp in path.components() {
+        match comp {
+            Component::ParentDir => {
+                result.pop();
+            }
+            Component::CurDir => {}
+            _ => result.push(comp),
+        }
+    }
+    result
+}
+
+/// Compute a relative path from `from` (a directory) to `to` (a file).
+fn relative_path(from: &Path, to: &Path) -> PathBuf {
+    let from: Vec<_> = from.components().collect();
+    let to: Vec<_> = to.components().collect();
+    let common = from.iter().zip(&to).take_while(|(a, b)| a == b).count();
+    let mut result = PathBuf::new();
+    for _ in common..from.len() {
+        result.push("..");
+    }
+    for comp in &to[common..] {
+        result.push(comp);
+    }
+    result
 }

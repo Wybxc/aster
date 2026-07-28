@@ -10,7 +10,7 @@
       #html.meta(charset: "utf-8")
       #html.meta(name: "viewport", content: "width=device-width, initial-scale=1")
       #html.title("Blog Post")
-      #html.elem("link", attrs: ("rel": "css", "href": "style.css"))
+      #html.elem("link", attrs: ("rel": "css", "href": "../style.css"))
     ]
     html.body[
       = Blog Post

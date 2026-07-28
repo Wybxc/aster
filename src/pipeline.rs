@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use typst::foundations::{Dict, Str, Value};
@@ -111,9 +111,16 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
 
         match builder.document(entry, project, &page_library) {
             Ok(mut doc) => {
+                let template_subdir = entry
+                    .parent()
+                    .and_then(|p| p.strip_prefix(project.src_dir()).ok())
+                    .unwrap_or(Path::new(""))
+                    .to_path_buf();
                 let ctx = transform::ProcessingContext {
                     src_dir: src_dir.clone(),
                     dist_dir: output_dir.clone(),
+                    template_subdir,
+                    page_path: output.clone(),
                 };
                 if let Err(err) = transform::process_document(&mut doc, &ctx) {
                     eprintln!("error: post-processing failed: {err:#}");
@@ -143,9 +150,16 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
 
             match builder.document(template, project, &route_library) {
                 Ok(mut doc) => {
+                    let template_subdir = template
+                        .parent()
+                        .and_then(|p| p.strip_prefix(project.src_dir()).ok())
+                        .unwrap_or(Path::new(""))
+                        .to_path_buf();
                     let ctx = transform::ProcessingContext {
                         src_dir: src_dir.clone(),
                         dist_dir: output_dir.clone(),
+                        template_subdir,
+                        page_path: output.clone(),
                     };
                     if let Err(err) = transform::process_document(&mut doc, &ctx) {
                         eprintln!("error: post-processing failed: {err:#}");
