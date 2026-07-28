@@ -22,7 +22,7 @@ impl ElementProcessor for CssProcessor {
             .any(|(a, v)| *a.resolve() == *"rel" && v.as_str() == "css")
     }
 
-    fn process(&self, elem: &mut HtmlElement, ctx: &ProcessingContext) -> Result<WalkControl> {
+    fn process(&self, elem: &mut HtmlElement, ctx: &ProcessingContext<'_>) -> Result<WalkControl> {
         let href = elem
             .attrs
             .0
@@ -33,7 +33,11 @@ impl ElementProcessor for CssProcessor {
         };
 
         // Resolve the source CSS file relative to the template's subdirectory.
-        let source = normalize(&ctx.src_dir.join(ctx.template_subdir()).join(href.as_str()));
+        let source = normalize(
+            &ctx.src_dir()
+                .join(ctx.template_subdir())
+                .join(href.as_str()),
+        );
         let css = bundle_file(&source)?;
 
         let hash = format!("{:016x}", seahash::hash(css.as_bytes()));
@@ -49,7 +53,7 @@ impl ElementProcessor for CssProcessor {
         let hashed_name = format!("{stem}.{hash}.{ext}");
 
         // Write the bundled CSS to dist_dir.
-        let css_output = ctx.dist_dir.join(&hashed_name);
+        let css_output = ctx.output_dir().join(&hashed_name);
         if let Some(parent) = css_output.parent() {
             std::fs::create_dir_all(parent)
                 .with_context(|| format!("failed to create directory {}", parent.display()))?;

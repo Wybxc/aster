@@ -23,7 +23,7 @@ impl ElementProcessor for ImageProcessor {
             .any(|(a, v)| *a.resolve() == *"src" && v.as_str().starts_with("data:"))
     }
 
-    fn process(&self, elem: &mut HtmlElement, ctx: &ProcessingContext) -> Result<WalkControl> {
+    fn process(&self, elem: &mut HtmlElement, ctx: &ProcessingContext<'_>) -> Result<WalkControl> {
         let src = elem
             .attrs
             .0
@@ -33,7 +33,7 @@ impl ElementProcessor for ImageProcessor {
             return Ok(WalkControl::Continue);
         };
 
-        if let Some(new_src) = try_extract(&src, &ctx.dist_dir)? {
+        if let Some(new_src) = try_extract(&src, &ctx.output_dir())? {
             for (a, v) in elem.attrs.0.make_mut().iter_mut() {
                 if *a.resolve() == *"src" {
                     *v = new_src.clone().into();

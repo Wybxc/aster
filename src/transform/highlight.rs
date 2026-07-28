@@ -34,7 +34,7 @@ impl ElementProcessor for HighlightProcessor {
     fn process(
         &self,
         elem: &mut HtmlElement,
-        _ctx: &ProcessingContext,
+        _ctx: &ProcessingContext<'_>,
     ) -> anyhow::Result<WalkControl> {
         let theme = &THEMES.themes[TOKEN_THEME];
         let lang = match elem

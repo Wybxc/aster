@@ -2,7 +2,7 @@ pub mod css;
 pub mod highlight;
 pub mod image;
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::Result;
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
@@ -27,10 +27,10 @@ pub enum WalkControl {
 }
 
 /// Recursively visit every descendant `HtmlElement` depth-first (mutable).
-pub fn walk_mut<E>(
+pub fn walk_mut<'a, E>(
     elem: &mut HtmlElement,
-    ctx: &ProcessingContext,
-    f: &mut impl FnMut(&mut HtmlElement, &ProcessingContext) -> Result<WalkControl, E>,
+    ctx: &ProcessingContext<'a>,
+    f: &mut impl FnMut(&mut HtmlElement, &ProcessingContext<'a>) -> Result<WalkControl, E>,
 ) -> Result<(), E> {
     if matches!(f(elem, ctx)?, WalkControl::SkipChildren) {
         return Ok(());
@@ -46,13 +46,13 @@ pub fn walk_mut<E>(
 /// A processor that matches and transforms individual [`HtmlElement`] nodes.
 pub trait ElementProcessor {
     fn matches(&self, elem: &HtmlElement) -> bool;
-    fn process(&self, elem: &mut HtmlElement, ctx: &ProcessingContext) -> Result<WalkControl>;
+    fn process(&self, elem: &mut HtmlElement, ctx: &ProcessingContext<'_>) -> Result<WalkControl>;
 }
 
 /// Run a set of [`ElementProcessor`]s on the document in a single traversal.
 pub fn process_all(
     doc: &mut HtmlDocument,
-    ctx: &ProcessingContext,
+    ctx: &ProcessingContext<'_>,
     processors: &[&dyn ElementProcessor],
 ) -> Result<()> {
     walk_mut(doc.root_mut(), ctx, &mut |elem, ctx| {
@@ -66,35 +66,38 @@ pub fn process_all(
 }
 
 /// Per-page context for the document processing pipeline.
-pub struct ProcessingContext {
-    pub src_dir: PathBuf,
-    pub dist_dir: PathBuf,
-    /// Absolute output path of the current page (e.g. `dist/blog/hello-world.html`).
+pub struct ProcessingContext<'a> {
+    pub project: &'a ProjectRoot,
     pub page_path: PathBuf,
 }
 
-impl ProcessingContext {
-    /// Build context for a specific page from the project root.
-    pub fn new(project: &ProjectRoot, page_path: PathBuf) -> Self {
-        Self {
-            src_dir: project.src_dir(),
-            dist_dir: project.output_dir(),
-            page_path,
-        }
+impl ProcessingContext<'_> {
+    pub fn new(project: &ProjectRoot, page_path: PathBuf) -> ProcessingContext<'_> {
+        ProcessingContext { project, page_path }
+    }
+
+    pub fn src_dir(&self) -> PathBuf {
+        self.project.src_dir()
+    }
+
+    pub fn output_dir(&self) -> PathBuf {
+        self.project.output_dir()
     }
 
     /// Subdirectory of `src_dir` where the current template lives, derived from
     /// the page's output path (e.g. `blog` for page `dist/blog/page.html`).
-    pub fn template_subdir(&self) -> &Path {
+    pub fn template_subdir(&self) -> PathBuf {
+        let output = self.output_dir();
         self.page_path
             .parent()
-            .and_then(|p| p.strip_prefix(&self.dist_dir).ok())
-            .unwrap_or(Path::new(""))
+            .and_then(|p| p.strip_prefix(&output).ok())
+            .map(|p| p.to_path_buf())
+            .unwrap_or_default()
     }
 }
 
 /// Run every built-in processor in a single DOM traversal.
-pub fn process_document(doc: &mut HtmlDocument, ctx: &ProcessingContext) -> Result<()> {
+pub fn process_document(doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> Result<()> {
     let css = css::CssProcessor;
     let img = image::ImageProcessor;
     let hl = highlight::HighlightProcessor;
