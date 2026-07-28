@@ -6,17 +6,10 @@ use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions};
 use lightningcss::targets::Browsers;
 use typst_html::HtmlElement;
 
-use super::{ElementProcessor, WalkControl};
+use super::{ElementProcessor, ProcessingContext, WalkControl};
 
 /// Processor that bundles `<link rel="css">` references through lightningcss.
-pub(super) struct CssProcessor {
-    pub src_dir: PathBuf,
-    pub dist_dir: PathBuf,
-    /// The template's subdirectory within `src_dir` (e.g. `"blog"`).
-    pub template_subdir: PathBuf,
-    /// Absolute output path of the current page.
-    pub page_path: PathBuf,
-}
+pub(super) struct CssProcessor;
 
 impl ElementProcessor for CssProcessor {
     fn matches(&self, elem: &HtmlElement) -> bool {
@@ -29,7 +22,7 @@ impl ElementProcessor for CssProcessor {
             .any(|(a, v)| *a.resolve() == *"rel" && v.as_str() == "css")
     }
 
-    fn process(&self, elem: &mut HtmlElement) -> Result<WalkControl> {
+    fn process(&self, elem: &mut HtmlElement, ctx: &ProcessingContext) -> Result<WalkControl> {
         let href = elem
             .attrs
             .0
@@ -39,8 +32,8 @@ impl ElementProcessor for CssProcessor {
             return Ok(WalkControl::Continue);
         };
 
-        // Resolve the source CSS file relative to the template's directory.
-        let source = normalize(&self.src_dir.join(&self.template_subdir).join(href.as_str()));
+        // Resolve the source CSS file relative to the template's subdirectory.
+        let source = normalize(&ctx.src_dir.join(ctx.template_subdir()).join(href.as_str()));
         let css = bundle_file(&source)?;
 
         let hash = format!("{:016x}", seahash::hash(css.as_bytes()));
@@ -56,7 +49,7 @@ impl ElementProcessor for CssProcessor {
         let hashed_name = format!("{stem}.{hash}.{ext}");
 
         // Write the bundled CSS to dist_dir.
-        let css_output = self.dist_dir.join(&hashed_name);
+        let css_output = ctx.dist_dir.join(&hashed_name);
         if let Some(parent) = css_output.parent() {
             std::fs::create_dir_all(parent)
                 .with_context(|| format!("failed to create directory {}", parent.display()))?;
@@ -65,7 +58,7 @@ impl ElementProcessor for CssProcessor {
             .with_context(|| format!("failed to write {}", css_output.display()))?;
 
         // Compute relative path from the page to the CSS file.
-        let page_dir = self.page_path.parent().expect("page has a parent");
+        let page_dir = ctx.page_path.parent().expect("page has a parent");
         let relative = relative_path(page_dir, &css_output);
 
         for (a, v) in elem.attrs.0.make_mut().iter_mut() {

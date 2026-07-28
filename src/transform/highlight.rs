@@ -7,7 +7,7 @@ use typst::ecow::{EcoVec, eco_format, eco_vec};
 use typst::syntax::{LinkedNode, Span, SyntaxNode, parse_code, parse_math};
 use typst_html::{HtmlElement, HtmlNode};
 
-use super::{ElementProcessor, WalkControl};
+use super::{ElementProcessor, ProcessingContext, WalkControl};
 
 static SS: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
 static THEMES: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
@@ -31,7 +31,11 @@ impl ElementProcessor for HighlightProcessor {
                 .any(|(a, _v)| *a.resolve() == *"data-lang")
     }
 
-    fn process(&self, elem: &mut HtmlElement) -> anyhow::Result<WalkControl> {
+    fn process(
+        &self,
+        elem: &mut HtmlElement,
+        _ctx: &ProcessingContext,
+    ) -> anyhow::Result<WalkControl> {
         let theme = &THEMES.themes[TOKEN_THEME];
         let lang = match elem
             .attrs
