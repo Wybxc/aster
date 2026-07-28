@@ -70,21 +70,19 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
         .walk_src()
         .filter(|p| p.extension().is_some_and(|ext| ext == "typ"))
     {
-        let has_slug_param = entry
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .is_some_and(|s| s.contains('[') && s.contains(']'));
+        // Parse slug param names from the path (e.g. `[slug]` in the filename).
+        let slug_params = route::parse_params(&entry);
 
-        if has_slug_param {
-            // Probe: compile to Content, extract route metadata.
+        if slug_params.is_empty() {
+            // No slug params — always static.
+            static_entries.push(entry);
+        } else {
+            // Probe: compile to Content, extract route values for these params.
             match builder.content(&entry, project, &page_library) {
                 Ok(content) => {
                     let routes = route::extract(&content);
                     if routes.is_empty() {
-                        eprintln!(
-                            "warning: {} has `[slug]` pattern but no `<route>` metadata",
-                            entry.display()
-                        );
+                        static_entries.push(entry);
                     } else {
                         route_entries.push((entry, routes));
                     }
@@ -93,8 +91,6 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
                     bail!("failed to probe {}: {e:#}", entry.display());
                 }
             }
-        } else {
-            static_entries.push(entry);
         }
     }
 

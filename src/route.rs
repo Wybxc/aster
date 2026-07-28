@@ -9,6 +9,34 @@ use crate::project::ProjectRoot;
 /// Parameter assignments for a single generated page.
 pub type ParamSet = Vec<(String, String)>;
 
+/// Extract parameter names from a template path.
+///
+/// Extracts all `[name]` patterns from each path component's stem (without
+/// extension), matching Astro's convention. Supports multiple params within
+/// a single component, e.g. `[lang]-[version].typ` → `["lang", "version"]`.
+pub fn parse_params(path: &Path) -> Vec<String> {
+    let mut params = Vec::new();
+    for comp in path.components() {
+        let os = comp.as_os_str();
+        let name = Path::new(os).file_stem().unwrap_or(os).to_string_lossy();
+        let mut pos = 0;
+        let s = name.as_ref();
+        while let Some(open) = s[pos..].find('[') {
+            let open = pos + open;
+            if let Some(close) = s[open..].find(']') {
+                let close = open + close;
+                if close > open + 1 {
+                    params.push(s[open + 1..close].to_string());
+                }
+                pos = close + 1;
+            } else {
+                break;
+            }
+        }
+    }
+    params
+}
+
 /// Extract route declarations from compiled content.
 ///
 /// Looks for `#metadata(((key: val, ...), ...)) <route>` elements.
@@ -17,7 +45,7 @@ pub type ParamSet = Vec<(String, String)>;
 pub fn extract(content: &Content) -> Vec<ParamSet> {
     let mut result = Vec::new();
     let _ = content.traverse(&mut |element| -> ControlFlow<()> {
-        if element.label().map_or(false, |l| *l.resolve() == *"route")
+        if element.label().is_some_and(|l| *l.resolve() == *"route")
             && let Some(meta) = element.to_packed::<MetadataElem>()
             && let Value::Array(arr) = &meta.value
         {
