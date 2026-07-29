@@ -25,18 +25,18 @@ pub trait ElementProcessor {
 /// Recursively visit every descendant `HtmlElement` depth-first (mutable).
 ///
 /// Processors that need element-level access can use this instead of
-/// writing their own traversal.
-pub fn walk_mut<'a>(
+/// writing their own traversal.  Capture external state (such as
+/// [`ProcessingContext`]) in the closure.
+pub fn walk_mut(
     elem: &mut HtmlElement,
-    ctx: &ProcessingContext<'a>,
-    f: &mut impl FnMut(&mut HtmlElement, &ProcessingContext<'a>) -> Result<WalkControl>,
+    f: &mut impl FnMut(&mut HtmlElement) -> Result<WalkControl>,
 ) -> Result<()> {
-    if matches!(f(elem, ctx)?, WalkControl::SkipChildren) {
+    if matches!(f(elem)?, WalkControl::SkipChildren) {
         return Ok(());
     }
     for child in elem.children.make_mut().iter_mut() {
         if let HtmlNode::Element(e) = child {
-            walk_mut(e, ctx, f)?;
+            walk_mut(e, f)?;
         }
     }
     Ok(())

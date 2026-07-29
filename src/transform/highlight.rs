@@ -29,7 +29,7 @@ impl ElementProcessor for HighlightProcessor {
     fn process(&self, doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> Result<()> {
         // First pass: syntax-highlight all <code data-lang="..."> blocks.
         let theme = &THEMES.themes[TOKEN_THEME];
-        walk_mut(doc.root_mut(), ctx, &mut |elem, _ctx| {
+        walk_mut(doc.root_mut(), &mut |elem| {
             if elem.tag != typst_html::tag::code {
                 return Ok(WalkControl::Continue);
             }
