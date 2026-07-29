@@ -14,7 +14,7 @@ use typst_kit::files::{FileStore, FsRoot, SystemFiles};
 use typst_kit::fonts::FontStore;
 use typst_kit::packages::SystemPackages;
 
-use crate::diag::emit_diags;
+use crate::diag::{self, emit_diags};
 use crate::project::ProjectRoot;
 use crate::world::CompileWorld;
 
@@ -36,6 +36,8 @@ pub struct CompileContext {
 impl CompileContext {
     /// Build shared resources for one project root.
     pub fn new(project: &ProjectRoot) -> Self {
+        let start = std::time::Instant::now();
+        diag::emit_step("Preparing CompileContext...");
         let fonts = Arc::new({
             let mut fonts = FontStore::new();
             fonts.extend(typst_kit::fonts::system());
@@ -48,6 +50,10 @@ impl CompileContext {
             let system_files = SystemFiles::new(fs_root, packages);
             FileStore::new(system_files)
         });
+        diag::emit_step(&format!(
+            "CompileContext ready in {:.1}s",
+            start.elapsed().as_secs_f64()
+        ));
         Self { fonts, files }
     }
 
