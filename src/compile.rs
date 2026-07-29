@@ -37,12 +37,17 @@ impl CompileContext {
     /// Build shared resources for one project root.
     pub fn new(project: &ProjectRoot) -> Self {
         let start = std::time::Instant::now();
-        diag::emit_step("Preparing CompileContext...");
+        diag::emit_step("Loading fonts...");
         let fonts = Arc::new({
             let mut fonts = FontStore::new();
             fonts.extend(typst_kit::fonts::system());
             fonts
         });
+        diag::emit_step(&format!(
+            "Fonts loaded in {:.1}s",
+            start.elapsed().as_secs_f64()
+        ));
+
         let files = Arc::new({
             let downloader = SystemDownloader::new("aster/0.1.0");
             let packages = SystemPackages::new(downloader);
@@ -50,10 +55,7 @@ impl CompileContext {
             let system_files = SystemFiles::new(fs_root, packages);
             FileStore::new(system_files)
         });
-        diag::emit_step(&format!(
-            "CompileContext ready in {:.1}s",
-            start.elapsed().as_secs_f64()
-        ));
+
         Self { fonts, files }
     }
 
