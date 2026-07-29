@@ -102,17 +102,27 @@ fn scope_css_name(scopes: &[Scope]) -> EcoString {
 }
 
 /// Collect the text content of all descendant `HtmlNode::Text` nodes
-/// under the given element.
+/// under the given element, inserting `\n` for `<br>` elements so the
+/// result reflects the original multi-line code.
+///
+/// Traverses children **in order**, recursing into sub-elements at the
+/// point where they appear, so that text from deeply nested wrappers
+/// (e.g. Typst's show-rule markers) is emitted in source-code order.
 fn collect_text(elem: &HtmlElement) -> String {
     let mut out = String::new();
-    super::walk(elem, &mut |el| {
-        for child in &el.children {
-            if let HtmlNode::Text(t, _) = child {
-                out.push_str(t.as_str());
-            }
-        }
-    });
+    collect_impl(elem, &mut out);
     out
+}
+
+fn collect_impl(elem: &HtmlElement, out: &mut String) {
+    for child in &elem.children {
+        match child {
+            HtmlNode::Text(t, _) => out.push_str(t.as_str()),
+            HtmlNode::Element(e) if e.tag == typst_html::tag::br => out.push('\n'),
+            HtmlNode::Element(e) => collect_impl(e, out),
+            _ => {}
+        }
+    }
 }
 
 /// Highlight code using syntect (all non-Typst languages).
@@ -331,4 +341,251 @@ pub fn resolve_highlight_css(
 
 fn color_to_hex(c: syntect::highlighting::Color) -> String {
     format!("#{:02x}{:02x}{:02x}", c.r, c.g, c.b)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Helper: return the concatenated text of all non-whitespace tokens
+    /// so we can check source-code ordering.
+    fn token_texts(tokens: &[(EcoString, u8, EcoString)]) -> Vec<String> {
+        tokens
+            .iter()
+            .map(|(_, _, t)| t.as_str().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn typst_highlight_let_binding_order() {
+        // `let x = 1` followed by `let y = "hi"` — tokens must be emitted
+        // in source position order, not grouped by binding point.
+        let theme = &THEMES.themes["InspiredGitHub"];
+        let code = "let x = 1\nlet y = \"hi\"\n";
+        let tokens = do_typst_highlight(code, "typc", theme);
+
+        let texts = token_texts(&tokens);
+        // The first meaningful token should be "let", not "x".
+        let non_ws: Vec<&str> = texts
+            .iter()
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.as_str())
+            .collect();
+        assert_eq!(
+            non_ws,
+            &["let", "x", "=", "1", "let", "y", "=", "\"hi\""],
+            "tokens should appear in source-code order, not binding-point-first"
+        );
+    }
+
+    #[test]
+    fn typst_highlight_invalid_code_error_tolerance() {
+        // The original example used code with `."hello-world"` field
+        // access which is invalid in Typst code mode.  The parser
+        // produces error-recovery nodes; we must not panic and should
+        // still produce some sensible output.
+        let theme = &THEMES.themes["InspiredGitHub"];
+        let code = concat!(
+            "state.protocol = 1\n",
+            "collections.blog.\"hello-world\".rendered = (\n",
+            "  (kind: \"element\", tag: \"h2\"),\n",
+            ")\n",
+        );
+        let tokens = do_typst_highlight(code, "typc", theme);
+        // We expect at least some tokens (no panic, no empty output).
+        assert!(!tokens.is_empty(), "should produce tokens even for invalid code");
+        // Every token's text must come from the input string (no garbage).
+        for (_, _, t) in &tokens {
+            let s = t.as_str();
+            if s != "\n" {
+                assert!(
+                    code.contains(s.trim()),
+                    "token {:?} must be a substring of input", s
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn typst_highlight_hyphenated_dict_key() {
+        // Dict keys with hyphens (valid Typst identifiers) must NOT
+        // cause string values to be pushed to the end of output.
+        let theme = &THEMES.themes["InspiredGitHub"];
+        let code = concat!(
+            "let x = (\n",
+            "  hello-world: \"value\",\n",
+            ")\n",
+        );
+        let tokens = do_typst_highlight(code, "typc", theme);
+        let texts = token_texts(&tokens);
+        let non_ws: Vec<&str> = texts
+            .iter()
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.as_str())
+            .collect();
+        assert_eq!(
+            non_ws,
+            &["let", "x", "=", "(", "hello-world", ":", "\"value\"", ",", ")"],
+            "hyphenated dict key does not scramble order"
+        );
+    }
+
+    #[test]
+    fn typst_highlight_deeply_nested_hyphen_keys() {
+        // Exact content from the example site: hyphenated dict keys,
+        // deep nesting, multiple let bindings.
+        let theme = &THEMES.themes["InspiredGitHub"];
+        let code = concat!(
+            "let protocol = 1\n",
+            "let posts = (\n",
+            "  blog: (\n",
+            "    hello-world: (\n",
+            "      id: \"hello-world\",\n",
+            "      body: (\n",
+            "        (kind: \"element\", tag: \"h2\", attrs: (:), children: (\n",
+            "          (kind: \"text\", value: \"Hello, Aster!\"),\n",
+            "        )),\n",
+            "      ),\n",
+            "    ),\n",
+            "  ),\n",
+            ")\n",
+        );
+        let tokens = do_typst_highlight(code, "typc", theme);
+        let texts = token_texts(&tokens);
+        let non_ws: Vec<&str> = texts
+            .iter()
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.as_str())
+            .collect();
+
+        let first_let = non_ws.iter().position(|&s| s == "let");
+        let last_let = non_ws.iter().rposition(|&s| s == "let");
+        assert!(first_let < last_let, "two let bindings in order");
+
+        let hello_world_value = non_ws.iter().position(|&s| s == "\"hello-world\"");
+        let hello_aster = non_ws.iter().position(|&s| s == "\"Hello, Aster!\"");
+        assert!(hello_world_value < hello_aster, "\"hello-world\" before \"Hello, Aster!\"");
+
+        let closing_paren = non_ws.iter().rposition(|&s| s == ")");
+        if let (Some(hv), Some(cp)) = (hello_aster, closing_paren) {
+            assert!(hv < cp, "last string value before final closing paren");
+        }
+    }
+
+    #[test]
+    fn typst_highlight_deeply_nested_let_order() {
+        // Exact structure from the example site — multiple let bindings
+        // with deeply nested dicts.  This previously produced tokens
+        // with string values concatenated at the end.
+        let theme = &THEMES.themes["InspiredGitHub"];
+        let code = concat!(
+            "let protocol = 1\n",
+            "let posts = (\n",
+            "  blog: (\n",
+            "    hello_world: (\n",
+            "      id: \"hello-world\",\n",
+            "      body: (\n",
+            "        (kind: \"element\", tag: \"h2\", attrs: (:), children: (\n",
+            "          (kind: \"text\", value: \"Hello, Aster!\"),\n",
+            "        )),\n",
+            "      ),\n",
+            "    ),\n",
+            "  ),\n",
+            ")\n",
+        );
+        let tokens = do_typst_highlight(code, "typc", theme);
+
+        let texts = token_texts(&tokens);
+        let non_ws: Vec<&str> = texts
+            .iter()
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.as_str())
+            .collect();
+
+        // The first binding must appear before the second one.
+        let first_let = non_ws.iter().position(|&s| s == "let").unwrap();
+        let second_let = non_ws.iter().rposition(|&s| s == "let").unwrap();
+        let first_one = non_ws.iter().position(|&s| s == "1").unwrap();
+        let hello = non_ws.iter().position(|&s| s == "\"Hello, Aster!\"").unwrap();
+        assert!(
+            first_let < second_let,
+            "first 'let' before second 'let'"
+        );
+        assert!(
+            first_one < hello,
+            "value '1' before '\"Hello, Aster!\"' — not pushed to end"
+        );
+        // Check that "hello-world" appears near "id", not at the end.
+        let id = non_ws.iter().position(|&s| s == "id").unwrap();
+        let hello_world = non_ws.iter().position(|&s| s == "\"hello-world\"").unwrap();
+        assert!(
+            (hello_world as isize - id as isize).abs() < 5,
+            "\"hello-world\" should appear right after id, not far away"
+        );
+    }
+
+    #[test]
+    fn typst_highlight_nested_let_order() {
+        // A `let` whose value is a nested dictionary — this was the
+        // original bug from the example site, where string values
+        // appeared after the closing paren.
+        let theme = &THEMES.themes["InspiredGitHub"];
+        let code = "let x = (\n  a: \"hello\",\n  b: \"world\",\n)\n";
+        let tokens = do_typst_highlight(code, "typc", theme);
+
+        let texts = token_texts(&tokens);
+        let non_ws: Vec<&str> = texts
+            .iter()
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.as_str())
+            .collect();
+        assert_eq!(
+            non_ws,
+            &["let", "x", "=", "(", "a", ":", "\"hello\"", ",", "b", ":", "\"world\"", ",", ")"],
+            "nested let-dict tokens in source order, not string-values-last"
+        );
+    }
+
+    #[test]
+    fn typst_highlight_dict_literal_order() {
+        // A dictionary literal — all keys and values must appear in
+        // source-code order, not with string values pushed to the end.
+        let theme = &THEMES.themes["InspiredGitHub"];
+        // Single-line dict — easiest to reason about.
+        let code = "(a: 1, b: 2)\n";
+        let tokens = do_typst_highlight(code, "typc", theme);
+
+        let texts = token_texts(&tokens);
+        let non_ws: Vec<&str> = texts
+            .iter()
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.as_str())
+            .collect();
+        assert_eq!(
+            non_ws,
+            &["(", "a", ":", "1", ",", "b", ":", "2", ")"],
+            "dictionary literal tokens in source order"
+        );
+    }
+
+    #[test]
+    fn syntect_highlight_json_order() {
+        // Multi-line JSON — tokens must appear in source order, not
+        // grouped by scope (e.g. all punctuation before all strings).
+        let theme = &THEMES.themes["InspiredGitHub"];
+        let code = "{\n  \"a\": 1,\n  \"b\": 2\n}\n";
+        let tokens = do_syntect_highlight(code, "json", theme);
+
+        let texts = token_texts(&tokens);
+        let non_ws: Vec<&str> = texts
+            .iter()
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.as_str())
+            .collect();
+        assert_eq!(
+            non_ws,
+            &["{", "\"", "a", "\"", ":", "1", ",", "\"", "b", "\"", ":", "2", "}"],
+            "JSON tokens (quotes & content separate) should appear in source-code order"
+        );
+    }
 }

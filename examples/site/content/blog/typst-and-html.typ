@@ -20,19 +20,20 @@ pages can import `lib/aster/content.typ` and use `#get-collection()`,
 
 The data flowing between phases uses a simple protocol:
 
-```
-protocol: 1
-collections:
-  blog:
-    hello-world:
-      id: hello-world
-      body:
-        - kind: element
-          tag: h2
-          attrs: ()
-          children:
-            - kind: text
-              value: "Hello, Aster!"
+```typc
+let protocol = 1
+let posts = (
+  blog: (
+    hello-world: (
+      id: "hello-world",
+      body: (
+        (kind: "element", tag: "h2", attrs: (:), children: (
+          (kind: "text", value: "Hello, Aster!"),
+        )),
+      ),
+    ),
+  ),
+)
 ```
 
 This page template wraps each post in an `<article>` element and renders the

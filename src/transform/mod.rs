@@ -9,16 +9,6 @@ use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 
 use crate::project::ProjectRoot;
 
-/// Recursively visit every descendant `HtmlElement` depth-first (immutable).
-pub fn walk(elem: &HtmlElement, f: &mut dyn FnMut(&HtmlElement)) {
-    f(elem);
-    for child in &elem.children {
-        if let HtmlNode::Element(e) = child {
-            walk(e, f);
-        }
-    }
-}
-
 /// Signal returned by the callback passed to [`walk_mut`] to control
 /// whether children of the current element should be visited.
 pub enum WalkControl {
