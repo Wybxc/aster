@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use termcolor::{ColorChoice, StandardStream};
-use typst::diag::{FileError, SourceDiagnostic};
+use typst::diag::{FileError, Severity, SourceDiagnostic};
 use typst::foundations::{Bytes, Datetime, Dict, Duration};
-use typst::syntax::FileId;
+use typst::syntax::{FileId, Span};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
 use typst::{Feature, Features, Library, LibraryExt, World};
@@ -86,4 +86,50 @@ pub fn emit_diags(world: &impl DiagnosticWorld, diags: &[SourceDiagnostic]) {
             eprintln!("error: {diag:?}");
         }
     }
+}
+
+/// A trivial [`DiagnosticWorld`] — never resolves names (for detached-span diagnostics).
+pub struct NullWorld;
+
+impl World for NullWorld {
+    fn library(&self) -> &LazyHash<typst::Library> {
+        unimplemented!()
+    }
+    fn book(&self) -> &LazyHash<FontBook> {
+        unimplemented!()
+    }
+    fn main(&self) -> FileId {
+        unimplemented!()
+    }
+    fn source(&self, _id: FileId) -> std::result::Result<typst::syntax::Source, FileError> {
+        unimplemented!()
+    }
+    fn file(&self, _id: FileId) -> std::result::Result<Bytes, FileError> {
+        unimplemented!()
+    }
+    fn font(&self, _index: usize) -> Option<Font> {
+        None
+    }
+    fn today(&self, _offset: Option<Duration>) -> Option<Datetime> {
+        None
+    }
+}
+
+impl DiagnosticWorld for NullWorld {
+    fn name(&self, _id: FileId) -> String {
+        String::new()
+    }
+}
+
+/// Emit a simple message as a [`SourceDiagnostic`] without source location.
+pub fn emit_message(world: &impl DiagnosticWorld, severity: Severity, message: &str) {
+    let diag = SourceDiagnostic {
+        severity,
+        span: Span::detached().into(),
+        message: message.into(),
+        trace: typst::ecow::eco_vec![],
+        hints: typst::ecow::eco_vec![],
+    };
+    let mut writer = StandardStream::stderr(ColorChoice::Auto);
+    let _ = diagnostics::emit(&mut writer, world, Some(&diag), DiagnosticFormat::Human);
 }

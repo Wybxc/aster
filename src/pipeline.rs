@@ -56,9 +56,10 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<(Vec<PathBuf>, Vec<a
             .insert(output.clone(), RenderJob { template, library })
             .is_some()
         {
-            eprintln!(
-                "warning: duplicate output path `{}` — skipping",
-                output.display()
+            world::emit_message(
+                &world::NullWorld,
+                typst::diag::Severity::Warning,
+                &format!("duplicate output path `{}` — skipping", output.display()),
             );
         }
     };
@@ -86,9 +87,13 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<(Vec<PathBuf>, Vec<a
                     })?,
             );
             if routes.is_empty() {
-                eprintln!(
-                    "warning: {} has `[slug]` pattern but no `<route>` metadata",
-                    entry.display()
+                world::emit_message(
+                    &world::NullWorld,
+                    typst::diag::Severity::Warning,
+                    &format!(
+                        "{} has `[slug]` pattern but no `<route>` metadata",
+                        entry.display()
+                    ),
                 );
             }
 
