@@ -23,21 +23,13 @@ fn writer() -> StandardStream {
     StandardStream::stderr(ColorChoice::Auto)
 }
 
-fn dimmed(w: &mut StandardStream) {
-    let _ = w.set_color(ColorSpec::new().set_dimmed(true));
-}
-
-fn reset(w: &mut StandardStream) {
-    let _ = w.reset();
-}
-
-/// Print a dimmed bullet for each output file.
+/// Print an output file line.
 pub fn emit_page(path: &str) {
     let mut w = writer();
-    dimmed(&mut w);
-    let _ = write!(w, "   {path}");
-    reset(&mut w);
-    let _ = writeln!(w);
+    let _ = w.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)).set_bold(true));
+    let _ = write!(w, "info");
+    let _ = w.reset();
+    let _ = writeln!(w, ": {path}");
 }
 
 /// Print the build summary line.
