@@ -9,14 +9,6 @@ use typst_html::HtmlOptions;
 use crate::project::ProjectRoot;
 use crate::{compile, route, transform, world};
 
-/// Result of a complete Aster project build.
-pub struct BuildResult {
-    /// Whether any compilation errors occurred.
-    pub has_errors: bool,
-    /// Paths of all successfully written output files.
-    pub outputs: Vec<PathBuf>,
-}
-
 /// Return a complete `_aster` protocol value with empty collections.
 fn empty_aster() -> Value {
     Value::Dict(Dict::from_iter([
@@ -27,16 +19,12 @@ fn empty_aster() -> Value {
 
 /// Execute the full Aster build lifecycle.
 ///
-/// 1. Load content collections (Phase 1) — uses config inputs
-/// 2. Assemble base Typst inputs (config + `_aster` protocol)
-/// 3. Probe dynamic templates (`[slug].typ`) for route declarations
-/// 4. Compile all pages — static once, dynamic once per route entry
-/// 5. Serialize and write output
-pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
-    // World builder — fonts scanned once for the whole project.
+/// Returns `(output_paths, per_page_errors)` on success. The caller is
+/// responsible for printing errors and deciding whether they are fatal.
+pub fn build(project: &ProjectRoot, config: Dict) -> Result<(Vec<PathBuf>, Vec<anyhow::Error>)> {
     let builder = compile::CompileContext::new(project);
 
-    // --- Phase 1: content collections (config inputs only) ---
+    // --- Phase 1: content collections ---
     let aster_value = if project.content_dir().is_dir() {
         let lib = LazyHash::new(world::build_library(config.clone()));
         crate::content::load_collections(project, &builder, &lib)
@@ -55,12 +43,7 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
         bail!("src/ directory not found in project");
     }
 
-    let mut result = BuildResult {
-        has_errors: false,
-        outputs: Vec::new(),
-    };
-
-    // --- Probe phase: extract routes from [slug] templates ---
+    // --- Probe phase ---
     struct RenderJob {
         template: PathBuf,
         library: LazyHash<Library>,
@@ -125,6 +108,7 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
     }
 
     // --- Render & serialize ---
+    let mut outputs: Vec<PathBuf> = Vec::new();
     let mut errors: Vec<anyhow::Error> = Vec::new();
 
     for (output, job) in &render_queue {
@@ -148,16 +132,14 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
             std::fs::write(output, &raw)
                 .with_context(|| format!("failed to write {}", output.display()))?;
 
-            result.outputs.push(output.clone());
+            outputs.push(output.clone());
             Ok(())
         };
 
         if let Err(e) = page() {
-            eprintln!("error: {}: {e:#}", output.display());
             errors.push(e);
         }
     }
 
-    result.has_errors = !errors.is_empty();
-    Ok(result)
+    Ok((outputs, errors))
 }
