@@ -110,7 +110,6 @@ impl CompileContext {
     ) -> Result<HtmlDocument> {
         let world = self.world(entry, project, library);
         let warned = typst::compile::<HtmlDocument>(&world);
-        emit_diags(&world, &warned.warnings);
 
         match warned.output {
             Ok(doc) => Ok(doc),
