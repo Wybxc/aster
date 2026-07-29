@@ -92,13 +92,8 @@ pub fn parse_template(path: &Path) -> Result<RouteTemplate, RouteError> {
 }
 
 fn is_last_component(path: &Path, comp: std::path::Component<'_>) -> bool {
-    let mut it = path.components();
-    while let Some(c) = it.next() {
-        if std::ptr::eq(&c, &comp) {
-            return it.next().is_none();
-        }
-    }
-    false
+    let mut it = path.components().rev();
+    it.next().map_or(false, |last| last == comp)
 }
 
 /// Split a route component string into parts at `[...]` boundaries.
