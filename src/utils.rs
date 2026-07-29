@@ -7,22 +7,6 @@ use anyhow::{Context, Result};
 use typst::ecow::EcoString;
 use typst_html::{HtmlElement, HtmlNode};
 
-/// Resolve `..` components in a path without requiring the file to exist.
-pub fn normalize(path: &Path) -> PathBuf {
-    use std::path::Component;
-    let mut result = PathBuf::new();
-    for comp in path.components() {
-        match comp {
-            Component::ParentDir => {
-                result.pop();
-            }
-            Component::CurDir => {}
-            _ => result.push(comp),
-        }
-    }
-    result
-}
-
 /// Compute a relative path from `from` (a directory) to `to` (a file).
 pub fn relative_path(from: &Path, to: &Path) -> PathBuf {
     let from: Vec<_> = from.components().collect();

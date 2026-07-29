@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use lightningcss::bundler::{Bundler, FileProvider};
 use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions};
 use lightningcss::targets::Browsers;
@@ -8,7 +8,7 @@ use typst_html::HtmlDocument;
 
 use super::{ElementProcessor, ProcessingContext, WalkControl};
 use crate::utils::HtmlElementExt;
-use crate::utils::{normalize, relative_path};
+use crate::utils::relative_path;
 
 pub(super) struct CssProcessor;
 
@@ -28,11 +28,12 @@ impl ElementProcessor for CssProcessor {
             };
 
             // Resolve the source CSS file relative to the template's subdirectory.
-            let source = normalize(
-                &ctx.src_dir()
-                    .join(ctx.template_subdir())
-                    .join(href.as_str()),
-            );
+            let source = ctx
+                .src_dir()
+                .join(ctx.template_subdir())
+                .join(href.as_str());
+            let source = std::fs::canonicalize(&source)
+                .with_context(|| format!("failed to resolve {}", source.display()))?;
             let css = bundle_file(&source)?;
 
             let hash = crate::utils::content_hash(css.as_bytes());
