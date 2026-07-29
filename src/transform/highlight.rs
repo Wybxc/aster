@@ -7,7 +7,7 @@ use syntect::highlighting::{Highlighter, Theme, ThemeSet};
 use syntect::parsing::{ParseState, Scope, ScopeStack, SyntaxSet};
 use typst::ecow::{EcoString, EcoVec, eco_format, eco_vec};
 use typst::syntax::{LinkedNode, Span, SyntaxNode, parse_code, parse_math};
-use typst_html::{HtmlElement, HtmlNode};
+use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 
 use crate::config::HighlightConfig;
 use crate::project::ProjectRoot;
@@ -341,6 +341,35 @@ pub fn resolve_highlight_css(
 
 fn color_to_hex(c: syntect::highlighting::Color) -> String {
     format!("#{:02x}{:02x}{:02x}", c.r, c.g, c.b)
+}
+
+// ---------------------------------------------------------------------------
+// Post-processing
+// ---------------------------------------------------------------------------
+
+impl HighlightProcessor {
+    /// Run after all highlighting is done — inject the highlight CSS `<link>`
+    /// into `<head>` when a configured path is present.
+    pub fn finalize_document(doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) {
+        if let Some(ref hl_css) = ctx.hl_css_path {
+            Self::inject_css_link(doc, hl_css);
+        }
+    }
+
+    fn inject_css_link(doc: &mut HtmlDocument, href: &Path) {
+        use typst_html::{attr, tag};
+        for child in doc.root_mut().children.make_mut().iter_mut() {
+            if let HtmlNode::Element(head) = child
+                && head.tag == tag::head
+            {
+                let link = HtmlElement::new(tag::link)
+                    .with_attr(attr::rel, "stylesheet")
+                    .with_attr(attr::href, href.to_string_lossy().as_ref());
+                head.children.push(HtmlNode::Element(link));
+                return;
+            }
+        }
+    }
 }
 
 #[cfg(test)]

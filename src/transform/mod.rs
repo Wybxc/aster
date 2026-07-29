@@ -2,7 +2,7 @@ pub mod css;
 pub mod highlight;
 pub mod image;
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::Result;
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
@@ -83,8 +83,7 @@ impl ProcessingContext<'_> {
     }
 }
 
-/// Run built-in processors followed by any extra processors from the
-/// context, then inject the highlight CSS `<link>` if configured.
+/// Run every built-in processor in a single DOM traversal.
 pub fn process_document(doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> Result<()> {
     process_all(
         doc,
@@ -96,24 +95,6 @@ pub fn process_document(doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> 
         ],
     )?;
 
-    if let Some(ref hl_css) = ctx.hl_css_path {
-        inject_hl_link(doc, hl_css);
-    }
+    highlight::HighlightProcessor::finalize_document(doc, ctx);
     Ok(())
-}
-
-/// Inject `<link rel="stylesheet" href="...">` into `<head>`.
-fn inject_hl_link(doc: &mut HtmlDocument, href: &Path) {
-    use typst_html::{attr, tag};
-    for child in doc.root_mut().children.make_mut().iter_mut() {
-        if let HtmlNode::Element(head) = child
-            && head.tag == tag::head
-        {
-            let link = HtmlElement::new(tag::link)
-                .with_attr(attr::rel, "stylesheet")
-                .with_attr(attr::href, href.to_string_lossy().as_ref());
-            head.children.push(HtmlNode::Element(link));
-            return;
-        }
-    }
 }
