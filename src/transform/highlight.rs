@@ -72,18 +72,19 @@ impl ElementProcessor for HighlightProcessor {
             let mut new_children: EcoVec<HtmlNode> = EcoVec::new();
             for (scope_name, bits, txt) in &tokens {
                 let span = if scope_name == "default" && *bits == 0 {
+                    // Plain tokens: no class, inherit parent styling.
                     HtmlElement::new(typst_html::tag::span)
                         .with_children(eco_vec![HtmlNode::Text(txt.clone(), Span::detached())])
                 } else {
-                    let mut style = eco_format!("color:var(--hl-{scope_name})");
+                    let mut class = eco_format!("hl-{scope_name}");
                     if bits & 1 != 0 {
-                        style.push_str(";font-weight:bold");
+                        class.push_str(" hl-bold");
                     }
                     if bits & 2 != 0 {
-                        style.push_str(";font-style:italic");
+                        class.push_str(" hl-italic");
                     }
                     HtmlElement::new(typst_html::tag::span)
-                        .with_attr(typst_html::attr::style, style)
+                        .with_attr(typst_html::attr::class, class)
                         .with_children(eco_vec![HtmlNode::Text(txt.clone(), Span::detached())])
                 };
                 new_children.push(HtmlNode::Element(span));
@@ -351,6 +352,15 @@ pub fn resolve_highlight_css(
         }
     }
     css.push_str("}\n");
+    // Class-name rules — bold & italic can differ between themes.
+    for (name, _, _) in &vars {
+        let _ = std::fmt::Write::write_fmt(
+            &mut css,
+            format_args!(".hl-{name}{{color:var(--hl-{name})}}\n"),
+        );
+    }
+    css.push_str(".hl-bold{font-weight:bold}\n");
+    css.push_str(".hl-italic{font-style:italic}\n");
 
     // Write to output directory with content hash.
     let hash = format!("{:016x}", seahash::hash(css.as_bytes()));
