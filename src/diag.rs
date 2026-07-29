@@ -26,10 +26,10 @@ fn writer() -> StandardStream {
 /// Print an output file line, showing the source template.
 pub fn emit_page(path: &str, source: &str) {
     let mut w = writer();
-    let _ = w.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)).set_bold(true));
-    let _ = write!(w, "info");
+    let _ = w.set_color(ColorSpec::new().set_fg(Some(Color::Green)).set_bold(true));
+    let _ = write!(w, "write");
     let _ = w.reset();
-    let _ = write!(w, ": {path}  ");
+    let _ = write!(w, "  {path}  ");
     let _ = w.set_color(ColorSpec::new().set_dimmed(true));
     let _ = writeln!(w, "({source})");
     let _ = w.reset();
