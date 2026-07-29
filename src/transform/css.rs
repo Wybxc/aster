@@ -6,32 +6,23 @@ use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions};
 use lightningcss::targets::Browsers;
 use typst_html::HtmlDocument;
 
-use super::{ElementProcessor, ProcessingContext, WalkControl};
+use super::{ElementProcessor, ProcessingContext, WalkControl, html_util};
 
 pub(super) struct CssProcessor;
 
 impl ElementProcessor for CssProcessor {
     fn process(&self, doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> Result<()> {
         super::walk_mut(doc.root_mut(), &mut |elem| {
-            if elem.tag != typst_html::tag::link {
+            if !html_util::is_tag(elem, typst_html::tag::link) {
                 return Ok(WalkControl::Continue);
             }
-            if !elem
-                .attrs
-                .0
-                .iter()
-                .any(|(a, v)| *a.resolve() == *"rel" && v.as_str() == "css")
-            {
+            if !html_util::has_attr(elem, "rel", |v| v.as_str() == "css") {
                 return Ok(WalkControl::Continue);
             }
 
-            let href = elem
-                .attrs
-                .0
-                .iter()
-                .find_map(|(a, v)| (*a.resolve() == *"href").then(|| v.clone()));
-            let Some(href) = href else {
-                return Ok(WalkControl::Continue);
+            let href = match html_util::get_attr(elem, "href") {
+                Some(h) => h,
+                None => return Ok(WalkControl::Continue),
             };
 
             // Resolve the source CSS file relative to the template's subdirectory.
@@ -67,13 +58,8 @@ impl ElementProcessor for CssProcessor {
             let page_dir = ctx.page_path.parent().expect("page has a parent");
             let relative = relative_path(page_dir, &css_output);
 
-            for (a, v) in elem.attrs.0.make_mut().iter_mut() {
-                if *a.resolve() == *"href" {
-                    *v = relative.to_string_lossy().into();
-                } else if *a.resolve() == *"rel" {
-                    *v = "stylesheet".into();
-                }
-            }
+            html_util::update_attr(elem, "href", |v| *v = relative.to_string_lossy().into());
+            html_util::update_attr(elem, "rel", |v| *v = "stylesheet".into());
             Ok(WalkControl::Continue)
         })
     }

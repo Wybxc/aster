@@ -13,7 +13,7 @@ use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 use crate::config::HighlightConfig;
 use crate::project::ProjectRoot;
 
-use super::{ElementProcessor, ProcessingContext, WalkControl, walk_mut};
+use super::{ElementProcessor, ProcessingContext, WalkControl, html_util, walk_mut};
 
 static SS: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
 static THEMES: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
@@ -28,25 +28,11 @@ impl ElementProcessor for HighlightProcessor {
         // Syntax-highlight all <code data-lang="..."> blocks.
         // Theme-independent: we only derive CSS class names from scopes.
         walk_mut(doc.root_mut(), &mut |elem| {
-            if elem.tag != typst_html::tag::code {
-                return Ok(WalkControl::Continue);
-            }
-            if !elem
-                .attrs
-                .0
-                .iter()
-                .any(|(a, _v)| *a.resolve() == *"data-lang")
-            {
+            if !html_util::is_tag(elem, typst_html::tag::code) {
                 return Ok(WalkControl::Continue);
             }
 
-            let lang = match elem
-                .attrs
-                .0
-                .iter()
-                .find(|(a, _)| *a.resolve() == *"data-lang")
-                .map(|(_, v)| v.clone())
-            {
+            let lang = match html_util::get_attr(elem, "data-lang") {
                 Some(l) => l,
                 None => return Ok(WalkControl::Continue),
             };
@@ -81,22 +67,14 @@ impl ElementProcessor for HighlightProcessor {
 
         // Second step: inject highlight CSS link into <head> if configured.
         if let Some(ref hl_css) = ctx.hl_css_path {
-            let mut found_head = false;
-            for child in doc.root_mut().children.make_mut().iter_mut() {
-                if let HtmlNode::Element(head) = child
-                    && head.tag == typst_html::tag::head
-                {
-                    let link = HtmlElement::new(typst_html::tag::link)
-                        .with_attr(typst_html::attr::rel, "stylesheet")
-                        .with_attr(typst_html::attr::href, hl_css.to_string_lossy().as_ref());
-                    head.children.push(HtmlNode::Element(link));
-                    found_head = true;
-                    break;
-                }
-            }
-            if !found_head {
+            let root = doc.root_mut();
+            let Some(head) = html_util::find_child_mut(root, typst_html::tag::head) else {
                 anyhow::bail!("highlight CSS configured but found no <head> element");
-            }
+            };
+            let link = HtmlElement::new(typst_html::tag::link)
+                .with_attr(typst_html::attr::rel, "stylesheet")
+                .with_attr(typst_html::attr::href, hl_css.to_string_lossy().as_ref());
+            head.children.push(HtmlNode::Element(link));
         }
 
         Ok(())

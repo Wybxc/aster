@@ -1,5 +1,6 @@
 pub mod css;
 pub mod highlight;
+pub mod html_util;
 pub mod image;
 
 use std::path::PathBuf;
