@@ -1,8 +1,8 @@
 // Page template: blog index
 //
-// CSS variables for syntax highlighting are defined in external stylesheets
-// under src/ (style.css + theme-light.css + theme-dark.css).  They are
-// bundled and minified into dist/style.css by the CSS loader.
+// Syntax highlighting CSS variables are generated automatically by Aster
+// from the tmTheme themes declared in aster.toml and injected directly
+// into <head> as a separate stylesheet.
 
 #import "/lib/aster/content.typ": get-collection, render
 

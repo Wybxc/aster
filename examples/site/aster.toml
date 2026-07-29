@@ -1,2 +1,5 @@
 [project]
 name = "sample-site"
+
+[highlight]
+themes = { light = "InspiredGitHub", dark = "base16-eighties.dark" }
