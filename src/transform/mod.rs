@@ -47,6 +47,10 @@ pub struct ProcessingContext<'a> {
     pub project: &'a ProjectRoot,
     pub page_path: PathBuf,
     pub hl_css_path: Option<PathBuf>,
+    /// Name of the syntect theme used for token-level highlighting
+    /// (determines which scopes get non-default classification).  When
+    /// `None`, a built-in default is used.
+    pub highlight_theme: Option<String>,
 }
 
 impl ProcessingContext<'_> {

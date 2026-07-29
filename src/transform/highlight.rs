@@ -17,8 +17,9 @@ use super::{ElementProcessor, ProcessingContext, WalkControl, walk_mut};
 static SS: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
 static THEMES: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
 
-/// Theme used for internal tokenization.
-const TOKEN_THEME: &str = "InspiredGitHub";
+/// Default theme used for token-level highlighting when no highlight
+/// config is provided.
+const DEFAULT_TOKEN_THEME: &str = "InspiredGitHub";
 
 /// Languages that Typst can parse with its own AST.
 const TYPST_LANGS: &[&str] = &["typ", "typst", "typc", "typm"];
@@ -28,7 +29,11 @@ pub(super) struct HighlightProcessor;
 impl ElementProcessor for HighlightProcessor {
     fn process(&self, doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> Result<()> {
         // First pass: syntax-highlight all <code data-lang="..."> blocks.
-        let theme = &THEMES.themes[TOKEN_THEME];
+        let theme_name = ctx
+            .highlight_theme
+            .as_deref()
+            .unwrap_or(DEFAULT_TOKEN_THEME);
+        let theme = &THEMES.themes[theme_name];
         walk_mut(doc.root_mut(), &mut |elem| {
             if elem.tag != typst_html::tag::code {
                 return Ok(WalkControl::Continue);
