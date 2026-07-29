@@ -61,7 +61,7 @@ fn build(project_dir: Option<std::path::PathBuf>) -> Result<()> {
     let (outputs, errors) = pipeline::build(&project, config)?;
 
     for err in &errors {
-        eprintln!("error: {err:#}");
+        world::emit_error(&format!("{err:#}"));
     }
 
     if !errors.is_empty() {

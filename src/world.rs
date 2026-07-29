@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use termcolor::{ColorChoice, StandardStream};
+use std::io::Write;
+
+use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use typst::diag::{FileError, SourceDiagnostic};
 use typst::foundations::{Bytes, Datetime, Dict, Duration};
 use typst::syntax::FileId;
@@ -86,4 +88,26 @@ pub fn emit_diags(world: &impl DiagnosticWorld, diags: &[SourceDiagnostic]) {
             eprintln!("error: {diag:?}");
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Simple styled output (for messages without CompileWorld)
+// ---------------------------------------------------------------------------
+
+fn styled_prefix(prefix: &str, color: Color, message: &str) {
+    let mut w = StandardStream::stderr(ColorChoice::Auto);
+    let _ = w.set_color(ColorSpec::new().set_fg(Some(color)).set_bold(true));
+    let _ = write!(w, "{prefix}");
+    let _ = w.reset();
+    let _ = writeln!(w, ": {message}");
+}
+
+/// Print a styled `error:` message to stderr.
+pub fn emit_error(message: &str) {
+    styled_prefix("error", Color::Red, message);
+}
+
+/// Print a styled `warning:` message to stderr.
+pub fn emit_warning(message: &str) {
+    styled_prefix("warning", Color::Yellow, message);
 }
