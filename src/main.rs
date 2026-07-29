@@ -61,11 +61,7 @@ fn build(project_dir: Option<std::path::PathBuf>) -> Result<()> {
     let (outputs, errors) = pipeline::build(&project, config)?;
 
     for err in &errors {
-        world::emit_message(
-            &world::NullWorld,
-            typst::diag::Severity::Error,
-            &format!("{err:#}"),
-        );
+        eprintln!("error: {err:#}");
     }
 
     if !errors.is_empty() {

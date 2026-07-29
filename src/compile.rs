@@ -33,6 +33,11 @@ pub struct CompileContext {
 }
 
 impl CompileContext {
+    /// Access the shared file store (for diagnostic emission).
+    pub(crate) fn file_store(&self) -> Arc<FileStore<SystemFiles>> {
+        Arc::clone(&self.files)
+    }
+
     /// Build shared resources for one project root.
     pub fn new(project: &ProjectRoot) -> Self {
         let fonts = Arc::new({

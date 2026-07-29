@@ -88,24 +88,33 @@ pub fn emit_diags(world: &impl DiagnosticWorld, diags: &[SourceDiagnostic]) {
     }
 }
 
-/// A trivial [`DiagnosticWorld`] — never resolves names (for detached-span diagnostics).
-pub struct NullWorld;
+/// A [`DiagnosticWorld`] backed by a [`FileStore`], usable for emitting
+/// diagnostics that may have source-level span information.
+pub struct FileStoreWorld {
+    files: Arc<FileStore<SystemFiles>>,
+}
 
-impl World for NullWorld {
+impl FileStoreWorld {
+    pub fn new(files: Arc<FileStore<SystemFiles>>) -> Self {
+        Self { files }
+    }
+}
+
+impl World for FileStoreWorld {
     fn library(&self) -> &LazyHash<typst::Library> {
-        unimplemented!()
+        panic!("FileStoreWorld does not provide a library")
     }
     fn book(&self) -> &LazyHash<FontBook> {
-        unimplemented!()
+        panic!("FileStoreWorld does not provide a font book")
     }
     fn main(&self) -> FileId {
-        unimplemented!()
+        panic!("FileStoreWorld does not have a main file")
     }
-    fn source(&self, _id: FileId) -> std::result::Result<typst::syntax::Source, FileError> {
-        unimplemented!()
+    fn source(&self, id: FileId) -> std::result::Result<typst::syntax::Source, FileError> {
+        self.files.source(id)
     }
-    fn file(&self, _id: FileId) -> std::result::Result<Bytes, FileError> {
-        unimplemented!()
+    fn file(&self, id: FileId) -> std::result::Result<Bytes, FileError> {
+        self.files.file(id)
     }
     fn font(&self, _index: usize) -> Option<Font> {
         None
@@ -115,9 +124,20 @@ impl World for NullWorld {
     }
 }
 
-impl DiagnosticWorld for NullWorld {
-    fn name(&self, _id: FileId) -> String {
-        String::new()
+impl DiagnosticWorld for FileStoreWorld {
+    fn name(&self, id: FileId) -> String {
+        let cwd = std::env::current_dir().ok();
+        self.files
+            .loader()
+            .resolve(id)
+            .ok()
+            .and_then(|p| {
+                cwd.as_ref()
+                    .and_then(|cwd| p.strip_prefix(cwd).ok())
+                    .map(|p| p.display().to_string())
+                    .or_else(|| Some(p.display().to_string()))
+            })
+            .unwrap_or_else(|| id.vpath().get_with_slash().to_string())
     }
 }
 
