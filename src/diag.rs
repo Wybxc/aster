@@ -15,10 +15,7 @@ pub fn emit_diags(world: &impl DiagnosticWorld, diags: &[SourceDiagnostic]) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Style A: No prefix — for ambient progress and conclusive summaries.
-// ---------------------------------------------------------------------------
-
+/// Ambient progress messages — no prefix, for phase announcements and final summaries.
 fn writer() -> StandardStream {
     StandardStream::stderr(ColorChoice::Auto)
 }
@@ -42,10 +39,7 @@ pub fn emit_summary(count: usize, elapsed: &Instant) {
     let _ = writeln!(w, " in {secs:.1}s");
 }
 
-// ---------------------------------------------------------------------------
-// Style B: With prefix — for concrete, actionable messages.
-// ---------------------------------------------------------------------------
-
+/// Actionable messages — colored `action:` prefix, for results that need attention.
 fn styled_prefix(prefix: &str, color: Color, message: &str) {
     let mut w = writer();
     let _ = w.set_color(ColorSpec::new().set_fg(Some(color)).set_bold(true));
