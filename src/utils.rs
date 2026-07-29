@@ -1,26 +1,11 @@
 //! Utility helpers — DOM traversal, HTML element extension methods, path
 //! utilities, colour formatting, etc.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{Context, Result};
 use typst::ecow::EcoString;
 use typst_html::{HtmlElement, HtmlNode};
-
-/// Compute a relative path from `from` (a directory) to `to` (a file).
-pub fn relative_path(from: &Path, to: &Path) -> PathBuf {
-    let from: Vec<_> = from.components().collect();
-    let to: Vec<_> = to.components().collect();
-    let common = from.iter().zip(&to).take_while(|(a, b)| a == b).count();
-    let mut result = PathBuf::new();
-    for _ in common..from.len() {
-        result.push("..");
-    }
-    for comp in &to[common..] {
-        result.push(comp);
-    }
-    result
-}
 
 /// Format a syntect [`Color`](syntect::highlighting::Color) as `#rrggbb`.
 pub fn color_to_hex(c: syntect::highlighting::Color) -> String {

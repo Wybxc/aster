@@ -136,6 +136,7 @@ dependencies = [
  "clap",
  "indexmap",
  "lightningcss",
+ "pathdiff",
  "seahash",
  "syntect",
  "termcolor",

@@ -8,7 +8,6 @@ use typst_html::HtmlDocument;
 
 use super::{ElementProcessor, ProcessingContext, WalkControl};
 use crate::utils::HtmlElementExt;
-use crate::utils::relative_path;
 
 pub(super) struct CssProcessor;
 
@@ -54,7 +53,8 @@ impl ElementProcessor for CssProcessor {
 
             // Compute relative path from the page to the CSS file.
             let page_dir = ctx.page_path.parent().expect("page has a parent");
-            let relative = relative_path(page_dir, &css_output);
+            let relative =
+                pathdiff::diff_paths(&css_output, page_dir).expect("both paths under output_dir");
 
             elem.update_attr("href", |v| *v = relative.to_string_lossy().into());
             elem.update_attr("rel", |v| *v = "stylesheet".into());
