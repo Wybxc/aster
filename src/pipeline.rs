@@ -64,8 +64,35 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
     };
 
     // --- Probe phase: extract routes from [slug] templates ---
-    // Queue entries: (template_path, parsed_template, output_path, library)
-    let mut queue: Vec<(PathBuf, route::RouteTemplate, PathBuf, LazyHash<Library>)> = Vec::new();
+    struct RenderJob {
+        template: PathBuf,
+        _tpl: route::RouteTemplate,
+        output: PathBuf,
+        library: LazyHash<Library>,
+    }
+
+    let mut render_queue: Vec<RenderJob> = Vec::new();
+    let mut seen_outputs: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
+
+    let mut enqueue = |template: PathBuf,
+                       tpl: route::RouteTemplate,
+                       output: PathBuf,
+                       library: LazyHash<Library>| {
+        if seen_outputs.contains(&output) {
+            eprintln!(
+                "warning: duplicate output path `{}` — skipping",
+                output.display()
+            );
+        } else {
+            seen_outputs.insert(output.clone());
+            render_queue.push(RenderJob {
+                template,
+                _tpl: tpl,
+                output,
+                library,
+            });
+        }
+    };
 
     for entry in project
         .walk_src()
@@ -81,7 +108,7 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
             let output = project
                 .page_output_path(&entry)
                 .expect("file must be under src/");
-            queue.push((entry, tpl, output, page_library.clone()));
+            enqueue(entry, tpl, output, page_library.clone());
         } else {
             let content = builder
                 .content(&entry, project, &page_library)
@@ -106,7 +133,7 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
                     ));
                 }
                 let library = LazyHash::new(world::build_library(Dict::from_iter(inputs)));
-                queue.push((entry.clone(), tpl.clone(), output, library));
+                enqueue(entry.clone(), tpl.clone(), output, library);
             }
         }
     }
@@ -114,37 +141,20 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
     // --- Render phase ---
     let mut page_docs: Vec<(PathBuf, HtmlDocument)> = Vec::new();
 
-    for (template, _tpl, output, library) in &queue {
-        match builder.document(template, project, library) {
+    for job in &render_queue {
+        match builder.document(&job.template, project, &job.library) {
             Ok(mut doc) => {
-                let ctx = transform::ProcessingContext::new(project, output.clone());
+                let ctx = transform::ProcessingContext::new(project, job.output.clone());
                 if let Err(err) = transform::process_document(&mut doc, &ctx) {
                     eprintln!("error: post-processing failed: {err:#}");
                     result.has_errors = true;
                 }
-                page_docs.push((output.clone(), doc));
+                page_docs.push((job.output.clone(), doc));
             }
             Err(_) => {
                 result.has_errors = true;
             }
         }
-    }
-
-    // --- Detect collisions ---
-    {
-        let mut seen = std::collections::HashSet::new();
-        page_docs.retain(|(output, _)| {
-            if seen.contains(output) {
-                eprintln!(
-                    "warning: duplicate output path `{}` — skipping",
-                    output.display()
-                );
-                false
-            } else {
-                seen.insert(output.clone());
-                true
-            }
-        });
     }
 
     // --- Serialize ---
