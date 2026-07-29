@@ -66,25 +66,14 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
     // --- Probe phase: extract routes from [slug] templates ---
     struct RenderJob {
         template: PathBuf,
-        _tpl: route::RouteTemplate,
         library: LazyHash<Library>,
     }
 
     let mut render_queue: indexmap::IndexMap<PathBuf, RenderJob> = indexmap::IndexMap::new();
 
-    let mut enqueue = |template: PathBuf,
-                       tpl: route::RouteTemplate,
-                       output: PathBuf,
-                       library: LazyHash<Library>| {
+    let mut enqueue = |template: PathBuf, output: PathBuf, library: LazyHash<Library>| {
         if render_queue
-            .insert(
-                output.clone(),
-                RenderJob {
-                    template,
-                    _tpl: tpl,
-                    library,
-                },
-            )
+            .insert(output.clone(), RenderJob { template, library })
             .is_some()
         {
             eprintln!(
@@ -108,7 +97,7 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
             let output = project
                 .page_output_path(&entry)
                 .expect("file must be under src/");
-            enqueue(entry, tpl, output, page_library.clone());
+            enqueue(entry, output, page_library.clone());
         } else {
             let content = builder
                 .content(&entry, project, &page_library)
@@ -133,7 +122,7 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
                     ));
                 }
                 let library = LazyHash::new(world::build_library(Dict::from_iter(inputs)));
-                enqueue(entry.clone(), tpl.clone(), output, library);
+                enqueue(entry.clone(), output, library);
             }
         }
     }
