@@ -1,3 +1,4 @@
+use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
@@ -334,38 +335,29 @@ pub fn resolve_highlight_css(
     //   4. [data-theme="light"] — explicit override (wins over OS dark)
     let mut css = String::new();
     for (name, lc, lb, _, _) in &vars {
-        let _ = std::fmt::Write::write_fmt(
-            &mut css,
-            format_args!(".hl-{name}{{color:{lc}{}}}\n", font_style(*lb)),
-        );
+        let _ = writeln!(css, ".hl-{name}{{color:{lc}{}}}", font_style(*lb));
     }
     for (name, _, _, dc, db) in &vars {
         if *dc != default_dark || *db != 0 {
-            let _ = std::fmt::Write::write_fmt(
-                &mut css,
-                format_args!(
-                    "@media(prefers-color-scheme:dark){{.hl-{name}{{color:{dc}{}}}}}\n",
-                    font_style(*db),
-                ),
+            let _ = writeln!(
+                css,
+                "@media(prefers-color-scheme:dark){{.hl-{name}{{color:{dc}{}}}}}",
+                font_style(*db),
             );
         }
     }
     for (name, lc, lb, _, _) in &vars {
-        let _ = std::fmt::Write::write_fmt(
-            &mut css,
-            format_args!(
-                "[data-theme=\"light\"] .hl-{name}{{color:{lc}{}}}\n",
-                font_style(*lb)
-            ),
+        let _ = writeln!(
+            css,
+            "[data-theme=\"light\"] .hl-{name}{{color:{lc}{}}}",
+            font_style(*lb)
         );
     }
     for (name, _, _, dc, db) in &vars {
-        let _ = std::fmt::Write::write_fmt(
-            &mut css,
-            format_args!(
-                "[data-theme=\"dark\"] .hl-{name}{{color:{dc}{}}}\n",
-                font_style(*db),
-            ),
+        let _ = writeln!(
+            css,
+            "[data-theme=\"dark\"] .hl-{name}{{color:{dc}{}}}",
+            font_style(*db),
         );
     }
 
