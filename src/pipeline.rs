@@ -37,13 +37,10 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
     let builder = compile::CompileContext::new(project);
 
     // --- Phase 1: content collections (config inputs only) ---
-    let content_library = LazyHash::new(world::build_library(config.clone()));
-
     let aster_value = if project.content_dir().is_dir() {
-        match crate::content::load_collections(project, &builder, &content_library) {
-            Ok(v) => v,
-            Err(err) => bail!("error: failed to load content collections: {err}"),
-        }
+        let lib = LazyHash::new(world::build_library(config.clone()));
+        crate::content::load_collections(project, &builder, &lib)
+            .map_err(|err| anyhow::anyhow!("failed to load content collections: {err}"))?
     } else {
         empty_aster()
     };
@@ -91,20 +88,20 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
             .strip_prefix(project.src_dir())
             .expect("entry under src/");
         let tpl = route::parse_template(relative).expect("invalid route template");
-        let slug_params = route::parse_params(relative);
 
-        if slug_params.is_empty() {
+        if route::parse_params(relative).is_empty() {
             let output = project
                 .page_output_path(&entry)
                 .expect("file must be under src/");
             enqueue(entry, output, page_library.clone());
         } else {
-            let content = builder
-                .content(&entry, project, &page_library)
-                .with_context(|| {
-                    format!("failed to probe {}: compilation failed", entry.display())
-                })?;
-            let routes = route::extract(&content);
+            let routes = route::extract(
+                &builder
+                    .content(&entry, project, &page_library)
+                    .with_context(|| {
+                        format!("failed to probe {}: compilation failed", entry.display())
+                    })?,
+            );
             if routes.is_empty() {
                 eprintln!(
                     "warning: {} has `[slug]` pattern but no `<route>` metadata",
