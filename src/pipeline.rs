@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 use typst::Library;
 use typst::foundations::{Dict, Str, Value};
 use typst::utils::LazyHash;
-use typst_html::{HtmlDocument, HtmlOptions};
+use typst_html::HtmlOptions;
 
 use crate::project::ProjectRoot;
 use crate::{compile, route, transform, world};
@@ -127,9 +127,7 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
         }
     }
 
-    // --- Render phase ---
-    let mut page_docs: Vec<(PathBuf, HtmlDocument)> = Vec::new();
-
+    // --- Render & serialize ---
     for (output, job) in &render_queue {
         match builder.document(&job.template, project, &job.library) {
             Ok(mut doc) => {
@@ -137,27 +135,38 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
                 if let Err(err) = transform::process_document(&mut doc, &ctx) {
                     eprintln!("error: post-processing failed: {err:#}");
                     result.has_errors = true;
+                    continue;
                 }
-                page_docs.push((output.clone(), doc));
+                match typst_html::html(&doc, &HtmlOptions::default()) {
+                    Ok(raw) => {
+                        if let Some(parent) = output.parent() {
+                            if let Err(e) = std::fs::create_dir_all(parent) {
+                                eprintln!(
+                                    "error: failed to create directory {}: {e}",
+                                    parent.display()
+                                );
+                                result.has_errors = true;
+                                continue;
+                            }
+                        }
+                        match std::fs::write(output, &raw) {
+                            Ok(()) => result.outputs.push(output.clone()),
+                            Err(e) => {
+                                eprintln!("error: failed to write {}: {e}", output.display());
+                                result.has_errors = true;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        eprintln!("error: failed to encode HTML for {}", output.display());
+                        result.has_errors = true;
+                    }
+                }
             }
             Err(_) => {
                 result.has_errors = true;
             }
         }
-    }
-
-    // --- Serialize ---
-    for (output, doc) in &page_docs {
-        let raw = typst_html::html(doc, &HtmlOptions::default())
-            .map_err(|_| anyhow::anyhow!("failed to encode HTML"))?;
-
-        if let Some(parent) = output.parent() {
-            std::fs::create_dir_all(parent)
-                .with_context(|| format!("failed to create directory {}", parent.display()))?;
-        }
-        std::fs::write(output, &raw)
-            .with_context(|| format!("failed to write {}", output.display()))?;
-        result.outputs.push(output.clone());
     }
 
     Ok(result)
