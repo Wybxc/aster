@@ -130,7 +130,6 @@ pub fn build(
                 project,
                 page_path: output.clone(),
                 hl_css_path: hl_css_path.clone(),
-                highlight_theme: Some(aster_config.highlight.themes.light.clone()),
             };
             transform::process_document(&mut doc, &pctx)?;
 

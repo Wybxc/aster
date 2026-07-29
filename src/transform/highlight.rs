@@ -17,10 +17,6 @@ use super::{ElementProcessor, ProcessingContext, WalkControl, walk_mut};
 static SS: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
 static THEMES: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
 
-/// Default theme used for token-level highlighting when no highlight
-/// config is provided.
-const DEFAULT_TOKEN_THEME: &str = "InspiredGitHub";
-
 /// Languages that Typst can parse with its own AST.
 const TYPST_LANGS: &[&str] = &["typ", "typst", "typc", "typm"];
 
@@ -28,12 +24,8 @@ pub(super) struct HighlightProcessor;
 
 impl ElementProcessor for HighlightProcessor {
     fn process(&self, doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> Result<()> {
-        // First pass: syntax-highlight all <code data-lang="..."> blocks.
-        let theme_name = ctx
-            .highlight_theme
-            .as_deref()
-            .unwrap_or(DEFAULT_TOKEN_THEME);
-        let theme = &THEMES.themes[theme_name];
+        // Syntax-highlight all <code data-lang="..."> blocks.
+        // Theme-independent: we only derive CSS class names from scopes.
         walk_mut(doc.root_mut(), &mut |elem| {
             if elem.tag != typst_html::tag::code {
                 return Ok(WalkControl::Continue);
@@ -64,9 +56,9 @@ impl ElementProcessor for HighlightProcessor {
             }
 
             let tokens = if TYPST_LANGS.contains(&lang.as_str()) {
-                do_typst_highlight(&raw, &lang, theme)
+                do_typst_highlight(&raw, &lang)
             } else {
-                do_syntect_highlight(&raw, &lang, theme)
+                do_syntect_highlight(&raw, &lang)
             };
 
             let mut new_children: EcoVec<HtmlNode> = EcoVec::new();
@@ -146,35 +138,28 @@ fn collect_impl(elem: &HtmlElement, out: &mut String) {
     }
 }
 
-/// Build the class string from a scope name and font-style bits.
-fn make_class(name: &str, bits: u8) -> EcoString {
-    if name == "default" && bits == 0 {
-        return "default".into();
+/// Build the class string from a scope name.
+fn make_class(name: &str) -> EcoString {
+    if name == "default" {
+        "default".into()
+    } else {
+        eco_format!("hl-{name}")
     }
-    let mut class = eco_format!("hl-{name}");
-    if bits & 1 != 0 {
-        class.push_str(" hl-bold");
-    }
-    if bits & 2 != 0 {
-        class.push_str(" hl-italic");
-    }
-    class
 }
 
 /// Highlight code using syntect (all non-Typst languages).
-fn do_syntect_highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(EcoString, EcoString)> {
+///
+/// This is **theme-independent** — it only derives CSS class names from
+/// the scope stack produced by the syntax parser.  All colour / font
+/// decisions live in the generated CSS.
+fn do_syntect_highlight(code: &str, lang: &str) -> Vec<(EcoString, EcoString)> {
     let syntax = SS
         .find_syntax_by_token(lang)
         .or_else(|| SS.find_syntax_by_extension(lang))
         .unwrap_or_else(|| SS.find_syntax_plain_text());
 
-    let highlighter = Highlighter::new(theme);
     let mut parse_state = ParseState::new(syntax);
     let mut scope_stack = ScopeStack::new();
-    let default_fg = theme
-        .settings
-        .foreground
-        .unwrap_or(syntect::highlighting::Color::BLACK);
     let mut out = Vec::new();
 
     for line in code.lines() {
@@ -188,17 +173,8 @@ fn do_syntect_highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(EcoString
                 continue;
             }
 
-            let style = highlighter.style_for_stack(scope_stack.as_slice());
-            let bits = style.font_style.bits();
-            let fg = style.foreground;
-
-            let name: EcoString = if fg == default_fg && bits == 0 {
-                "default".into()
-            } else {
-                scope_css_name(scope_stack.as_slice())
-            };
-
-            out.push((make_class(&name, bits), EcoString::from(text)));
+            let name = scope_css_name(scope_stack.as_slice());
+            out.push((make_class(&name), EcoString::from(text)));
         }
 
         out.push(("default".into(), "\n".into()));
@@ -208,53 +184,51 @@ fn do_syntect_highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(EcoString
 }
 
 /// Highlight code using Typst's native AST (languages: typ, typst, typc, typm).
-fn do_typst_highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(EcoString, EcoString)> {
+///
+/// Theme-independent — scope-based class names only, no colour resolution.
+fn do_typst_highlight(code: &str, lang: &str) -> Vec<(EcoString, EcoString)> {
     let root: SyntaxNode = match lang {
         "typc" => parse_code(code),
         "typm" => parse_math(code),
         _ => typst::syntax::parse(code),
     };
 
-    let highlighter = Highlighter::new(theme);
-    let mut tokens: Vec<(EcoString, u8, EcoString)> = Vec::new();
+    let mut native_tokens: Vec<(EcoString, u8, EcoString)> = Vec::new();
     let mut scopes: Vec<Scope> = Vec::new();
 
     walk_typst_node(
         code,
         &LinkedNode::new(&root),
-        &highlighter,
         &mut scopes,
-        &mut tokens,
+        &mut native_tokens,
     );
 
     let mut out: Vec<(EcoString, EcoString)> = Vec::new();
-    for (name, bits, text) in &tokens {
+    for (name, _bits, text) in &native_tokens {
         for (i, segment) in text.split('\n').enumerate() {
             if i > 0 {
-                out.push((make_class("default", 0), "\n".into()));
+                out.push((make_class("default"), "\n".into()));
             }
             if !segment.is_empty() {
-                out.push((make_class(name, *bits), EcoString::from(segment)));
+                out.push((make_class(name), EcoString::from(segment)));
             }
         }
     }
     out
 }
 
-fn walk_typst_node(
+/// Walk Typst's AST collecting scope-and-text pairs (theme‑independent).
+fn walk_typst_node<'a>(
     code: &str,
-    node: &LinkedNode,
-    highlighter: &Highlighter,
+    node: &LinkedNode<'a>,
     scopes: &mut Vec<Scope>,
     tokens: &mut Vec<(EcoString, u8, EcoString)>,
 ) {
     if node.children().len() == 0 {
         let text = &code[node.range()];
         if !text.is_empty() {
-            let style = highlighter.style_for_stack(scopes.as_slice());
-            let bits = style.font_style.bits();
             let name = scope_css_name(scopes.as_slice());
-            tokens.push((name, bits, EcoString::from(text)));
+            tokens.push((name, 0, EcoString::from(text)));
         }
         return;
     }
@@ -267,7 +241,7 @@ fn walk_typst_node(
             child_scopes.push(s);
         }
         std::mem::swap(&mut child_scopes, scopes);
-        walk_typst_node(code, &child, highlighter, scopes, tokens);
+        walk_typst_node(code, &child, scopes, tokens);
         std::mem::swap(&mut child_scopes, scopes);
     }
 }
@@ -402,9 +376,8 @@ mod tests {
     fn typst_highlight_let_binding_order() {
         // `let x = 1` followed by `let y = "hi"` — tokens must be emitted
         // in source position order, not grouped by binding point.
-        let theme = &THEMES.themes["InspiredGitHub"];
         let code = "let x = 1\nlet y = \"hi\"\n";
-        let tokens = do_typst_highlight(code, "typc", theme);
+        let tokens = do_typst_highlight(code, "typc");
 
         let texts = token_texts(&tokens);
         // The first meaningful token should be "let", not "x".
@@ -426,14 +399,13 @@ mod tests {
         // access which is invalid in Typst code mode.  The parser
         // produces error-recovery nodes; we must not panic and should
         // still produce some sensible output.
-        let theme = &THEMES.themes["InspiredGitHub"];
         let code = concat!(
             "state.protocol = 1\n",
             "collections.blog.\"hello-world\".rendered = (\n",
             "  (kind: \"element\", tag: \"h2\"),\n",
             ")\n",
         );
-        let tokens = do_typst_highlight(code, "typc", theme);
+        let tokens = do_typst_highlight(code, "typc");
         // We expect at least some tokens (no panic, no empty output).
         assert!(
             !tokens.is_empty(),
@@ -456,9 +428,8 @@ mod tests {
     fn typst_highlight_hyphenated_dict_key() {
         // Dict keys with hyphens (valid Typst identifiers) must NOT
         // cause string values to be pushed to the end of output.
-        let theme = &THEMES.themes["InspiredGitHub"];
         let code = concat!("let x = (\n", "  hello-world: \"value\",\n", ")\n",);
-        let tokens = do_typst_highlight(code, "typc", theme);
+        let tokens = do_typst_highlight(code, "typc");
         let texts = token_texts(&tokens);
         let non_ws: Vec<&str> = texts
             .iter()
@@ -486,7 +457,6 @@ mod tests {
     fn typst_highlight_deeply_nested_hyphen_keys() {
         // Exact content from the example site: hyphenated dict keys,
         // deep nesting, multiple let bindings.
-        let theme = &THEMES.themes["InspiredGitHub"];
         let code = concat!(
             "let protocol = 1\n",
             "let posts = (\n",
@@ -502,7 +472,7 @@ mod tests {
             "  ),\n",
             ")\n",
         );
-        let tokens = do_typst_highlight(code, "typc", theme);
+        let tokens = do_typst_highlight(code, "typc");
         let texts = token_texts(&tokens);
         let non_ws: Vec<&str> = texts
             .iter()
@@ -532,7 +502,6 @@ mod tests {
         // Exact structure from the example site — multiple let bindings
         // with deeply nested dicts.  This previously produced tokens
         // with string values concatenated at the end.
-        let theme = &THEMES.themes["InspiredGitHub"];
         let code = concat!(
             "let protocol = 1\n",
             "let posts = (\n",
@@ -548,7 +517,7 @@ mod tests {
             "  ),\n",
             ")\n",
         );
-        let tokens = do_typst_highlight(code, "typc", theme);
+        let tokens = do_typst_highlight(code, "typc");
 
         let texts = token_texts(&tokens);
         let non_ws: Vec<&str> = texts
@@ -584,9 +553,8 @@ mod tests {
         // A `let` whose value is a nested dictionary — this was the
         // original bug from the example site, where string values
         // appeared after the closing paren.
-        let theme = &THEMES.themes["InspiredGitHub"];
         let code = "let x = (\n  a: \"hello\",\n  b: \"world\",\n)\n";
-        let tokens = do_typst_highlight(code, "typc", theme);
+        let tokens = do_typst_highlight(code, "typc");
 
         let texts = token_texts(&tokens);
         let non_ws: Vec<&str> = texts
@@ -619,10 +587,9 @@ mod tests {
     fn typst_highlight_dict_literal_order() {
         // A dictionary literal — all keys and values must appear in
         // source-code order, not with string values pushed to the end.
-        let theme = &THEMES.themes["InspiredGitHub"];
         // Single-line dict — easiest to reason about.
         let code = "(a: 1, b: 2)\n";
-        let tokens = do_typst_highlight(code, "typc", theme);
+        let tokens = do_typst_highlight(code, "typc");
 
         let texts = token_texts(&tokens);
         let non_ws: Vec<&str> = texts
@@ -641,9 +608,8 @@ mod tests {
     fn syntect_highlight_json_order() {
         // Multi-line JSON — tokens must appear in source order, not
         // grouped by scope (e.g. all punctuation before all strings).
-        let theme = &THEMES.themes["InspiredGitHub"];
         let code = "{\n  \"a\": 1,\n  \"b\": 2\n}\n";
-        let tokens = do_syntect_highlight(code, "json", theme);
+        let tokens = do_syntect_highlight(code, "json");
 
         let texts = token_texts(&tokens);
         let non_ws: Vec<&str> = texts
