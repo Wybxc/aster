@@ -113,14 +113,14 @@ pub fn process_document(doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> 
 fn inject_hl_link(doc: &mut HtmlDocument, href: &Path) {
     use typst_html::{attr, tag};
     for child in doc.root_mut().children.make_mut().iter_mut() {
-        if let HtmlNode::Element(head) = child {
-            if head.tag == tag::head {
-                let link = HtmlElement::new(tag::link)
-                    .with_attr(attr::rel, "stylesheet")
-                    .with_attr(attr::href, href.to_string_lossy().as_ref());
-                head.children.push(HtmlNode::Element(link));
-                return;
-            }
+        if let HtmlNode::Element(head) = child
+            && head.tag == tag::head
+        {
+            let link = HtmlElement::new(tag::link)
+                .with_attr(attr::rel, "stylesheet")
+                .with_attr(attr::href, href.to_string_lossy().as_ref());
+            head.children.push(HtmlNode::Element(link));
+            return;
         }
     }
 }

@@ -7,7 +7,7 @@ use typst::engine::{Route, Sink, Traced};
 use typst::foundations::{Content, Dict};
 use typst::syntax::{RootedPath, VirtualPath, VirtualRoot};
 use typst::utils::LazyHash;
-use typst::{Library, World};
+use typst::{Feature, Library, LibraryExt, World};
 use typst_html::HtmlDocument;
 use typst_kit::downloader::SystemDownloader;
 use typst_kit::files::{FileStore, FsRoot, SystemFiles};
@@ -16,7 +16,7 @@ use typst_kit::packages::SystemPackages;
 
 use crate::diag;
 use crate::project::ProjectRoot;
-use crate::world::{self, CompileWorld};
+use crate::world::CompileWorld;
 
 /// Reusable compilation context for a project.
 ///
@@ -62,7 +62,11 @@ impl CompileContext {
     /// Build a [`Library`] with the given `sys.inputs` dict, pre-wrapped
     /// in a [`LazyHash`].
     pub fn page_library(&self, inputs: Dict) -> LazyHash<Library> {
-        LazyHash::new(world::build_library(inputs))
+        let library = Library::builder()
+            .with_inputs(inputs)
+            .with_features([Feature::Html].into_iter().collect())
+            .build();
+        LazyHash::new(library)
     }
 
     /// Create a per-entry world recycling fonts/files.

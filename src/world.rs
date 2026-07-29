@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use typst::diag::FileError;
-use typst::foundations::{Bytes, Datetime, Dict, Duration};
+use typst::foundations::{Bytes, Datetime, Duration};
 use typst::syntax::FileId;
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
-use typst::{Feature, Features, Library, LibraryExt, World};
+use typst::{Library, World};
 use typst_kit::diagnostics::DiagnosticWorld;
 use typst_kit::files::{FileStore, SystemFiles};
 use typst_kit::fonts::FontStore;
@@ -66,13 +66,4 @@ impl DiagnosticWorld for CompileWorld {
             })
             .unwrap_or_else(|| id.vpath().get_with_slash().to_string())
     }
-}
-
-/// Build a [`Library`] with the HTML feature enabled and the given `sys.inputs`.
-pub fn build_library(inputs: Dict) -> Library {
-    let features: Features = [Feature::Html].into_iter().collect();
-    Library::builder()
-        .with_inputs(inputs)
-        .with_features(features)
-        .build()
 }
