@@ -1,6 +1,6 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use lightningcss::bundler::{Bundler, FileProvider};
 use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions};
 use lightningcss::targets::Browsers;
@@ -8,6 +8,7 @@ use typst_html::HtmlDocument;
 
 use super::{ElementProcessor, ProcessingContext, WalkControl};
 use crate::utils::HtmlElementExt;
+use crate::utils::{normalize, relative_path};
 
 pub(super) struct CssProcessor;
 
@@ -34,7 +35,7 @@ impl ElementProcessor for CssProcessor {
             );
             let css = bundle_file(&source)?;
 
-            let hash = format!("{:016x}", seahash::hash(css.as_bytes()));
+            let hash = crate::utils::content_hash(css.as_bytes());
             let h = href.as_str();
             let stem = Path::new(h)
                 .file_stem()
@@ -48,12 +49,7 @@ impl ElementProcessor for CssProcessor {
 
             // Write the bundled CSS to dist_dir.
             let css_output = ctx.output_dir().join(&hashed_name);
-            if let Some(parent) = css_output.parent() {
-                std::fs::create_dir_all(parent)
-                    .with_context(|| format!("failed to create directory {}", parent.display()))?;
-            }
-            std::fs::write(&css_output, &css)
-                .with_context(|| format!("failed to write {}", css_output.display()))?;
+            crate::utils::write_file(&css_output, css.as_bytes())?;
 
             // Compute relative path from the page to the CSS file.
             let page_dir = ctx.page_path.parent().expect("page has a parent");
@@ -90,35 +86,4 @@ fn bundle_file(entry: &Path) -> Result<String> {
         .map_err(|e| anyhow::anyhow!("failed to serialize CSS: {e:#}"))?;
 
     Ok(result.code)
-}
-
-/// Resolve `..` components in a path without requiring the file to exist.
-fn normalize(path: &Path) -> PathBuf {
-    use std::path::Component;
-    let mut result = PathBuf::new();
-    for comp in path.components() {
-        match comp {
-            Component::ParentDir => {
-                result.pop();
-            }
-            Component::CurDir => {}
-            _ => result.push(comp),
-        }
-    }
-    result
-}
-
-/// Compute a relative path from `from` (a directory) to `to` (a file).
-fn relative_path(from: &Path, to: &Path) -> PathBuf {
-    let from: Vec<_> = from.components().collect();
-    let to: Vec<_> = to.components().collect();
-    let common = from.iter().zip(&to).take_while(|(a, b)| a == b).count();
-    let mut result = PathBuf::new();
-    for _ in common..from.len() {
-        result.push("..");
-    }
-    for comp in &to[common..] {
-        result.push(comp);
-    }
-    result
 }

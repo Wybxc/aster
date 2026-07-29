@@ -136,12 +136,7 @@ pub fn build(
             let raw = typst_html::html(&doc, &HtmlOptions::default())
                 .map_err(|_| anyhow::anyhow!("HTML encoding failed"))?;
 
-            if let Some(parent) = output.parent() {
-                std::fs::create_dir_all(parent)
-                    .with_context(|| format!("failed to create directory {}", parent.display()))?;
-            }
-            std::fs::write(output, &raw)
-                .with_context(|| format!("failed to write {}", output.display()))?;
+            crate::utils::write_file(output, raw.as_bytes())?;
 
             outputs.push(output.clone());
             let out_rel = output.strip_prefix(project.output_dir()).unwrap_or(output);

@@ -60,16 +60,12 @@ fn try_extract(src: &str, dist_dir: &Path) -> Result<Option<EcoString>> {
         return Ok(None);
     }
 
-    let hash = format!("{:016x}", seahash::hash(&decoded));
+    let hash = crate::utils::content_hash(&decoded);
     let ext = media_type_to_ext(mediatype);
     let filename = eco_format!("{hash}.{ext}");
     let output = dist_dir.join(filename.as_str());
 
-    if let Some(parent) = output.parent() {
-        std::fs::create_dir_all(parent).context("failed to create dist directory")?;
-    }
-    std::fs::write(&output, &decoded)
-        .with_context(|| format!("failed to write {}", output.display()))?;
+    crate::utils::write_file(&output, &decoded)?;
 
     Ok(Some(filename))
 }

@@ -38,7 +38,7 @@ impl ElementProcessor for HighlightProcessor {
                 None => return Ok(WalkControl::Continue),
             };
 
-            let raw = collect_text(elem);
+            let raw = elem.collect_text();
             if raw.is_empty() {
                 return Ok(WalkControl::SkipChildren);
             }
@@ -92,30 +92,6 @@ fn scope_css_name(scopes: &[Scope]) -> EcoString {
         }
     }
     "default".into()
-}
-
-/// Collect the text content of all descendant `HtmlNode::Text` nodes
-/// under the given element, inserting `\n` for `<br>` elements so the
-/// result reflects the original multi-line code.
-///
-/// Traverses children **in order**, recursing into sub-elements at the
-/// point where they appear, so that text from deeply nested wrappers
-/// (e.g. Typst's show-rule markers) is emitted in source-code order.
-fn collect_text(elem: &HtmlElement) -> String {
-    let mut out = String::new();
-    collect_impl(elem, &mut out);
-    out
-}
-
-fn collect_impl(elem: &HtmlElement, out: &mut String) {
-    for child in &elem.children {
-        match child {
-            HtmlNode::Text(t, _) => out.push_str(t.as_str()),
-            HtmlNode::Element(e) if e.tag == typst_html::tag::br => out.push('\n'),
-            HtmlNode::Element(e) => collect_impl(e, out),
-            _ => {}
-        }
-    }
 }
 
 /// Build the class string from a scope name.
@@ -258,7 +234,7 @@ pub fn resolve_highlight_css(
     let light_h = Highlighter::new(&light);
     let dark_h = Highlighter::new(&dark);
 
-    let default_dark = color_to_hex(
+    let default_dark = crate::utils::color_to_hex(
         dark.settings
             .foreground
             .unwrap_or(syntect::highlighting::Color::BLACK),
@@ -285,9 +261,9 @@ pub fn resolve_highlight_css(
                 let dark_st = dark_h.style_for_stack(std::slice::from_ref(&scope));
                 vars.push((
                     name,
-                    color_to_hex(light_st.foreground),
+                    crate::utils::color_to_hex(light_st.foreground),
                     light_st.font_style.bits(),
-                    color_to_hex(dark_st.foreground),
+                    crate::utils::color_to_hex(dark_st.foreground),
                     dark_st.font_style.bits(),
                 ));
             }
@@ -341,21 +317,12 @@ pub fn resolve_highlight_css(
     }
 
     // Write to output directory with content hash.
-    let hash = format!("{:016x}", seahash::hash(css.as_bytes()));
+    let hash = crate::utils::content_hash(css.as_bytes());
     let filename = format!("hl.{hash}.css");
     let output = project.output_dir().join(&filename);
-    if let Some(parent) = output.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("failed to create directory {}", parent.display()))?;
-    }
-    std::fs::write(&output, &css)
-        .with_context(|| format!("failed to write {}", output.display()))?;
+    crate::utils::write_file(&output, css.as_bytes())?;
 
     Ok(Some(PathBuf::from(filename)))
-}
-
-fn color_to_hex(c: syntect::highlighting::Color) -> String {
-    format!("#{:02x}{:02x}{:02x}", c.r, c.g, c.b)
 }
 
 #[cfg(test)]

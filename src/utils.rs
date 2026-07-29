@@ -1,6 +1,9 @@
-//! Utility helpers — DOM traversal, HTML element extension methods, etc.
+//! Utility helpers — DOM traversal, HTML element extension methods, path
+//! utilities, colour formatting, etc.
 
-use anyhow::Result;
+use std::path::{Path, PathBuf};
+
+use anyhow::{Context, Result};
 use typst::ecow::EcoString;
 use typst_html::{HtmlElement, HtmlNode};
 
@@ -29,6 +32,57 @@ pub fn walk_mut(
     Ok(())
 }
 
+/// Resolve `..` components in a path without requiring the file to exist.
+pub fn normalize(path: &Path) -> PathBuf {
+    use std::path::Component;
+    let mut result = PathBuf::new();
+    for comp in path.components() {
+        match comp {
+            Component::ParentDir => {
+                result.pop();
+            }
+            Component::CurDir => {}
+            _ => result.push(comp),
+        }
+    }
+    result
+}
+
+/// Compute a relative path from `from` (a directory) to `to` (a file).
+pub fn relative_path(from: &Path, to: &Path) -> PathBuf {
+    let from: Vec<_> = from.components().collect();
+    let to: Vec<_> = to.components().collect();
+    let common = from.iter().zip(&to).take_while(|(a, b)| a == b).count();
+    let mut result = PathBuf::new();
+    for _ in common..from.len() {
+        result.push("..");
+    }
+    for comp in &to[common..] {
+        result.push(comp);
+    }
+    result
+}
+
+/// Format a syntect [`Color`](syntect::highlighting::Color) as `#rrggbb`.
+pub fn color_to_hex(c: syntect::highlighting::Color) -> String {
+    format!("#{:02x}{:02x}{:02x}", c.r, c.g, c.b)
+}
+
+/// Compute a content-hash hex string (seahash, first 16 hex chars).
+pub fn content_hash(data: &[u8]) -> String {
+    format!("{:016x}", seahash::hash(data))
+}
+
+/// Write `data` to `path`, creating parent directories first.
+pub fn write_file(path: &Path, data: &[u8]) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create directory {}", parent.display()))?;
+    }
+    std::fs::write(path, data).with_context(|| format!("failed to write {}", path.display()))?;
+    Ok(())
+}
+
 /// Extension-trait helpers for common [`HtmlElement`] operations.
 
 /// Extension methods on [`HtmlElement`] that DRY up the frequently
@@ -49,6 +103,11 @@ pub trait HtmlElementExt {
 
     /// Return the first mutable child element whose tag matches `tag`.
     fn find_child_mut(&mut self, tag: typst_html::HtmlTag) -> Option<&mut HtmlElement>;
+
+    /// Collect the text of all descendant `HtmlNode::Text` nodes,
+    /// inserting `\n` for `<br>` elements so the result reflects
+    /// multi-line content in source order.
+    fn collect_text(&self) -> String;
 }
 
 impl HtmlElementExt for HtmlElement {
@@ -89,5 +148,22 @@ impl HtmlElementExt for HtmlElement {
             }
         }
         None
+    }
+
+    fn collect_text(&self) -> String {
+        let mut out = String::new();
+        collect_impl(self, &mut out);
+        out
+    }
+}
+
+fn collect_impl(elem: &HtmlElement, out: &mut String) {
+    for child in &elem.children {
+        match child {
+            HtmlNode::Text(t, _) => out.push_str(t.as_str()),
+            HtmlNode::Element(e) if e.tag == typst_html::tag::br => out.push('\n'),
+            HtmlNode::Element(e) => collect_impl(e, out),
+            _ => {}
+        }
     }
 }
