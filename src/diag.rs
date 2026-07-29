@@ -59,6 +59,14 @@ fn styled_prefix(prefix: &str, color: Color, message: &str) {
     let _ = writeln!(w, ": {message}");
 }
 
+/// Print a phase message (grey, no prefix).
+pub fn emit_step(message: &str) {
+    let mut w = writer();
+    let _ = w.set_color(ColorSpec::new().set_dimmed(true));
+    let _ = writeln!(w, "{message}");
+    let _ = w.reset();
+}
+
 /// Print a styled `error:` message to stderr.
 pub fn emit_error(message: &str) {
     styled_prefix("error", Color::Red, message);

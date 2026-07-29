@@ -22,7 +22,13 @@ fn empty_aster() -> Value {
 /// Returns `(output_paths, per_page_errors)` on success. The caller is
 /// responsible for printing errors and deciding whether they are fatal.
 pub fn build(project: &ProjectRoot, config: Dict) -> Result<(Vec<PathBuf>, Vec<anyhow::Error>)> {
+    let ctx_start = std::time::Instant::now();
+    diag::emit_step("Loading fonts...");
     let builder = compile::CompileContext::new(project);
+    diag::emit_step(&format!(
+        "Fonts loaded in {:.1}s",
+        ctx_start.elapsed().as_secs_f64()
+    ));
 
     // --- Phase 1: content collections ---
     let aster_value = if project.content_dir().is_dir() {
