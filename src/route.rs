@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 
@@ -9,44 +10,107 @@ use crate::project::ProjectRoot;
 /// Parameter assignments for a single generated page.
 pub type ParamSet = Vec<(String, String)>;
 
-/// Extract parameter names from a template path.
+// ---------------------------------------------------------------------------
+// Template path parsing
+// ---------------------------------------------------------------------------
+
+/// A pre-parsed component of a template path.
+#[derive(Debug, Clone)]
+pub enum Component {
+    /// Static text used as-is (directory or filename).
+    Text(String),
+    /// Contains `[param]` patterns (stem only, no extension).
+    Pattern(String),
+    /// A `[...param]` spread component.
+    Spread(String),
+}
+
+/// Pre-parse a template path into structured components.
 ///
-/// Extracts all `[name]` and `[...name]` (spread/rest) patterns from each
-/// path component's stem, matching Astro's convention. Supports multiple
-/// params within a single component, e.g. `[lang]-[version].typ` → `["lang", "version"]`.
+/// Strips file extensions, detects `[...]` spread patterns, and extracts
+/// all `[name]` slots for later substitution.
+pub fn parse_template(path: &Path) -> Vec<Component> {
+    use std::path::Component as PathComp;
+
+    let mut components = Vec::new();
+    let comps: Vec<PathComp<'_>> = path.components().collect();
+
+    for (i, comp) in comps.iter().enumerate() {
+        let PathComp::Normal(os) = comp else { continue };
+        let s = os.to_string_lossy();
+        let is_last = i == comps.len() - 1;
+
+        // Check spread: `[...name]` or `[...name].ext`
+        if let Some(param) = spread_name(&s) {
+            components.push(Component::Spread(param));
+            continue;
+        }
+
+        // For file components, strip the extension.
+        let text = if is_last {
+            Path::new(&*s)
+                .file_stem()
+                .unwrap_or(os)
+                .to_string_lossy()
+                .to_string()
+        } else {
+            s.to_string()
+        };
+
+        if text.contains('[') {
+            components.push(Component::Pattern(text));
+        } else {
+            components.push(Component::Text(text));
+        }
+    }
+
+    components
+}
+
+/// Extract parameter names from a template path (convenience for probe detection).
 pub fn parse_params(path: &Path) -> Vec<String> {
     let mut params = Vec::new();
-    for comp in path.components() {
-        let os = comp.as_os_str();
-        let name = Path::new(os).file_stem().unwrap_or(os).to_string_lossy();
-        let mut pos = 0;
-        let s = name.as_ref();
-        while let Some(open) = s[pos..].find('[') {
-            let open = pos + open;
-            if let Some(close) = s[open..].find(']') {
-                let close = open + close;
-                if close > open + 1 {
-                    let raw = &s[open + 1..close];
-                    // Strip leading `..` for spread params (`[...slug]` → `slug`).
-                    let param = raw.strip_prefix("..").unwrap_or(raw);
-                    if !param.is_empty() {
-                        params.push(param.to_string());
+    for comp in parse_template(path) {
+        match comp {
+            Component::Pattern(s) | Component::Spread(s) => {
+                // Extract param names from the text.
+                let mut pos = 0;
+                while let Some(open) = s[pos..].find('[') {
+                    let open = pos + open;
+                    if let Some(close) = s[open..].find(']') {
+                        let close = open + close;
+                        if close > open + 1 {
+                            let raw = &s[open + 1..close];
+                            let param = raw.strip_prefix("..").unwrap_or(raw);
+                            if !param.is_empty() {
+                                params.push(param.to_string());
+                            }
+                        }
+                        pos = close + 1;
+                    } else {
+                        break;
                     }
                 }
-                pos = close + 1;
-            } else {
-                break;
             }
+            Component::Text(_) => {}
         }
     }
     params
 }
 
+fn spread_name(s: &str) -> Option<String> {
+    let stem = Path::new(s).file_stem().unwrap_or(OsStr::new(s));
+    let t = stem.to_string_lossy();
+    t.strip_prefix("[...")
+        .and_then(|rest| rest.strip_suffix("]"))
+        .map(|s| s.to_string())
+}
+
+// ---------------------------------------------------------------------------
+// Route extraction
+// ---------------------------------------------------------------------------
+
 /// Extract route declarations from compiled content.
-///
-/// Looks for `#metadata(((key: val, ...), ...)) <route>` elements.
-/// The metadata value is an array of dicts, each dict representing one page's
-/// parameter bindings.
 pub fn extract(content: &Content) -> Vec<ParamSet> {
     let mut result = Vec::new();
     let _ = content.traverse(&mut |element| -> ControlFlow<()> {
@@ -73,18 +137,66 @@ pub fn extract(content: &Content) -> Vec<ParamSet> {
     result
 }
 
+// ---------------------------------------------------------------------------
+// Output path generation
+// ---------------------------------------------------------------------------
+
 /// Compute the output path for a route-generated page.
 ///
-/// Replaces `[param]` placeholders in the template path with actual values.
-pub fn output_path(project: &ProjectRoot, template: &Path, params: &ParamSet) -> PathBuf {
-    let relative = template
-        .strip_prefix(project.src_dir())
-        .expect("template must be under src/");
-    let mut path_str = relative.to_string_lossy().to_string();
-    for (name, value) in params {
-        // Replace spread form first to avoid partial matches.
-        path_str = path_str.replace(&format!("[...{}]", name), value);
-        path_str = path_str.replace(&format!("[{}]", name), value);
+/// Uses the pre-parsed template path to expand each component:
+/// - `Text` parts are used as-is
+/// - `Pattern` parts have `[name]` replaced with param values
+/// - `Spread` parts expand the param value by `/` into multiple segments
+/// - The final component gets a `.html` extension
+pub fn output_path(project: &ProjectRoot, template: &[Component], params: &ParamSet) -> PathBuf {
+    let mut parts: Vec<String> = Vec::new();
+
+    for comp in template {
+        match comp {
+            Component::Text(t) => parts.push(t.clone()),
+            Component::Pattern(s) => parts.push(fill_params(s, params)),
+            Component::Spread(name) => {
+                if let Some((_, value)) = params.iter().find(|(k, _)| *k == *name) {
+                    for part in value.split('/') {
+                        parts.push(part.to_string());
+                    }
+                }
+            }
+        }
     }
-    project.output_dir().join(&path_str).with_extension("html")
+
+    let last = parts.len().saturating_sub(1);
+    let mut output = project.output_dir();
+    for (i, part) in parts.iter().enumerate() {
+        if i == last {
+            output = output.join(part).with_extension("html");
+        } else {
+            output = output.join(part);
+        }
+    }
+    output
+}
+
+fn fill_params(s: &str, params: &ParamSet) -> String {
+    let mut result = String::new();
+    let mut pos = 0;
+    while let Some(open) = s[pos..].find('[') {
+        let abs_open = pos + open;
+        result.push_str(&s[pos..abs_open]);
+        if let Some(close) = s[abs_open..].find(']') {
+            let name = &s[abs_open + 1..abs_open + close];
+            if let Some((_, value)) = params.iter().find(|(k, _)| *k == name) {
+                result.push_str(value);
+            }
+            pos = abs_open + close + 1;
+        } else {
+            result.push_str(&s[abs_open..]);
+            pos = s.len();
+            break;
+        }
+    }
+    if pos < s.len() {
+        result.push_str(&s[pos..]);
+    }
+    result
 }

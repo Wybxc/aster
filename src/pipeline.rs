@@ -64,22 +64,26 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
     };
 
     // --- Probe phase: extract routes from [slug] templates ---
-    let mut queue: Vec<(PathBuf, PathBuf, LazyHash<Library>)> = Vec::new();
+    // Queue entries: (template_path, parsed_components, output_path, library)
+    let mut queue: Vec<(PathBuf, Vec<route::Component>, PathBuf, LazyHash<Library>)> = Vec::new();
 
     for entry in project
         .walk_src()
         .filter(|p| p.extension().is_some_and(|ext| ext == "typ"))
     {
-        let slug_params = route::parse_params(&entry);
+        // Parse relative to src_dir so components reflect the output structure.
+        let relative = entry
+            .strip_prefix(project.src_dir())
+            .expect("entry under src/");
+        let tpl = route::parse_template(relative);
+        let slug_params = route::parse_params(relative);
 
         if slug_params.is_empty() {
-            // No slug params — compile once with base inputs.
             let output = project
                 .page_output_path(&entry)
                 .expect("file must be under src/");
-            queue.push((entry, output, page_library.clone()));
+            queue.push((entry, tpl, output, page_library.clone()));
         } else {
-            // Probe: compile to Content, extract route values.
             let content = builder
                 .content(&entry, project, &page_library)
                 .with_context(|| {
@@ -94,7 +98,7 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
             }
 
             for params in routes {
-                let output = route::output_path(project, &entry, &params);
+                let output = route::output_path(project, &tpl, &params);
                 let mut inputs = base_inputs.clone();
                 for (name, value) in &params {
                     inputs.push((
@@ -103,7 +107,7 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
                     ));
                 }
                 let library = LazyHash::new(world::build_library(Dict::from_iter(inputs)));
-                queue.push((entry.clone(), output, library));
+                queue.push((entry.clone(), tpl.clone(), output, library));
             }
         }
     }
@@ -111,7 +115,7 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
     // --- Render phase ---
     let mut page_docs: Vec<(PathBuf, HtmlDocument)> = Vec::new();
 
-    for (template, output, library) in &queue {
+    for (template, _tpl, output, library) in &queue {
         match builder.document(template, project, library) {
             Ok(mut doc) => {
                 let ctx = transform::ProcessingContext::new(project, output.clone());
