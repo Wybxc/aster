@@ -284,8 +284,8 @@ pub fn resolve_highlight_css(
             .unwrap_or(syntect::highlighting::Color::BLACK),
     );
 
-    // Collect unique scope names from theme selectors, resolve colours.
-    let mut vars: Vec<(EcoString, String, String)> = Vec::new();
+    // Collect unique scope names from theme selectors, resolve colours + font style.
+    let mut vars: Vec<(EcoString, String, u8, String, u8)> = Vec::new();
     for theme in [&light, &dark] {
         for scope_entry in &theme.scopes {
             for single in &scope_entry.scope.selectors {
@@ -298,16 +298,18 @@ pub fn resolve_highlight_css(
                     continue;
                 }
                 // Deduplicate by scope name.
-                if vars.iter().any(|(n, _, _)| *n == name) {
+                if vars.iter().any(|(n, _, _, _, _)| *n == name) {
                     continue;
                 }
-                let light_fg = light_h
-                    .style_for_stack(std::slice::from_ref(&scope))
-                    .foreground;
-                let dark_fg = dark_h
-                    .style_for_stack(std::slice::from_ref(&scope))
-                    .foreground;
-                vars.push((name, color_to_hex(light_fg), color_to_hex(dark_fg)));
+                let light_st = light_h.style_for_stack(std::slice::from_ref(&scope));
+                let dark_st = dark_h.style_for_stack(std::slice::from_ref(&scope));
+                vars.push((
+                    name,
+                    color_to_hex(light_st.foreground),
+                    light_st.font_style.bits(),
+                    color_to_hex(dark_st.foreground),
+                    dark_st.font_style.bits(),
+                ));
             }
         }
     }
@@ -316,24 +318,56 @@ pub fn resolve_highlight_css(
         return Ok(None);
     }
 
-    // Generate CSS — class rules directly, no CSS variable indirection.
+    fn font_style(bits: u8) -> &'static str {
+        match bits & 3 {
+            1 => ";font-weight:bold",
+            2 => ";font-style:italic",
+            3 => ";font-weight:bold;font-style:italic",
+            _ => "",
+        }
+    }
+
+    // Generate CSS, one class per scope, with prefers-color-scheme + data-theme cascade:
+    //   1. default = light
+    //   2. @media(prefers-color-scheme:dark) — OS-level dark preference
+    //   3. [data-theme="dark"] — explicit override
+    //   4. [data-theme="light"] — explicit override (wins over OS dark)
     let mut css = String::new();
-    for (name, lc, _) in &vars {
+    for (name, lc, lb, _, _) in &vars {
         let _ = std::fmt::Write::write_fmt(
             &mut css,
-            format_args!(":root,[data-theme=\"light\"] .hl-{name}{{color:{lc}}}\n"),
+            format_args!(".hl-{name}{{color:{lc}{}}}\n", font_style(*lb)),
         );
     }
-    for (name, _, dc) in &vars {
-        if *dc != default_dark {
+    for (name, _, _, dc, db) in &vars {
+        if *dc != default_dark || *db != 0 {
             let _ = std::fmt::Write::write_fmt(
                 &mut css,
-                format_args!("[data-theme=\"dark\"] .hl-{name}{{color:{dc}}}\n"),
+                format_args!(
+                    "@media(prefers-color-scheme:dark){{.hl-{name}{{color:{dc}{}}}}}\n",
+                    font_style(*db),
+                ),
             );
         }
     }
-    css.push_str(".hl-bold{font-weight:bold}\n");
-    css.push_str(".hl-italic{font-style:italic}\n");
+    for (name, lc, lb, _, _) in &vars {
+        let _ = std::fmt::Write::write_fmt(
+            &mut css,
+            format_args!(
+                "[data-theme=\"light\"] .hl-{name}{{color:{lc}{}}}\n",
+                font_style(*lb)
+            ),
+        );
+    }
+    for (name, _, _, dc, db) in &vars {
+        let _ = std::fmt::Write::write_fmt(
+            &mut css,
+            format_args!(
+                "[data-theme=\"dark\"] .hl-{name}{{color:{dc}{}}}\n",
+                font_style(*db),
+            ),
+        );
+    }
 
     // Write to output directory with content hash.
     let hash = format!("{:016x}", seahash::hash(css.as_bytes()));
