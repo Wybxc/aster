@@ -67,30 +67,30 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
     struct RenderJob {
         template: PathBuf,
         _tpl: route::RouteTemplate,
-        output: PathBuf,
         library: LazyHash<Library>,
     }
 
-    let mut render_queue: Vec<RenderJob> = Vec::new();
-    let mut seen_outputs: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
+    let mut render_queue: indexmap::IndexMap<PathBuf, RenderJob> = indexmap::IndexMap::new();
 
     let mut enqueue = |template: PathBuf,
                        tpl: route::RouteTemplate,
                        output: PathBuf,
                        library: LazyHash<Library>| {
-        if seen_outputs.contains(&output) {
+        if render_queue
+            .insert(
+                output.clone(),
+                RenderJob {
+                    template,
+                    _tpl: tpl,
+                    library,
+                },
+            )
+            .is_some()
+        {
             eprintln!(
                 "warning: duplicate output path `{}` — skipping",
                 output.display()
             );
-        } else {
-            seen_outputs.insert(output.clone());
-            render_queue.push(RenderJob {
-                template,
-                _tpl: tpl,
-                output,
-                library,
-            });
         }
     };
 
@@ -141,15 +141,15 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
     // --- Render phase ---
     let mut page_docs: Vec<(PathBuf, HtmlDocument)> = Vec::new();
 
-    for job in &render_queue {
+    for (output, job) in &render_queue {
         match builder.document(&job.template, project, &job.library) {
             Ok(mut doc) => {
-                let ctx = transform::ProcessingContext::new(project, job.output.clone());
+                let ctx = transform::ProcessingContext::new(project, output.clone());
                 if let Err(err) = transform::process_document(&mut doc, &ctx) {
                     eprintln!("error: post-processing failed: {err:#}");
                     result.has_errors = true;
                 }
-                page_docs.push((job.output.clone(), doc));
+                page_docs.push((output.clone(), doc));
             }
             Err(_) => {
                 result.has_errors = true;

@@ -134,6 +134,7 @@ dependencies = [
  "anyhow",
  "base64",
  "clap",
+ "indexmap",
  "lightningcss",
  "seahash",
  "syntect",
