@@ -130,7 +130,6 @@ pub fn build(
                 project,
                 page_path: output.clone(),
                 hl_css_path: hl_css_path.clone(),
-                extra_processors: &[],
             };
             transform::process_document(&mut doc, &pctx)?;
 
