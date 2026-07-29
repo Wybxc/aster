@@ -1,4 +1,3 @@
-use std::ffi::OsStr;
 use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 
@@ -11,103 +10,179 @@ use crate::project::ProjectRoot;
 pub type ParamSet = Vec<(String, String)>;
 
 // ---------------------------------------------------------------------------
-// Template path parsing
+// Route template — pre-parsed, validated
 // ---------------------------------------------------------------------------
 
-/// A pre-parsed component of a template path.
-#[derive(Debug, Clone)]
-pub enum Component {
-    /// Static text used as-is (directory or filename).
-    Text(String),
-    /// Contains `[param]` patterns (stem only, no extension).
-    Pattern(String),
-    /// A `[...param]` spread component.
+/// A single part within a route segment.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Part {
+    /// Static text preserved verbatim.
+    Static(String),
+    /// A named parameter `[name]`.
+    Param(String),
+    /// A spread parameter `[...name]` — value may expand into multiple segments.
     Spread(String),
 }
 
-/// Pre-parse a template path into structured components.
+/// A pre-parsed and validated route template.
 ///
-/// Strips file extensions, detects `[...]` spread patterns, and extracts
-/// all `[name]` slots for later substitution.
-pub fn parse_template(path: &Path) -> Vec<Component> {
-    use std::path::Component as PathComp;
+/// Segments correspond to path components, each consisting of parts
+/// that are either static text or parameter slots.
+#[derive(Debug, Clone)]
+pub struct RouteTemplate {
+    segments: Vec<Vec<Part>>,
+}
 
-    let mut components = Vec::new();
-    let comps: Vec<PathComp<'_>> = path.components().collect();
+/// Errors that can occur during template parsing.
+#[derive(Debug)]
+pub enum RouteError {
+    UnbalancedBrackets,
+    EmptyBrackets,
+    ConsecutiveBrackets,
+    SpreadNotStandalone(usize),
+}
 
-    for (i, comp) in comps.iter().enumerate() {
-        let PathComp::Normal(os) = comp else { continue };
+impl std::fmt::Display for RouteError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RouteError::UnbalancedBrackets => write!(f, "unbalanced brackets in route path"),
+            RouteError::EmptyBrackets => write!(f, "empty brackets `[]` in route path"),
+            RouteError::ConsecutiveBrackets => write!(f, "consecutive brackets `][` in route path"),
+            RouteError::SpreadNotStandalone(idx) => {
+                write!(
+                    f,
+                    "rest parameter `[...` in segment {idx} must be a standalone segment"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for RouteError {}
+
+// ---------------------------------------------------------------------------
+// Parsing
+// ---------------------------------------------------------------------------
+
+/// Parse a template path (relative to `src_dir`) into a validated [`RouteTemplate`].
+pub fn parse_template(path: &Path) -> Result<RouteTemplate, RouteError> {
+    use std::path::Component;
+
+    let mut segments = Vec::new();
+
+    for comp in path.components() {
+        let Component::Normal(os) = comp else {
+            continue;
+        };
         let s = os.to_string_lossy();
-        let is_last = i == comps.len() - 1;
 
-        // Check spread: `[...name]` or `[...name].ext`
-        if let Some(param) = spread_name(&s) {
-            components.push(Component::Spread(param));
+        // Strip file extension for the last component (file).
+        let is_last = is_last_component(path, comp);
+        let text = if is_last {
+            Path::new(&*s).file_stem().unwrap_or(os).to_string_lossy()
+        } else {
+            s
+        };
+
+        let parts = parse_component(&text)?;
+        if parts.is_empty() {
             continue;
         }
 
-        // For file components, strip the extension.
-        let text = if is_last {
-            Path::new(&*s)
-                .file_stem()
-                .unwrap_or(os)
-                .to_string_lossy()
-                .to_string()
-        } else {
-            s.to_string()
-        };
+        // Validate spread standalone.
+        for (i, part) in parts.iter().enumerate() {
+            if matches!(part, Part::Spread(_)) && parts.len() > 1 {
+                return Err(RouteError::SpreadNotStandalone(segments.len()));
+            }
+            if i > 0 && matches!(part, Part::Param(_)) && matches!(parts[i - 1], Part::Param(_)) {
+                return Err(RouteError::ConsecutiveBrackets);
+            }
+        }
 
-        if text.contains('[') {
-            components.push(Component::Pattern(text));
+        segments.push(parts);
+    }
+
+    Ok(RouteTemplate { segments })
+}
+
+fn is_last_component(path: &Path, comp: std::path::Component<'_>) -> bool {
+    let mut it = path.components();
+    while let Some(c) = it.next() {
+        if std::ptr::eq(&c, &comp) {
+            return it.next().is_none();
+        }
+    }
+    false
+}
+
+/// Split a route component string into parts at `[...]` boundaries.
+fn parse_component(s: &str) -> Result<Vec<Part>, RouteError> {
+    let mut parts = Vec::new();
+    let mut pos = 0;
+
+    while pos < s.len() {
+        if s[pos..].starts_with('[') {
+            // Scan for matching ']'
+            let open_at = pos;
+            pos += 1;
+            let close_at = match s[pos..].find(']') {
+                Some(i) => pos + i,
+                None => return Err(RouteError::UnbalancedBrackets),
+            };
+
+            let inner = &s[open_at + 1..close_at];
+
+            if inner.is_empty() {
+                return Err(RouteError::EmptyBrackets);
+            }
+
+            if let Some(name) = inner.strip_prefix("...") {
+                if name.is_empty() {
+                    return Err(RouteError::EmptyBrackets);
+                }
+                parts.push(Part::Spread(name.to_string()));
+            } else {
+                parts.push(Part::Param(inner.to_string()));
+            }
+
+            pos = close_at + 1;
         } else {
-            components.push(Component::Text(text));
+            // Scan static text until next '[' or end.
+            let start = pos;
+            pos = match s[pos..].find('[') {
+                Some(i) => pos + i,
+                None => s.len(),
+            };
+            parts.push(Part::Static(s[start..pos].to_string()));
         }
     }
 
-    components
+    Ok(parts)
 }
 
-/// Extract parameter names from a template path (convenience for probe detection).
+// ---------------------------------------------------------------------------
+// Parameter name extraction
+// ---------------------------------------------------------------------------
+
+/// Extract all parameter names from a template path (convenience for probe).
 pub fn parse_params(path: &Path) -> Vec<String> {
+    let Ok(tpl) = parse_template(path) else {
+        return vec![];
+    };
     let mut params = Vec::new();
-    for comp in parse_template(path) {
-        match comp {
-            Component::Pattern(s) | Component::Spread(s) => {
-                // Extract param names from the text.
-                let mut pos = 0;
-                while let Some(open) = s[pos..].find('[') {
-                    let open = pos + open;
-                    if let Some(close) = s[open..].find(']') {
-                        let close = open + close;
-                        if close > open + 1 {
-                            let raw = &s[open + 1..close];
-                            let param = raw.strip_prefix("..").unwrap_or(raw);
-                            if !param.is_empty() {
-                                params.push(param.to_string());
-                            }
-                        }
-                        pos = close + 1;
-                    } else {
-                        break;
-                    }
-                }
+    for seg in &tpl.segments {
+        for part in seg {
+            match part {
+                Part::Param(name) | Part::Spread(name) => params.push(name.clone()),
+                Part::Static(_) => {}
             }
-            Component::Text(_) => {}
         }
     }
     params
 }
 
-fn spread_name(s: &str) -> Option<String> {
-    let stem = Path::new(s).file_stem().unwrap_or(OsStr::new(s));
-    let t = stem.to_string_lossy();
-    t.strip_prefix("[...")
-        .and_then(|rest| rest.strip_suffix("]"))
-        .map(|s| s.to_string())
-}
-
 // ---------------------------------------------------------------------------
-// Route extraction
+// Route extraction from compiled content
 // ---------------------------------------------------------------------------
 
 /// Extract route declarations from compiled content.
@@ -141,62 +216,48 @@ pub fn extract(content: &Content) -> Vec<ParamSet> {
 // Output path generation
 // ---------------------------------------------------------------------------
 
-/// Compute the output path for a route-generated page.
-///
-/// Uses the pre-parsed template path to expand each component:
-/// - `Text` parts are used as-is
-/// - `Pattern` parts have `[name]` replaced with param values
-/// - `Spread` parts expand the param value by `/` into multiple segments
-/// - The final component gets a `.html` extension
-pub fn output_path(project: &ProjectRoot, template: &[Component], params: &ParamSet) -> PathBuf {
-    let mut parts: Vec<String> = Vec::new();
+impl RouteTemplate {
+    /// Compute the output path for a given set of params.
+    ///
+    /// Each segment is assembled by substituting param values for their slots,
+    /// then joined with `/`. The last segment gets a `.html` extension.
+    pub fn generate(&self, project: &ProjectRoot, params: &ParamSet) -> PathBuf {
+        let mut out_parts: Vec<String> = Vec::new();
 
-    for comp in template {
-        match comp {
-            Component::Text(t) => parts.push(t.clone()),
-            Component::Pattern(s) => parts.push(fill_params(s, params)),
-            Component::Spread(name) => {
-                if let Some((_, value)) = params.iter().find(|(k, _)| *k == *name) {
-                    for part in value.split('/') {
-                        parts.push(part.to_string());
+        for seg in &self.segments {
+            let mut seg_text = String::new();
+            for part in seg {
+                match part {
+                    Part::Static(s) => seg_text.push_str(s),
+                    Part::Param(name) | Part::Spread(name) => {
+                        if let Some((_, value)) = params.iter().find(|(k, _)| k == name) {
+                            seg_text.push_str(value);
+                        }
                     }
                 }
             }
+            // Spread: the param itself may contain '/', expanding into sub-segments.
+            // We handle this by splitting after assembling the segment text.
+            for sub in seg_text.split('/') {
+                out_parts.push(sub.to_string());
+            }
         }
-    }
 
-    let last = parts.len().saturating_sub(1);
-    let mut output = project.output_dir();
-    for (i, part) in parts.iter().enumerate() {
-        if i == last {
-            output = output.join(part).with_extension("html");
-        } else {
-            output = output.join(part);
+        // Build the output path.
+        let last = out_parts.len().saturating_sub(1);
+        let mut output = project.output_dir();
+        for (i, part) in out_parts.iter().enumerate() {
+            if i == last {
+                output = output.join(part).with_extension("html");
+            } else {
+                output = output.join(part);
+            }
         }
+        output
     }
-    output
 }
 
-fn fill_params(s: &str, params: &ParamSet) -> String {
-    let mut result = String::new();
-    let mut pos = 0;
-    while let Some(open) = s[pos..].find('[') {
-        let abs_open = pos + open;
-        result.push_str(&s[pos..abs_open]);
-        if let Some(close) = s[abs_open..].find(']') {
-            let name = &s[abs_open + 1..abs_open + close];
-            if let Some((_, value)) = params.iter().find(|(k, _)| *k == name) {
-                result.push_str(value);
-            }
-            pos = abs_open + close + 1;
-        } else {
-            result.push_str(&s[abs_open..]);
-            pos = s.len();
-            break;
-        }
-    }
-    if pos < s.len() {
-        result.push_str(&s[pos..]);
-    }
-    result
+// Retained for backward compatibility: delegates to new RouteTemplate-based path.
+pub fn output_path(project: &ProjectRoot, tpl: &RouteTemplate, params: &ParamSet) -> PathBuf {
+    tpl.generate(project, params)
 }

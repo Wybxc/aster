@@ -64,18 +64,17 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
     };
 
     // --- Probe phase: extract routes from [slug] templates ---
-    // Queue entries: (template_path, parsed_components, output_path, library)
-    let mut queue: Vec<(PathBuf, Vec<route::Component>, PathBuf, LazyHash<Library>)> = Vec::new();
+    // Queue entries: (template_path, parsed_template, output_path, library)
+    let mut queue: Vec<(PathBuf, route::RouteTemplate, PathBuf, LazyHash<Library>)> = Vec::new();
 
     for entry in project
         .walk_src()
         .filter(|p| p.extension().is_some_and(|ext| ext == "typ"))
     {
-        // Parse relative to src_dir so components reflect the output structure.
         let relative = entry
             .strip_prefix(project.src_dir())
             .expect("entry under src/");
-        let tpl = route::parse_template(relative);
+        let tpl = route::parse_template(relative).expect("invalid route template");
         let slug_params = route::parse_params(relative);
 
         if slug_params.is_empty() {
