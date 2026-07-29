@@ -125,46 +125,39 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
     }
 
     // --- Render & serialize ---
+    let mut errors: Vec<anyhow::Error> = Vec::new();
+
     for (output, job) in &render_queue {
-        match builder.document(&job.template, project, &job.library) {
-            Ok(mut doc) => {
-                let ctx = transform::ProcessingContext::new(project, output.clone());
-                if let Err(err) = transform::process_document(&mut doc, &ctx) {
-                    eprintln!("error: post-processing failed: {err:#}");
-                    result.has_errors = true;
-                    continue;
-                }
-                match typst_html::html(&doc, &HtmlOptions::default()) {
-                    Ok(raw) => {
-                        if let Some(parent) = output.parent() {
-                            if let Err(e) = std::fs::create_dir_all(parent) {
-                                eprintln!(
-                                    "error: failed to create directory {}: {e}",
-                                    parent.display()
-                                );
-                                result.has_errors = true;
-                                continue;
-                            }
-                        }
-                        match std::fs::write(output, &raw) {
-                            Ok(()) => result.outputs.push(output.clone()),
-                            Err(e) => {
-                                eprintln!("error: failed to write {}: {e}", output.display());
-                                result.has_errors = true;
-                            }
-                        }
-                    }
-                    Err(_) => {
-                        eprintln!("error: failed to encode HTML for {}", output.display());
-                        result.has_errors = true;
-                    }
-                }
+        let mut page = || -> Result<()> {
+            let mut doc = builder
+                .document(&job.template, project, &job.library)
+                .map_err(|_| anyhow::anyhow!("compilation failed"))?;
+
+            transform::process_document(
+                &mut doc,
+                &transform::ProcessingContext::new(project, output.clone()),
+            )?;
+
+            let raw = typst_html::html(&doc, &HtmlOptions::default())
+                .map_err(|_| anyhow::anyhow!("HTML encoding failed"))?;
+
+            if let Some(parent) = output.parent() {
+                std::fs::create_dir_all(parent)
+                    .with_context(|| format!("failed to create directory {}", parent.display()))?;
             }
-            Err(_) => {
-                result.has_errors = true;
-            }
+            std::fs::write(output, &raw)
+                .with_context(|| format!("failed to write {}", output.display()))?;
+
+            result.outputs.push(output.clone());
+            Ok(())
+        };
+
+        if let Err(e) = page() {
+            eprintln!("error: {}: {e:#}", output.display());
+            errors.push(e);
         }
     }
 
+    result.has_errors = !errors.is_empty();
     Ok(result)
 }
