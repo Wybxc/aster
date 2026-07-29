@@ -16,23 +16,20 @@ pub fn emit_diags(world: &impl DiagnosticWorld, diags: &[SourceDiagnostic]) {
 }
 
 // ---------------------------------------------------------------------------
-// Build output
+// Style A: No prefix — for ambient progress and conclusive summaries.
 // ---------------------------------------------------------------------------
 
 fn writer() -> StandardStream {
     StandardStream::stderr(ColorChoice::Auto)
 }
 
-/// Print an output file line.
-pub fn emit_page(path: &str) {
+/// Print a phase message (ambient progress, no prefix).
+pub fn emit_step(message: &str) {
     let mut w = writer();
-    let _ = w.set_color(ColorSpec::new().set_fg(Some(Color::Green)).set_bold(true));
-    let _ = write!(w, "write");
-    let _ = w.reset();
-    let _ = writeln!(w, "  {path}");
+    let _ = writeln!(w, "{message}");
 }
 
-/// Print the build summary line.
+/// Print the build summary (conclusive result, bold emphasis).
 pub fn emit_summary(count: usize, elapsed: &Instant) {
     let secs = elapsed.elapsed().as_secs_f64();
     let mut w = writer();
@@ -46,7 +43,7 @@ pub fn emit_summary(count: usize, elapsed: &Instant) {
 }
 
 // ---------------------------------------------------------------------------
-// Styled diagnostics
+// Style B: With prefix — for concrete, actionable messages.
 // ---------------------------------------------------------------------------
 
 fn styled_prefix(prefix: &str, color: Color, message: &str) {
@@ -57,10 +54,13 @@ fn styled_prefix(prefix: &str, color: Color, message: &str) {
     let _ = writeln!(w, ": {message}");
 }
 
-/// Print a phase message.
-pub fn emit_step(message: &str) {
+/// Print an output file line (action: green `write` prefix).
+pub fn emit_page(path: &str) {
     let mut w = writer();
-    let _ = writeln!(w, "{message}");
+    let _ = w.set_color(ColorSpec::new().set_fg(Some(Color::Green)).set_bold(true));
+    let _ = write!(w, "write");
+    let _ = w.reset();
+    let _ = writeln!(w, "  {path}");
 }
 
 /// Print a styled `error:` message to stderr.

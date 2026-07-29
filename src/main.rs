@@ -66,7 +66,7 @@ fn build(project_dir: Option<std::path::PathBuf>) -> Result<()> {
     }
 
     if !errors.is_empty() {
-        eprintln!("error: {} page(s) failed", errors.len());
+        diag::emit_error(&format!("{} page(s) failed", errors.len()));
         bail!("build failed");
     }
 
