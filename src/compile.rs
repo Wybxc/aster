@@ -14,7 +14,7 @@ use typst_kit::files::{FileStore, FsRoot, SystemFiles};
 use typst_kit::fonts::FontStore;
 use typst_kit::packages::SystemPackages;
 
-use crate::diag::{self, emit_diags};
+use crate::diag;
 use crate::project::ProjectRoot;
 use crate::world::CompileWorld;
 
@@ -100,7 +100,7 @@ impl CompileContext {
             &source,
         )
         .map_err(|diags| {
-            emit_diags(&world, &diags);
+            diag::emit_diags(&world, &diags);
             anyhow::anyhow!("evaluation failed")
         })?;
 
@@ -120,7 +120,7 @@ impl CompileContext {
         match warned.output {
             Ok(doc) => Ok(doc),
             Err(errors) => {
-                emit_diags(&world, &errors);
+                diag::emit_diags(&world, &errors);
                 bail!("compilation failed");
             }
         }

@@ -135,11 +135,7 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<(Vec<PathBuf>, Vec<a
 
             outputs.push(output.clone());
             let out_rel = output.strip_prefix(project.output_dir()).unwrap_or(&output);
-            let src_rel = job
-                .template
-                .strip_prefix(project.src_dir())
-                .unwrap_or(&job.template);
-            diag::emit_page(&out_rel.to_string_lossy(), &src_rel.to_string_lossy());
+            diag::emit_page(&out_rel.to_string_lossy());
             Ok(())
         };
 

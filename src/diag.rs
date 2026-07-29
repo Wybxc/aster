@@ -24,7 +24,7 @@ fn writer() -> StandardStream {
 }
 
 /// Print an output file line.
-pub fn emit_page(path: &str, _source: &str) {
+pub fn emit_page(path: &str) {
     let mut w = writer();
     let _ = w.set_color(ColorSpec::new().set_fg(Some(Color::Green)).set_bold(true));
     let _ = write!(w, "write");
