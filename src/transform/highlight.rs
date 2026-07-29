@@ -70,21 +70,14 @@ impl ElementProcessor for HighlightProcessor {
             };
 
             let mut new_children: EcoVec<HtmlNode> = EcoVec::new();
-            for (scope_name, bits, txt) in &tokens {
-                let span = if scope_name == "default" && *bits == 0 {
+            for (class, txt) in &tokens {
+                let span = if class == "default" {
                     // Plain tokens: no class, inherit parent styling.
                     HtmlElement::new(typst_html::tag::span)
                         .with_children(eco_vec![HtmlNode::Text(txt.clone(), Span::detached())])
                 } else {
-                    let mut class = eco_format!("hl-{scope_name}");
-                    if bits & 1 != 0 {
-                        class.push_str(" hl-bold");
-                    }
-                    if bits & 2 != 0 {
-                        class.push_str(" hl-italic");
-                    }
                     HtmlElement::new(typst_html::tag::span)
-                        .with_attr(typst_html::attr::class, class)
+                        .with_attr(typst_html::attr::class, class.as_str())
                         .with_children(eco_vec![HtmlNode::Text(txt.clone(), Span::detached())])
                 };
                 new_children.push(HtmlNode::Element(span));
@@ -153,8 +146,23 @@ fn collect_impl(elem: &HtmlElement, out: &mut String) {
     }
 }
 
+/// Build the class string from a scope name and font-style bits.
+fn make_class(name: &str, bits: u8) -> EcoString {
+    if name == "default" && bits == 0 {
+        return "default".into();
+    }
+    let mut class = eco_format!("hl-{name}");
+    if bits & 1 != 0 {
+        class.push_str(" hl-bold");
+    }
+    if bits & 2 != 0 {
+        class.push_str(" hl-italic");
+    }
+    class
+}
+
 /// Highlight code using syntect (all non-Typst languages).
-fn do_syntect_highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(EcoString, u8, EcoString)> {
+fn do_syntect_highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(EcoString, EcoString)> {
     let syntax = SS
         .find_syntax_by_token(lang)
         .or_else(|| SS.find_syntax_by_extension(lang))
@@ -190,17 +198,17 @@ fn do_syntect_highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(EcoString
                 scope_css_name(scope_stack.as_slice())
             };
 
-            out.push((name, bits, EcoString::from(text)));
+            out.push((make_class(&name, bits), EcoString::from(text)));
         }
 
-        out.push(("default".into(), 0, "\n".into()));
+        out.push(("default".into(), "\n".into()));
     }
 
     out
 }
 
 /// Highlight code using Typst's native AST (languages: typ, typst, typc, typm).
-fn do_typst_highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(EcoString, u8, EcoString)> {
+fn do_typst_highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(EcoString, EcoString)> {
     let root: SyntaxNode = match lang {
         "typc" => parse_code(code),
         "typm" => parse_math(code),
@@ -219,14 +227,14 @@ fn do_typst_highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(EcoString, 
         &mut tokens,
     );
 
-    let mut out: Vec<(EcoString, u8, EcoString)> = Vec::new();
+    let mut out: Vec<(EcoString, EcoString)> = Vec::new();
     for (name, bits, text) in &tokens {
         for (i, segment) in text.split('\n').enumerate() {
             if i > 0 {
-                out.push((name.clone(), *bits, "\n".into()));
+                out.push((make_class("default", 0), "\n".into()));
             }
             if !segment.is_empty() {
-                out.push((name.clone(), *bits, EcoString::from(segment)));
+                out.push((make_class(name, *bits), EcoString::from(segment)));
             }
         }
     }
@@ -386,11 +394,8 @@ mod tests {
 
     /// Helper: return the concatenated text of all non-whitespace tokens
     /// so we can check source-code ordering.
-    fn token_texts(tokens: &[(EcoString, u8, EcoString)]) -> Vec<String> {
-        tokens
-            .iter()
-            .map(|(_, _, t)| t.as_str().to_string())
-            .collect()
+    fn token_texts(tokens: &[(EcoString, EcoString)]) -> Vec<String> {
+        tokens.iter().map(|(_, t)| t.as_str().to_string()).collect()
     }
 
     #[test]
@@ -435,7 +440,7 @@ mod tests {
             "should produce tokens even for invalid code"
         );
         // Every token's text must come from the input string (no garbage).
-        for (_, _, t) in &tokens {
+        for (_, t) in &tokens {
             let s = t.as_str();
             if s != "\n" {
                 assert!(
