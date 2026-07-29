@@ -61,17 +61,22 @@ impl ElementProcessor for HighlightProcessor {
 
         let mut new_children: EcoVec<HtmlNode> = EcoVec::new();
         for (scope_name, bits, txt) in &tokens {
-            let mut style = eco_format!("color:var(--hl-{scope_name})");
-            if bits & 1 != 0 {
-                style.push_str(";font-weight:bold");
-            }
-            if bits & 2 != 0 {
-                style.push_str(";font-style:italic");
-            }
-
-            let span = HtmlElement::new(typst_html::tag::span)
-                .with_attr(typst_html::attr::style, style)
-                .with_children(eco_vec![HtmlNode::Text(txt.clone(), Span::detached())]);
+            let span = if scope_name == "default" && *bits == 0 {
+                // Plain tokens: no inline style, inherit parent styling.
+                HtmlElement::new(typst_html::tag::span)
+                    .with_children(eco_vec![HtmlNode::Text(txt.clone(), Span::detached())])
+            } else {
+                let mut style = eco_format!("color:var(--hl-{scope_name})");
+                if bits & 1 != 0 {
+                    style.push_str(";font-weight:bold");
+                }
+                if bits & 2 != 0 {
+                    style.push_str(";font-style:italic");
+                }
+                HtmlElement::new(typst_html::tag::span)
+                    .with_attr(typst_html::attr::style, style)
+                    .with_children(eco_vec![HtmlNode::Text(txt.clone(), Span::detached())])
+            };
             new_children.push(HtmlNode::Element(span));
         }
         elem.children = new_children;
