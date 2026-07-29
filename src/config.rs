@@ -3,6 +3,45 @@ use std::path::Path;
 use anyhow::{Context, Result, bail};
 use typst::foundations::{Dict, Str, Value};
 
+/// Highlight theme configuration from `aster.toml`.
+pub struct HighlightConfig {
+    pub themes: Themes,
+}
+
+pub struct Themes {
+    pub light: String,
+    pub dark: String,
+}
+
+/// Parse highlight-specific config from `aster.toml`.
+pub fn parse_highlight(path: &Path) -> Result<Option<HighlightConfig>> {
+    let content = std::fs::read_to_string(path)
+        .with_context(|| format!("failed to read {}", path.display()))?;
+    let table: toml::Table = content
+        .parse()
+        .with_context(|| format!("failed to parse {}", path.display()))?;
+    let Some(highlight) = table.get("highlight") else {
+        return Ok(None);
+    };
+    let themes = highlight
+        .get("themes")
+        .and_then(|v| v.as_table())
+        .context("expected [highlight.themes] section")?;
+    let light = themes
+        .get("light")
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .context("expected [highlight.themes].light")?;
+    let dark = themes
+        .get("dark")
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .context("expected [highlight.themes].dark")?;
+    Ok(Some(HighlightConfig {
+        themes: Themes { light, dark },
+    }))
+}
+
 /// Parse `aster.toml` at the given path and return a [`Dict`] suitable for
 /// `sys.inputs`.
 pub fn parse_config(path: &Path) -> Result<Dict> {

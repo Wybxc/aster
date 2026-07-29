@@ -1,11 +1,16 @@
+use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
+use anyhow::{Context, Result};
 use syntect::easy::ScopeRegionIterator;
 use syntect::highlighting::{Highlighter, Theme, ThemeSet};
 use syntect::parsing::{ParseState, Scope, ScopeStack, SyntaxSet};
 use typst::ecow::{EcoString, EcoVec, eco_format, eco_vec};
 use typst::syntax::{LinkedNode, Span, SyntaxNode, parse_code, parse_math};
 use typst_html::{HtmlElement, HtmlNode};
+
+use crate::config::HighlightConfig;
+use crate::project::ProjectRoot;
 
 use super::{ElementProcessor, ProcessingContext, WalkControl};
 
@@ -219,4 +224,111 @@ fn walk_typst_node(
         walk_typst_node(code, &child, highlighter, scopes, tokens);
         std::mem::swap(&mut child_scopes, scopes);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Theme resolution for CSS variable generation
+// ---------------------------------------------------------------------------
+
+/// Load a syntect theme by built-in name or file path (relative to `project_root`).
+fn load_theme(name_or_path: &str, project_root: &Path) -> Result<Theme> {
+    if let Some(theme) = THEMES.themes.get(name_or_path) {
+        return Ok(theme.clone());
+    }
+    // Treat as file path — parse a single .tmTheme file.
+    let path = project_root.join(name_or_path);
+    let file = std::fs::File::open(&path)
+        .with_context(|| format!("failed to open theme file {}", path.display()))?;
+    let mut reader = std::io::BufReader::new(file);
+    let theme = ThemeSet::load_from_reader(&mut reader)
+        .with_context(|| format!("failed to load theme from {}", path.display()))?;
+    Ok(theme)
+}
+
+/// Resolve highlight theme colours and write the CSS file.
+///
+/// Returns the relative (from output_dir) path for `<link>` injection,
+/// or `None` if no [highlight] config is provided.
+pub fn resolve_highlight_css(
+    config: &HighlightConfig,
+    project: &ProjectRoot,
+) -> Result<Option<PathBuf>> {
+    let light = load_theme(&config.themes.light, project.root())?;
+    let dark = load_theme(&config.themes.dark, project.root())?;
+    let light_h = Highlighter::new(&light);
+    let dark_h = Highlighter::new(&dark);
+
+    let _default_light = color_to_hex(
+        light
+            .settings
+            .foreground
+            .unwrap_or(syntect::highlighting::Color::BLACK),
+    );
+    let default_dark = color_to_hex(
+        dark.settings
+            .foreground
+            .unwrap_or(syntect::highlighting::Color::BLACK),
+    );
+
+    // Collect unique scope names from theme selectors, resolve colours.
+    let mut vars: Vec<(EcoString, String, String)> = Vec::new();
+    for theme in [&light, &dark] {
+        for scope_entry in &theme.scopes {
+            for single in &scope_entry.scope.selectors {
+                let Some(scope) = single.extract_single_scope() else {
+                    continue;
+                };
+
+                let name = scope_css_name(std::slice::from_ref(&scope));
+                if name == "default" {
+                    continue;
+                }
+                // Deduplicate by scope name.
+                if vars.iter().any(|(n, _, _)| *n == name) {
+                    continue;
+                }
+                let light_fg = light_h
+                    .style_for_stack(std::slice::from_ref(&scope))
+                    .foreground;
+                let dark_fg = dark_h
+                    .style_for_stack(std::slice::from_ref(&scope))
+                    .foreground;
+                vars.push((name, color_to_hex(light_fg), color_to_hex(dark_fg)));
+            }
+        }
+    }
+
+    if vars.is_empty() {
+        return Ok(None);
+    }
+
+    // Generate CSS.
+    let mut css = String::from(":root,[data-theme=\"light\"]{\n");
+    for (name, lc, _) in &vars {
+        let _ = std::fmt::Write::write_fmt(&mut css, format_args!("  --hl-{name}:{lc};\n"));
+    }
+    css.push_str("}\n[data-theme=\"dark\"]{\n");
+    for (name, _, dc) in &vars {
+        if *dc != default_dark {
+            let _ = std::fmt::Write::write_fmt(&mut css, format_args!("  --hl-{name}:{dc};\n"));
+        }
+    }
+    css.push_str("}\n");
+
+    // Write to output directory with content hash.
+    let hash = format!("{:016x}", seahash::hash(css.as_bytes()));
+    let filename = format!("hl.{hash}.css");
+    let output = project.output_dir().join(&filename);
+    if let Some(parent) = output.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create directory {}", parent.display()))?;
+    }
+    std::fs::write(&output, &css)
+        .with_context(|| format!("failed to write {}", output.display()))?;
+
+    Ok(Some(PathBuf::from(filename)))
+}
+
+fn color_to_hex(c: syntect::highlighting::Color) -> String {
+    format!("#{:02x}{:02x}{:02x}", c.r, c.g, c.b)
 }

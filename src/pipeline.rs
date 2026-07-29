@@ -6,6 +6,7 @@ use typst::foundations::{Dict, Str, Value};
 use typst::utils::LazyHash;
 use typst_html::HtmlOptions;
 
+use crate::config;
 use crate::project::ProjectRoot;
 use crate::{compile, diag, route, transform, world};
 
@@ -23,6 +24,17 @@ fn empty_aster() -> Value {
 /// responsible for printing errors and deciding whether they are fatal.
 pub fn build(project: &ProjectRoot, config: Dict) -> Result<(Vec<PathBuf>, Vec<anyhow::Error>)> {
     let builder = compile::CompileContext::new(project);
+
+    // Pre-resolve highlight theme colours (non-fatal on failure).
+    let hl_css_path = match config::parse_highlight(&project.config_file()) {
+        Ok(Some(cfg)) => {
+            transform::highlight::resolve_highlight_css(&cfg, project).unwrap_or_else(|e| {
+                diag::emit_warning(&format!("failed to resolve highlight CSS: {e:#}"));
+                None
+            })
+        }
+        _ => None,
+    };
 
     // --- Phase 1: content collections ---
     let aster_value = if project.content_dir().is_dir() {
@@ -115,10 +127,12 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<(Vec<PathBuf>, Vec<a
                 .document(&job.template, project, &job.library)
                 .map_err(|_| anyhow::anyhow!("compilation failed"))?;
 
-            transform::process_document(
-                &mut doc,
-                &transform::ProcessingContext::new(project, output.clone()),
-            )?;
+            let pctx = transform::ProcessingContext {
+                project,
+                page_path: output.clone(),
+                hl_css_path: hl_css_path.clone(),
+            };
+            transform::process_document(&mut doc, &pctx)?;
 
             let raw = typst_html::html(&doc, &HtmlOptions::default())
                 .map_err(|_| anyhow::anyhow!("HTML encoding failed"))?;
