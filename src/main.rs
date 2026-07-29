@@ -59,17 +59,16 @@ fn build(project_dir: Option<std::path::PathBuf>) -> Result<()> {
     let config =
         config::parse_config(&project.config_file()).context("failed to parse aster.toml")?;
 
-    let (outputs, errors) = pipeline::build(&project, config)?;
+    let (_outputs, errors) = pipeline::build(&project, config)?;
 
     for err in &errors {
         diag::emit_error(&format!("{err:#}"));
     }
 
     if !errors.is_empty() {
-        eprintln!("error: {} page(s) failed to compile", errors.len());
+        eprintln!("error: {} page(s) failed", errors.len());
         bail!("build failed");
     }
 
-    eprintln!("built {} page(s)", outputs.len());
     Ok(())
 }

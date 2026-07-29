@@ -108,6 +108,7 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<(Vec<PathBuf>, Vec<a
     }
 
     // --- Render & serialize ---
+    let render_start = std::time::Instant::now();
     let mut outputs: Vec<PathBuf> = Vec::new();
     let mut errors: Vec<anyhow::Error> = Vec::new();
 
@@ -133,6 +134,8 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<(Vec<PathBuf>, Vec<a
                 .with_context(|| format!("failed to write {}", output.display()))?;
 
             outputs.push(output.clone());
+            let rel = output.strip_prefix(project.output_dir()).unwrap_or(&output);
+            diag::emit_page(&rel.to_string_lossy());
             Ok(())
         };
 
@@ -141,5 +144,6 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<(Vec<PathBuf>, Vec<a
         }
     }
 
+    diag::emit_summary(outputs.len(), &render_start);
     Ok((outputs, errors))
 }
