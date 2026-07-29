@@ -6,21 +6,21 @@ use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions};
 use lightningcss::targets::Browsers;
 use typst_html::HtmlDocument;
 
-use super::{ElementProcessor, ProcessingContext, WalkControl, html_util};
+use super::{ElementProcessor, ProcessingContext, WalkControl, html_util::HtmlElementExt};
 
 pub(super) struct CssProcessor;
 
 impl ElementProcessor for CssProcessor {
     fn process(&self, doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> Result<()> {
         super::walk_mut(doc.root_mut(), &mut |elem| {
-            if !html_util::is_tag(elem, typst_html::tag::link) {
+            if !elem.is_tag(typst_html::tag::link) {
                 return Ok(WalkControl::Continue);
             }
-            if !html_util::has_attr(elem, "rel", |v| v.as_str() == "css") {
+            if !elem.has_attr("rel", |v| v.as_str() == "css") {
                 return Ok(WalkControl::Continue);
             }
 
-            let href = match html_util::get_attr(elem, "href") {
+            let href = match elem.get_attr("href") {
                 Some(h) => h,
                 None => return Ok(WalkControl::Continue),
             };
@@ -58,8 +58,8 @@ impl ElementProcessor for CssProcessor {
             let page_dir = ctx.page_path.parent().expect("page has a parent");
             let relative = relative_path(page_dir, &css_output);
 
-            html_util::update_attr(elem, "href", |v| *v = relative.to_string_lossy().into());
-            html_util::update_attr(elem, "rel", |v| *v = "stylesheet".into());
+            elem.update_attr("href", |v| *v = relative.to_string_lossy().into());
+            elem.update_attr("rel", |v| *v = "stylesheet".into());
             Ok(WalkControl::Continue)
         })
     }

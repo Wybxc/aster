@@ -13,7 +13,9 @@ use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 use crate::config::HighlightConfig;
 use crate::project::ProjectRoot;
 
-use super::{ElementProcessor, ProcessingContext, WalkControl, html_util, walk_mut};
+use super::{
+    ElementProcessor, ProcessingContext, WalkControl, html_util::HtmlElementExt, walk_mut,
+};
 
 static SS: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
 static THEMES: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
@@ -28,11 +30,11 @@ impl ElementProcessor for HighlightProcessor {
         // Syntax-highlight all <code data-lang="..."> blocks.
         // Theme-independent: we only derive CSS class names from scopes.
         walk_mut(doc.root_mut(), &mut |elem| {
-            if !html_util::is_tag(elem, typst_html::tag::code) {
+            if !elem.is_tag(typst_html::tag::code) {
                 return Ok(WalkControl::Continue);
             }
 
-            let lang = match html_util::get_attr(elem, "data-lang") {
+            let lang = match elem.get_attr("data-lang") {
                 Some(l) => l,
                 None => return Ok(WalkControl::Continue),
             };
@@ -68,7 +70,7 @@ impl ElementProcessor for HighlightProcessor {
         // Second step: inject highlight CSS link into <head> if configured.
         if let Some(ref hl_css) = ctx.hl_css_path {
             let root = doc.root_mut();
-            let Some(head) = html_util::find_child_mut(root, typst_html::tag::head) else {
+            let Some(head) = root.find_child_mut(typst_html::tag::head) else {
                 anyhow::bail!("highlight CSS configured but found no <head> element");
             };
             let link = HtmlElement::new(typst_html::tag::link)

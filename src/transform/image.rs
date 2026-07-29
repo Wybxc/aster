@@ -5,7 +5,7 @@ use base64::Engine;
 use typst::ecow::{EcoString, eco_format};
 use typst_html::HtmlDocument;
 
-use super::{ElementProcessor, ProcessingContext, WalkControl, html_util};
+use super::{ElementProcessor, ProcessingContext, WalkControl, html_util::HtmlElementExt};
 
 /// Minimum decoded size (bytes) below which a data URI stays inline.
 const IMAGE_EXTRACT_THRESHOLD: usize = 1024;
@@ -15,20 +15,20 @@ pub(super) struct ImageProcessor;
 impl ElementProcessor for ImageProcessor {
     fn process(&self, doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> Result<()> {
         super::walk_mut(doc.root_mut(), &mut |elem| {
-            if !html_util::is_tag(elem, typst_html::tag::img) {
+            if !elem.is_tag(typst_html::tag::img) {
                 return Ok(WalkControl::Continue);
             }
-            if !html_util::has_attr(elem, "src", |v| v.as_str().starts_with("data:")) {
+            if !elem.has_attr("src", |v| v.as_str().starts_with("data:")) {
                 return Ok(WalkControl::Continue);
             }
 
-            let src = match html_util::get_attr(elem, "src") {
+            let src = match elem.get_attr("src") {
                 Some(s) => s,
                 None => return Ok(WalkControl::Continue),
             };
 
             if let Some(new_src) = try_extract(&src, &ctx.output_dir())? {
-                html_util::update_attr(elem, "src", |v| *v = new_src.clone());
+                elem.update_attr("src", |v| *v = new_src.clone());
             }
             Ok(WalkControl::Continue)
         })
