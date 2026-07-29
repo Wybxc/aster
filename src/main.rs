@@ -1,6 +1,7 @@
 mod compile;
 mod config;
 mod content;
+mod diag;
 mod pipeline;
 mod project;
 mod route;
@@ -61,7 +62,7 @@ fn build(project_dir: Option<std::path::PathBuf>) -> Result<()> {
     let (outputs, errors) = pipeline::build(&project, config)?;
 
     for err in &errors {
-        world::emit_error(&format!("{err:#}"));
+        diag::emit_error(&format!("{err:#}"));
     }
 
     if !errors.is_empty() {

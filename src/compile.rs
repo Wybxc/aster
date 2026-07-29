@@ -14,8 +14,9 @@ use typst_kit::files::{FileStore, FsRoot, SystemFiles};
 use typst_kit::fonts::FontStore;
 use typst_kit::packages::SystemPackages;
 
+use crate::diag::emit_diags;
 use crate::project::ProjectRoot;
-use crate::world::{CompileWorld, emit_diags};
+use crate::world::CompileWorld;
 
 /// Reusable compilation context for a project.
 ///

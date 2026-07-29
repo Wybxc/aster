@@ -7,7 +7,7 @@ use typst::utils::LazyHash;
 use typst_html::HtmlOptions;
 
 use crate::project::ProjectRoot;
-use crate::{compile, route, transform, world};
+use crate::{compile, diag, route, transform, world};
 
 /// Return a complete `_aster` protocol value with empty collections.
 fn empty_aster() -> Value {
@@ -56,7 +56,7 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<(Vec<PathBuf>, Vec<a
             .insert(output.clone(), RenderJob { template, library })
             .is_some()
         {
-            world::emit_warning(&format!(
+            diag::emit_warning(&format!(
                 "duplicate output path `{}` — skipping",
                 output.display()
             ));
@@ -86,7 +86,7 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<(Vec<PathBuf>, Vec<a
                     })?,
             );
             if routes.is_empty() {
-                world::emit_warning(&format!(
+                diag::emit_warning(&format!(
                     "{} has `[slug]` pattern but no `<route>` metadata",
                     entry.display()
                 ));
