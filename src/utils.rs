@@ -14,24 +14,6 @@ pub enum WalkControl {
     SkipChildren,
 }
 
-/// Recursively visit every descendant `HtmlElement` depth-first (mutable).
-///
-/// Capture external state (such as [`ProcessingContext`]) in the closure.
-pub fn walk_mut(
-    elem: &mut HtmlElement,
-    f: &mut impl FnMut(&mut HtmlElement) -> Result<WalkControl>,
-) -> Result<()> {
-    if matches!(f(elem)?, WalkControl::SkipChildren) {
-        return Ok(());
-    }
-    for child in elem.children.make_mut().iter_mut() {
-        if let HtmlNode::Element(e) = child {
-            walk_mut(e, f)?;
-        }
-    }
-    Ok(())
-}
-
 /// Resolve `..` components in a path without requiring the file to exist.
 pub fn normalize(path: &Path) -> PathBuf {
     use std::path::Component;
@@ -108,6 +90,14 @@ pub trait HtmlElementExt {
     /// inserting `\n` for `<br>` elements so the result reflects
     /// multi-line content in source order.
     fn collect_text(&self) -> String;
+
+    /// Recursively visit every descendant `HtmlElement` depth‑first.
+    /// Return `WalkControl::SkipChildren` from the callback to skip
+    /// an element's children.  Capture external state in the closure.
+    fn walk_mut(
+        &mut self,
+        f: &mut impl FnMut(&mut HtmlElement) -> Result<WalkControl>,
+    ) -> Result<()>;
 }
 
 impl HtmlElementExt for HtmlElement {
@@ -148,6 +138,21 @@ impl HtmlElementExt for HtmlElement {
             }
         }
         None
+    }
+
+    fn walk_mut(
+        &mut self,
+        f: &mut impl FnMut(&mut HtmlElement) -> Result<WalkControl>,
+    ) -> Result<()> {
+        if matches!(f(self)?, WalkControl::SkipChildren) {
+            return Ok(());
+        }
+        for child in self.children.make_mut().iter_mut() {
+            if let HtmlNode::Element(e) = child {
+                e.walk_mut(f)?;
+            }
+        }
+        Ok(())
     }
 
     fn collect_text(&self) -> String {

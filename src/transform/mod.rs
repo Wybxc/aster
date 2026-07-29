@@ -9,7 +9,7 @@ use typst_html::HtmlDocument;
 
 use crate::project::ProjectRoot;
 
-pub use crate::utils::{WalkControl, walk_mut};
+pub use crate::utils::WalkControl;
 
 /// A processor that transforms the document as a whole — CSS bundling,
 /// image extraction, syntax highlighting, etc.

@@ -15,7 +15,7 @@ pub(super) struct ImageProcessor;
 
 impl ElementProcessor for ImageProcessor {
     fn process(&self, doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> Result<()> {
-        super::walk_mut(doc.root_mut(), &mut |elem| {
+        doc.root_mut().walk_mut(&mut |elem| {
             if !elem.is_tag(typst_html::tag::img) {
                 return Ok(WalkControl::Continue);
             }
