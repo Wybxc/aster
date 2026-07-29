@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use typst::Library;
+use typst::ecow::EcoString;
 use typst::foundations::{Content, Dict, Str, Value, dict};
 use typst::introspection::MetadataElem;
 use typst::utils::LazyHash;
@@ -23,7 +24,7 @@ pub fn load_collections(
     library: &LazyHash<Library>,
 ) -> Result<Value> {
     let content_dir = project.content_dir();
-    let mut cols: BTreeMap<String, Vec<(String, PathBuf, Content)>> = BTreeMap::new();
+    let mut cols: BTreeMap<EcoString, Vec<(EcoString, PathBuf, Content)>> = BTreeMap::new();
 
     for path in project
         .walk_content()
@@ -42,7 +43,7 @@ pub fn load_collections(
         let mut components = relative.components();
         let collection = components
             .next()
-            .map(|c| c.as_os_str().to_string_lossy().to_string())
+            .map(|c| EcoString::from(c.as_os_str().to_string_lossy().as_ref()))
             .context("entry not inside a collection directory")?;
 
         let id = {
@@ -51,7 +52,7 @@ pub fn load_collections(
                 p.push(c);
             }
             p.set_extension("");
-            p.to_string_lossy().to_string()
+            EcoString::from(p.to_string_lossy().as_ref())
         };
 
         let body = builder.content(&path, project, library)?;

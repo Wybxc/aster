@@ -2,6 +2,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use base64::Engine;
+use typst::ecow::{EcoString, eco_format};
 use typst_html::HtmlElement;
 
 use super::{ElementProcessor, ProcessingContext, WalkControl};
@@ -36,7 +37,7 @@ impl ElementProcessor for ImageProcessor {
         if let Some(new_src) = try_extract(&src, &ctx.output_dir())? {
             for (a, v) in elem.attrs.0.make_mut().iter_mut() {
                 if *a.resolve() == *"src" {
-                    *v = new_src.clone().into();
+                    *v = new_src.clone();
                 }
             }
         }
@@ -45,7 +46,7 @@ impl ElementProcessor for ImageProcessor {
 }
 
 /// Try to extract a data URI image to a separate file.
-fn try_extract(src: &str, dist_dir: &Path) -> Result<Option<String>> {
+fn try_extract(src: &str, dist_dir: &Path) -> Result<Option<EcoString>> {
     let Some(data) = src.strip_prefix("data:") else {
         return Ok(None);
     };
@@ -70,8 +71,8 @@ fn try_extract(src: &str, dist_dir: &Path) -> Result<Option<String>> {
 
     let hash = format!("{:016x}", seahash::hash(&decoded));
     let ext = media_type_to_ext(mediatype);
-    let filename = format!("{hash}.{ext}");
-    let output = dist_dir.join(&filename);
+    let filename = eco_format!("{hash}.{ext}");
+    let output = dist_dir.join(filename.as_str());
 
     if let Some(parent) = output.parent() {
         std::fs::create_dir_all(parent).context("failed to create dist directory")?;

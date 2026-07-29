@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use syntect::easy::ScopeRegionIterator;
 use syntect::highlighting::{Highlighter, Theme, ThemeSet};
 use syntect::parsing::{ParseState, Scope, ScopeStack, SyntaxSet};
-use typst::ecow::{EcoVec, eco_format, eco_vec};
+use typst::ecow::{EcoString, EcoVec, eco_format, eco_vec};
 use typst::syntax::{LinkedNode, Span, SyntaxNode, parse_code, parse_math};
 use typst_html::{HtmlElement, HtmlNode};
 
@@ -71,10 +71,7 @@ impl ElementProcessor for HighlightProcessor {
 
             let span = HtmlElement::new(typst_html::tag::span)
                 .with_attr(typst_html::attr::style, style)
-                .with_children(eco_vec![HtmlNode::Text(
-                    txt.clone().into(),
-                    Span::detached()
-                )]);
+                .with_children(eco_vec![HtmlNode::Text(txt.clone(), Span::detached())]);
             new_children.push(HtmlNode::Element(span));
         }
         elem.children = new_children;
@@ -83,15 +80,15 @@ impl ElementProcessor for HighlightProcessor {
 }
 
 /// Derive a semantic CSS variable suffix from a slice of scopes.
-fn scope_css_name(scopes: &[Scope]) -> String {
+fn scope_css_name(scopes: &[Scope]) -> EcoString {
     for scope in scopes.iter().rev() {
-        let s = scope.to_string();
+        let s = eco_format!("{scope}");
         let parts: Vec<&str> = s.split('.').collect();
         if parts.len() >= 2 && parts[0] != "source" && parts[0] != "meta" {
-            return format!("{}-{}", parts[0], parts[1]);
+            return eco_format!("{}-{}", parts[0], parts[1]);
         }
     }
-    "default".to_string()
+    "default".into()
 }
 
 /// Collect the text content of all descendant `HtmlNode::Text` nodes
@@ -109,7 +106,7 @@ fn collect_text(elem: &HtmlElement) -> String {
 }
 
 /// Highlight code using syntect (all non-Typst languages).
-fn do_syntect_highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(String, u8, String)> {
+fn do_syntect_highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(EcoString, u8, EcoString)> {
     let syntax = SS
         .find_syntax_by_token(lang)
         .or_else(|| SS.find_syntax_by_extension(lang))
@@ -139,23 +136,23 @@ fn do_syntect_highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(String, u
             let bits = style.font_style.bits();
             let fg = style.foreground;
 
-            let name = if fg == default_fg && bits == 0 {
-                "default".to_string()
+            let name: EcoString = if fg == default_fg && bits == 0 {
+                "default".into()
             } else {
                 scope_css_name(scope_stack.as_slice())
             };
 
-            out.push((name, bits, text.to_string()));
+            out.push((name, bits, EcoString::from(text)));
         }
 
-        out.push(("default".to_string(), 0, "\n".into()));
+        out.push(("default".into(), 0, "\n".into()));
     }
 
     out
 }
 
 /// Highlight code using Typst's native AST (languages: typ, typst, typc, typm).
-fn do_typst_highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(String, u8, String)> {
+fn do_typst_highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(EcoString, u8, EcoString)> {
     let root: SyntaxNode = match lang {
         "typc" => parse_code(code),
         "typm" => parse_math(code),
@@ -163,7 +160,7 @@ fn do_typst_highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(String, u8,
     };
 
     let highlighter = Highlighter::new(theme);
-    let mut tokens = Vec::new();
+    let mut tokens: Vec<(EcoString, u8, EcoString)> = Vec::new();
     let mut scopes: Vec<Scope> = Vec::new();
 
     walk_typst_node(
@@ -174,14 +171,14 @@ fn do_typst_highlight(code: &str, lang: &str, theme: &Theme) -> Vec<(String, u8,
         &mut tokens,
     );
 
-    let mut out: Vec<(String, u8, String)> = Vec::new();
+    let mut out: Vec<(EcoString, u8, EcoString)> = Vec::new();
     for (name, bits, text) in &tokens {
         for (i, segment) in text.split('\n').enumerate() {
             if i > 0 {
                 out.push((name.clone(), *bits, "\n".into()));
             }
             if !segment.is_empty() {
-                out.push((name.clone(), *bits, segment.to_string()));
+                out.push((name.clone(), *bits, EcoString::from(segment)));
             }
         }
     }
@@ -193,7 +190,7 @@ fn walk_typst_node(
     node: &LinkedNode,
     highlighter: &Highlighter,
     scopes: &mut Vec<Scope>,
-    tokens: &mut Vec<(String, u8, String)>,
+    tokens: &mut Vec<(EcoString, u8, EcoString)>,
 ) {
     if node.children().len() == 0 {
         let text = &code[node.range()];
@@ -201,7 +198,7 @@ fn walk_typst_node(
             let style = highlighter.style_for_stack(scopes.as_slice());
             let bits = style.font_style.bits();
             let name = scope_css_name(scopes.as_slice());
-            tokens.push((name, bits, text.to_string()));
+            tokens.push((name, bits, EcoString::from(text)));
         }
         return;
     }

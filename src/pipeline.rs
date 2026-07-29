@@ -95,11 +95,8 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<(Vec<PathBuf>, Vec<a
             for params in routes {
                 let output = route::output_path(project, &tpl, &params);
                 let mut inputs = base_inputs.clone();
-                for (name, value) in &params {
-                    inputs.push((
-                        Str::from(name.as_str()),
-                        Value::Str(Str::from(value.as_str())),
-                    ));
+                for (name, value) in params {
+                    inputs.push((Str::from(name), Value::Str(Str::from(value))));
                 }
                 let library = LazyHash::new(world::build_library(Dict::from_iter(inputs)));
                 enqueue(entry.clone(), output, library);

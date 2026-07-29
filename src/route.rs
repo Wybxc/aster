@@ -1,23 +1,24 @@
 use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 
+use typst::ecow::EcoString;
 use typst::foundations::{Content, Value};
 use typst::introspection::MetadataElem;
 
 use crate::project::ProjectRoot;
 
 /// Parameter assignments for a single generated page.
-pub type ParamSet = Vec<(String, String)>;
+pub type ParamSet = Vec<(EcoString, EcoString)>;
 
 /// A single part within a route segment.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Part {
     /// Static text preserved verbatim.
-    Static(String),
+    Static(EcoString),
     /// A named parameter `[name]`.
-    Param(String),
+    Param(EcoString),
     /// A spread parameter `[...name]` — value may expand into multiple segments.
-    Spread(String),
+    Spread(EcoString),
 }
 
 /// A pre-parsed and validated route template.
@@ -113,9 +114,9 @@ fn parse_component(s: &str) -> Result<Vec<Part>, RouteError> {
                 if name.is_empty() {
                     return Err(RouteError::EmptyBrackets);
                 }
-                parts.push(Part::Spread(name.to_string()));
+                parts.push(Part::Spread(EcoString::from(name)));
             } else {
-                parts.push(Part::Param(inner.to_string()));
+                parts.push(Part::Param(EcoString::from(inner)));
             }
 
             pos = close_at + 1;
@@ -126,7 +127,7 @@ fn parse_component(s: &str) -> Result<Vec<Part>, RouteError> {
                 Some(i) => pos + i,
                 None => s.len(),
             };
-            parts.push(Part::Static(s[start..pos].to_string()));
+            parts.push(Part::Static(EcoString::from(&s[start..pos])));
         }
     }
 
@@ -134,7 +135,7 @@ fn parse_component(s: &str) -> Result<Vec<Part>, RouteError> {
 }
 
 /// Extract all parameter names from a template path (convenience for probe).
-pub fn parse_params(path: &Path) -> Vec<String> {
+pub fn parse_params(path: &Path) -> Vec<EcoString> {
     let Ok(tpl) = parse_template(path) else {
         return vec![];
     };
@@ -163,7 +164,7 @@ pub fn extract(content: &Content) -> Vec<ParamSet> {
                     let mut params = ParamSet::new();
                     for (k, v) in dict.iter() {
                         if let Value::Str(s) = v {
-                            params.push((k.to_string(), s.to_string()));
+                            params.push((EcoString::from(k.as_str()), EcoString::from(s.as_str())));
                         }
                     }
                     if !params.is_empty() {
