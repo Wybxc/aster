@@ -60,6 +60,9 @@ pub struct ProcessingContext<'a> {
     pub project: &'a ProjectRoot,
     pub page_path: PathBuf,
     pub hl_css_path: Option<PathBuf>,
+    /// Additional element processors to run after the built-in set.
+    /// The default is empty — only built-in processors run.
+    pub extra_processors: &'a [&'a dyn ElementProcessor],
 }
 
 impl ProcessingContext<'_> {
@@ -83,18 +86,22 @@ impl ProcessingContext<'_> {
     }
 }
 
-/// Run every built-in processor in a single DOM traversal,
-/// then inject the highlight CSS `<link>` if configured.
+/// Built-in processors run on every page, in this order.
+const BUILTIN_PROCESSORS: &[&dyn ElementProcessor] = &[
+    &css::CssProcessor,
+    &image::ImageProcessor,
+    &highlight::HighlightProcessor,
+];
+
+/// Run built-in processors followed by any extra processors from the
+/// context, then inject the highlight CSS `<link>` if configured.
 pub fn process_document(doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> Result<()> {
-    process_all(
-        doc,
-        ctx,
-        &[
-            &css::CssProcessor,
-            &image::ImageProcessor,
-            &highlight::HighlightProcessor,
-        ],
-    )?;
+    let all: Vec<&dyn ElementProcessor> = BUILTIN_PROCESSORS
+        .iter()
+        .copied()
+        .chain(ctx.extra_processors.iter().copied())
+        .collect();
+    process_all(doc, ctx, &all)?;
 
     if let Some(ref hl_css) = ctx.hl_css_path {
         inject_hl_link(doc, hl_css);

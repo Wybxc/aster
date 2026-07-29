@@ -4,7 +4,7 @@ use std::sync::Arc;
 use anyhow::{Result, bail};
 use typst::comemo::Track;
 use typst::engine::{Route, Sink, Traced};
-use typst::foundations::Content;
+use typst::foundations::{Content, Dict};
 use typst::syntax::{RootedPath, VirtualPath, VirtualRoot};
 use typst::utils::LazyHash;
 use typst::{Library, World};
@@ -16,7 +16,7 @@ use typst_kit::packages::SystemPackages;
 
 use crate::diag;
 use crate::project::ProjectRoot;
-use crate::world::CompileWorld;
+use crate::world::{self, CompileWorld};
 
 /// Reusable compilation context for a project.
 ///
@@ -57,6 +57,12 @@ impl CompileContext {
         });
 
         Self { fonts, files }
+    }
+
+    /// Build a [`Library`] with the given `sys.inputs` dict, pre-wrapped
+    /// in a [`LazyHash`].
+    pub fn page_library(&self, inputs: Dict) -> LazyHash<Library> {
+        LazyHash::new(world::build_library(inputs))
     }
 
     /// Create a per-entry world recycling fonts/files.

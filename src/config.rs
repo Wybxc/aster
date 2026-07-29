@@ -16,15 +16,38 @@ pub struct Themes {
     pub dark: String,
 }
 
-/// Parse highlight-specific config from `aster.toml`, filling in reasonable
-/// defaults for any missing piece so the return is always `Some`.
-pub fn parse_highlight(path: &Path) -> Result<HighlightConfig> {
-    let content = std::fs::read_to_string(path)
-        .with_context(|| format!("failed to read {}", path.display()))?;
-    let table: toml::Table = content
-        .parse()
-        .with_context(|| format!("failed to parse {}", path.display()))?;
+/// Complete parsed configuration from `aster.toml`.
+///
+/// Build once, share everywhere — no repeat file I/O.
+pub struct AsterConfig {
+    /// Typst-friendly config dict for `sys.inputs`.
+    pub dict: Dict,
+    /// Highlight theme settings (filled with defaults when absent).
+    pub highlight: HighlightConfig,
+}
 
+impl AsterConfig {
+    /// Read `aster.toml` and parse both `sys.inputs` dict and
+    /// `[highlight]` section in a single pass.
+    pub fn load(path: &Path) -> Result<Self> {
+        let content = std::fs::read_to_string(path)
+            .with_context(|| format!("failed to read {}", path.display()))?;
+        let table: toml::Table = content
+            .parse()
+            .with_context(|| format!("failed to parse {}", path.display()))?;
+        let highlight = parse_highlight_inner(&table);
+        let value = toml::Value::Table(table);
+
+        let dict = match toml_to_typst(value) {
+            Value::Dict(d) => d,
+            _ => bail!("unexpected value type from toml conversion"),
+        };
+        Ok(Self { dict, highlight })
+    }
+}
+
+/// Extract `[highlight]` config from an already-parsed TOML table.
+fn parse_highlight_inner(table: &toml::Table) -> HighlightConfig {
     let light = table
         .get("highlight")
         .and_then(|h| h.get("themes"))
@@ -41,23 +64,8 @@ pub fn parse_highlight(path: &Path) -> Result<HighlightConfig> {
         .map(String::from)
         .unwrap_or_else(|| DEFAULT_DARK.to_string());
 
-    Ok(HighlightConfig {
+    HighlightConfig {
         themes: Themes { light, dark },
-    })
-}
-
-/// Parse `aster.toml` at the given path and return a [`Dict`] suitable for
-/// `sys.inputs`.
-pub fn parse_config(path: &Path) -> Result<Dict> {
-    let content = std::fs::read_to_string(path)
-        .with_context(|| format!("failed to read {}", path.display()))?;
-    let table: toml::Table = content
-        .parse()
-        .with_context(|| format!("failed to parse {}", path.display()))?;
-    let value = toml::Value::Table(table);
-    match toml_to_typst(value) {
-        Value::Dict(d) => Ok(d),
-        _ => bail!("unexpected value type from toml conversion"),
     }
 }
 

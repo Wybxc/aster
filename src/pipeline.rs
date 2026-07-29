@@ -6,9 +6,9 @@ use typst::foundations::{Dict, Str, Value};
 use typst::utils::LazyHash;
 use typst_html::HtmlOptions;
 
-use crate::config;
+use crate::config::AsterConfig;
 use crate::project::ProjectRoot;
-use crate::{compile, diag, route, transform, world};
+use crate::{compile, diag, route, transform};
 
 /// Return a complete `_aster` protocol value with empty collections.
 fn empty_aster() -> Value {
@@ -22,28 +22,22 @@ fn empty_aster() -> Value {
 ///
 /// Returns `(output_paths, per_page_errors)` on success. The caller is
 /// responsible for printing errors and deciding whether they are fatal.
-pub fn build(project: &ProjectRoot, config: Dict) -> Result<(Vec<PathBuf>, Vec<anyhow::Error>)> {
+pub fn build(
+    project: &ProjectRoot,
+    aster_config: AsterConfig,
+) -> Result<(Vec<PathBuf>, Vec<anyhow::Error>)> {
     let builder = compile::CompileContext::new(project);
 
     // Pre-resolve highlight theme colours (non-fatal on failure).
-    let cfg = config::parse_highlight(&project.config_file()).unwrap_or_else(|e| {
-        diag::emit_warning(&format!("failed to parse highlight config: {e:#}"));
-        config::HighlightConfig {
-            themes: config::Themes {
-                light: String::from("InspiredGitHub"),
-                dark: String::from("base16-eighties.dark"),
-            },
-        }
-    });
-    let hl_css_path =
-        transform::highlight::resolve_highlight_css(&cfg, project).unwrap_or_else(|e| {
+    let hl_css_path = transform::highlight::resolve_highlight_css(&aster_config.highlight, project)
+        .unwrap_or_else(|e| {
             diag::emit_warning(&format!("failed to resolve highlight CSS: {e:#}"));
             None
         });
 
     // --- Phase 1: content collections ---
     let aster_value = if project.content_dir().is_dir() {
-        let lib = LazyHash::new(world::build_library(config.clone()));
+        let lib = builder.page_library(aster_config.dict.clone());
         crate::content::load_collections(project, &builder, &lib)
             .map_err(|err| anyhow::anyhow!("failed to load content collections: {err}"))?
     } else {
@@ -51,10 +45,10 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<(Vec<PathBuf>, Vec<a
     };
 
     // Base Typst inputs — reused for both static and dynamic pages.
-    let mut base_inputs: Vec<(Str, Value)> = config.into_iter().collect();
+    let mut base_inputs: Vec<(Str, Value)> = aster_config.dict.into_iter().collect();
     base_inputs.push((Str::from("_aster"), aster_value));
 
-    let page_library = LazyHash::new(world::build_library(Dict::from_iter(base_inputs.clone())));
+    let page_library = builder.page_library(Dict::from_iter(base_inputs.clone()));
 
     if !project.src_dir().is_dir() {
         bail!("src/ directory not found in project");
@@ -115,7 +109,7 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<(Vec<PathBuf>, Vec<a
                 for (name, value) in params {
                     inputs.push((Str::from(name), Value::Str(Str::from(value))));
                 }
-                let library = LazyHash::new(world::build_library(Dict::from_iter(inputs)));
+                let library = builder.page_library(Dict::from_iter(inputs));
                 enqueue(entry.clone(), output, library);
             }
         }
@@ -136,6 +130,7 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<(Vec<PathBuf>, Vec<a
                 project,
                 page_path: output.clone(),
                 hl_css_path: hl_css_path.clone(),
+                extra_processors: &[],
             };
             transform::process_document(&mut doc, &pctx)?;
 

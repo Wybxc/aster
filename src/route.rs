@@ -223,3 +223,148 @@ impl RouteTemplate {
 pub fn output_path(project: &ProjectRoot, tpl: &RouteTemplate, params: &ParamSet) -> PathBuf {
     tpl.generate(project, params)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn p(path: &str) -> Result<RouteTemplate, RouteError> {
+        parse_template(Path::new(path))
+    }
+
+    // ── Happy path ──────────────────────────────────────────
+
+    #[test]
+    fn static_path() {
+        let tpl = p("about.typ").unwrap();
+        assert_eq!(tpl.segments.len(), 1);
+        assert_eq!(tpl.segments[0], &[Part::Static(EcoString::from("about"))]);
+    }
+
+    #[test]
+    fn single_param() {
+        let tpl = p("[slug].typ").unwrap();
+        assert_eq!(tpl.segments[0], &[Part::Param(EcoString::from("slug"))]);
+    }
+
+    #[test]
+    fn spread_param() {
+        let tpl = p("[...slug].typ").unwrap();
+        assert_eq!(tpl.segments[0], &[Part::Spread(EcoString::from("slug"))]);
+    }
+
+    #[test]
+    fn multi_segment_static() {
+        let tpl = p("blog/index.typ").unwrap();
+        assert_eq!(tpl.segments.len(), 2);
+        assert_eq!(tpl.segments[0], &[Part::Static(EcoString::from("blog"))]);
+        assert_eq!(tpl.segments[1], &[Part::Static(EcoString::from("index"))]);
+    }
+
+    #[test]
+    fn param_in_subdir() {
+        let tpl = p("blog/[slug].typ").unwrap();
+        assert_eq!(tpl.segments.len(), 2);
+        assert_eq!(tpl.segments[0], &[Part::Static(EcoString::from("blog"))]);
+        assert_eq!(tpl.segments[1], &[Part::Param(EcoString::from("slug"))]);
+    }
+
+    #[test]
+    fn static_prefix_before_param() {
+        let tpl = p("prefix[slug].typ").unwrap();
+        assert_eq!(
+            tpl.segments[0],
+            &[
+                Part::Static(EcoString::from("prefix")),
+                Part::Param(EcoString::from("slug")),
+            ]
+        );
+    }
+
+    #[test]
+    fn mixed_static_and_param() {
+        let tpl = p("a[one]b[two]c.typ").unwrap();
+        assert_eq!(
+            tpl.segments[0],
+            &[
+                Part::Static(EcoString::from("a")),
+                Part::Param(EcoString::from("one")),
+                Part::Static(EcoString::from("b")),
+                Part::Param(EcoString::from("two")),
+                Part::Static(EcoString::from("c")),
+            ]
+        );
+    }
+
+    // ── parse_params ────────────────────────────────────────
+
+    #[test]
+    fn params_extraction() {
+        let ps = parse_params(Path::new("blog/[slug].typ"));
+        assert_eq!(ps, &[EcoString::from("slug")]);
+    }
+
+    #[test]
+    fn params_spread() {
+        let ps = parse_params(Path::new("[...path].typ"));
+        assert_eq!(ps, &[EcoString::from("path")]);
+    }
+
+    #[test]
+    fn params_multiple() {
+        let ps = parse_params(Path::new("a/[b]/c/[d].typ"));
+        assert_eq!(ps, &[EcoString::from("b"), EcoString::from("d")]);
+    }
+
+    #[test]
+    fn params_none_on_static() {
+        let ps = parse_params(Path::new("about.typ"));
+        assert!(ps.is_empty());
+    }
+
+    // ── Error cases ─────────────────────────────────────────
+
+    #[test]
+    fn err_unbalanced_brackets() {
+        assert!(matches!(
+            p("[slug.typ"),
+            Err(RouteError::UnbalancedBrackets)
+        ));
+    }
+
+    #[test]
+    fn err_empty_brackets() {
+        assert!(matches!(p("[].typ"), Err(RouteError::EmptyBrackets)));
+        assert!(matches!(p("[...].typ"), Err(RouteError::EmptyBrackets)));
+    }
+
+    #[test]
+    fn err_consecutive_brackets() {
+        assert!(matches!(
+            p("[a][b].typ"),
+            Err(RouteError::ConsecutiveBrackets)
+        ));
+    }
+
+    #[test]
+    fn err_spread_not_standalone() {
+        assert!(matches!(
+            p("prefix[...slug].typ"),
+            Err(RouteError::SpreadNotStandalone(0))
+        ));
+    }
+
+    #[test]
+    fn segment_with_surrounding_static_text() {
+        // `a[b]c` is valid — static text on both sides of a param.
+        let tpl = p("a[b]c.typ").unwrap();
+        assert_eq!(
+            tpl.segments[0],
+            &[
+                Part::Static(EcoString::from("a")),
+                Part::Param(EcoString::from("b")),
+                Part::Static(EcoString::from("c")),
+            ]
+        );
+    }
+}

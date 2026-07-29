@@ -393,14 +393,18 @@ mod tests {
         );
         let tokens = do_typst_highlight(code, "typc", theme);
         // We expect at least some tokens (no panic, no empty output).
-        assert!(!tokens.is_empty(), "should produce tokens even for invalid code");
+        assert!(
+            !tokens.is_empty(),
+            "should produce tokens even for invalid code"
+        );
         // Every token's text must come from the input string (no garbage).
         for (_, _, t) in &tokens {
             let s = t.as_str();
             if s != "\n" {
                 assert!(
                     code.contains(s.trim()),
-                    "token {:?} must be a substring of input", s
+                    "token {:?} must be a substring of input",
+                    s
                 );
             }
         }
@@ -411,11 +415,7 @@ mod tests {
         // Dict keys with hyphens (valid Typst identifiers) must NOT
         // cause string values to be pushed to the end of output.
         let theme = &THEMES.themes["InspiredGitHub"];
-        let code = concat!(
-            "let x = (\n",
-            "  hello-world: \"value\",\n",
-            ")\n",
-        );
+        let code = concat!("let x = (\n", "  hello-world: \"value\",\n", ")\n",);
         let tokens = do_typst_highlight(code, "typc", theme);
         let texts = token_texts(&tokens);
         let non_ws: Vec<&str> = texts
@@ -425,7 +425,17 @@ mod tests {
             .collect();
         assert_eq!(
             non_ws,
-            &["let", "x", "=", "(", "hello-world", ":", "\"value\"", ",", ")"],
+            &[
+                "let",
+                "x",
+                "=",
+                "(",
+                "hello-world",
+                ":",
+                "\"value\"",
+                ",",
+                ")"
+            ],
             "hyphenated dict key does not scramble order"
         );
     }
@@ -464,7 +474,10 @@ mod tests {
 
         let hello_world_value = non_ws.iter().position(|&s| s == "\"hello-world\"");
         let hello_aster = non_ws.iter().position(|&s| s == "\"Hello, Aster!\"");
-        assert!(hello_world_value < hello_aster, "\"hello-world\" before \"Hello, Aster!\"");
+        assert!(
+            hello_world_value < hello_aster,
+            "\"hello-world\" before \"Hello, Aster!\""
+        );
 
         let closing_paren = non_ws.iter().rposition(|&s| s == ")");
         if let (Some(hv), Some(cp)) = (hello_aster, closing_paren) {
@@ -506,11 +519,11 @@ mod tests {
         let first_let = non_ws.iter().position(|&s| s == "let").unwrap();
         let second_let = non_ws.iter().rposition(|&s| s == "let").unwrap();
         let first_one = non_ws.iter().position(|&s| s == "1").unwrap();
-        let hello = non_ws.iter().position(|&s| s == "\"Hello, Aster!\"").unwrap();
-        assert!(
-            first_let < second_let,
-            "first 'let' before second 'let'"
-        );
+        let hello = non_ws
+            .iter()
+            .position(|&s| s == "\"Hello, Aster!\"")
+            .unwrap();
+        assert!(first_let < second_let, "first 'let' before second 'let'");
         assert!(
             first_one < hello,
             "value '1' before '\"Hello, Aster!\"' — not pushed to end"
@@ -541,7 +554,21 @@ mod tests {
             .collect();
         assert_eq!(
             non_ws,
-            &["let", "x", "=", "(", "a", ":", "\"hello\"", ",", "b", ":", "\"world\"", ",", ")"],
+            &[
+                "let",
+                "x",
+                "=",
+                "(",
+                "a",
+                ":",
+                "\"hello\"",
+                ",",
+                "b",
+                ":",
+                "\"world\"",
+                ",",
+                ")"
+            ],
             "nested let-dict tokens in source order, not string-values-last"
         );
     }
@@ -584,7 +611,9 @@ mod tests {
             .collect();
         assert_eq!(
             non_ws,
-            &["{", "\"", "a", "\"", ":", "1", ",", "\"", "b", "\"", ":", "2", "}"],
+            &[
+                "{", "\"", "a", "\"", ":", "1", ",", "\"", "b", "\"", ":", "2", "}"
+            ],
             "JSON tokens (quotes & content separate) should appear in source-code order"
         );
     }

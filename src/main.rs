@@ -56,10 +56,10 @@ fn build(project_dir: Option<std::path::PathBuf>) -> Result<()> {
         }
     };
 
-    let config =
-        config::parse_config(&project.config_file()).context("failed to parse aster.toml")?;
+    let aster_config =
+        config::AsterConfig::load(&project.config_file()).context("failed to parse aster.toml")?;
 
-    let (_outputs, errors) = pipeline::build(&project, config)?;
+    let (_outputs, errors) = pipeline::build(&project, aster_config)?;
 
     for err in &errors {
         diag::emit_error(&format!("{err:#}"));
