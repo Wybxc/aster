@@ -7,13 +7,6 @@ use anyhow::{Context, Result};
 use typst::ecow::EcoString;
 use typst_html::{HtmlElement, HtmlNode};
 
-/// Signal returned by the callback passed to [`walk_mut`] to control
-/// whether children of the current element should be visited.
-pub enum WalkControl {
-    Continue,
-    SkipChildren,
-}
-
 /// Resolve `..` components in a path without requiring the file to exist.
 pub fn normalize(path: &Path) -> PathBuf {
     use std::path::Component;
@@ -65,8 +58,13 @@ pub fn write_file(path: &Path, data: &[u8]) -> Result<()> {
     Ok(())
 }
 
+/// Signal returned by the callback passed to [`walk_mut`] to control
+/// whether children of the current element should be visited.
+pub enum WalkControl {
+    Continue,
+    SkipChildren,
+}
 /// Extension-trait helpers for common [`HtmlElement`] operations.
-
 /// Extension methods on [`HtmlElement`] that DRY up the frequently
 /// repeated `elem.attrs.0.iter()` patterns.
 pub trait HtmlElementExt {
@@ -156,19 +154,19 @@ impl HtmlElementExt for HtmlElement {
     }
 
     fn collect_text(&self) -> String {
+        fn collect_impl(elem: &HtmlElement, out: &mut String) {
+            for child in &elem.children {
+                match child {
+                    HtmlNode::Text(t, _) => out.push_str(t.as_str()),
+                    HtmlNode::Element(e) if e.tag == typst_html::tag::br => out.push('\n'),
+                    HtmlNode::Element(e) => collect_impl(e, out),
+                    _ => {}
+                }
+            }
+        }
+
         let mut out = String::new();
         collect_impl(self, &mut out);
         out
-    }
-}
-
-fn collect_impl(elem: &HtmlElement, out: &mut String) {
-    for child in &elem.children {
-        match child {
-            HtmlNode::Text(t, _) => out.push_str(t.as_str()),
-            HtmlNode::Element(e) if e.tag == typst_html::tag::br => out.push('\n'),
-            HtmlNode::Element(e) => collect_impl(e, out),
-            _ => {}
-        }
     }
 }
