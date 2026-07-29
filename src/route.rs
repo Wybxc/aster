@@ -34,31 +34,17 @@ pub struct RouteTemplate {
 }
 
 /// Errors that can occur during template parsing.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum RouteError {
+    #[error("unbalanced brackets in route path")]
     UnbalancedBrackets,
+    #[error("empty brackets `[]` in route path")]
     EmptyBrackets,
+    #[error("consecutive brackets `][` in route path")]
     ConsecutiveBrackets,
+    #[error("rest parameter `[...` in segment {0} must be a standalone segment")]
     SpreadNotStandalone(usize),
 }
-
-impl std::fmt::Display for RouteError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            RouteError::UnbalancedBrackets => write!(f, "unbalanced brackets in route path"),
-            RouteError::EmptyBrackets => write!(f, "empty brackets `[]` in route path"),
-            RouteError::ConsecutiveBrackets => write!(f, "consecutive brackets `][` in route path"),
-            RouteError::SpreadNotStandalone(idx) => {
-                write!(
-                    f,
-                    "rest parameter `[...` in segment {idx} must be a standalone segment"
-                )
-            }
-        }
-    }
-}
-
-impl std::error::Error for RouteError {}
 
 // ---------------------------------------------------------------------------
 // Parsing
