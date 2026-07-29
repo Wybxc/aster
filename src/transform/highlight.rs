@@ -278,12 +278,6 @@ pub fn resolve_highlight_css(
     let light_h = Highlighter::new(&light);
     let dark_h = Highlighter::new(&dark);
 
-    let _default_light = color_to_hex(
-        light
-            .settings
-            .foreground
-            .unwrap_or(syntect::highlighting::Color::BLACK),
-    );
     let default_dark = color_to_hex(
         dark.settings
             .foreground
@@ -322,24 +316,21 @@ pub fn resolve_highlight_css(
         return Ok(None);
     }
 
-    // Generate CSS.
-    let mut css = String::from(":root,[data-theme=\"light\"]{\n");
+    // Generate CSS — class rules directly, no CSS variable indirection.
+    let mut css = String::new();
     for (name, lc, _) in &vars {
-        let _ = std::fmt::Write::write_fmt(&mut css, format_args!("  --hl-{name}:{lc};\n"));
-    }
-    css.push_str("}\n[data-theme=\"dark\"]{\n");
-    for (name, _, dc) in &vars {
-        if *dc != default_dark {
-            let _ = std::fmt::Write::write_fmt(&mut css, format_args!("  --hl-{name}:{dc};\n"));
-        }
-    }
-    css.push_str("}\n");
-    // Class-name rules — bold & italic can differ between themes.
-    for (name, _, _) in &vars {
         let _ = std::fmt::Write::write_fmt(
             &mut css,
-            format_args!(".hl-{name}{{color:var(--hl-{name})}}\n"),
+            format_args!(":root,[data-theme=\"light\"] .hl-{name}{{color:{lc}}}\n"),
         );
+    }
+    for (name, _, dc) in &vars {
+        if *dc != default_dark {
+            let _ = std::fmt::Write::write_fmt(
+                &mut css,
+                format_args!("[data-theme=\"dark\"] .hl-{name}{{color:{dc}}}\n"),
+            );
+        }
     }
     css.push_str(".hl-bold{font-weight:bold}\n");
     css.push_str(".hl-italic{font-style:italic}\n");
