@@ -26,15 +26,20 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<(Vec<PathBuf>, Vec<a
     let builder = compile::CompileContext::new(project);
 
     // Pre-resolve highlight theme colours (non-fatal on failure).
-    let hl_css_path = match config::parse_highlight(&project.config_file()) {
-        Ok(Some(cfg)) => {
-            transform::highlight::resolve_highlight_css(&cfg, project).unwrap_or_else(|e| {
-                diag::emit_warning(&format!("failed to resolve highlight CSS: {e:#}"));
-                None
-            })
+    let cfg = config::parse_highlight(&project.config_file()).unwrap_or_else(|e| {
+        diag::emit_warning(&format!("failed to parse highlight config: {e:#}"));
+        config::HighlightConfig {
+            themes: config::Themes {
+                light: String::from("InspiredGitHub"),
+                dark: String::from("base16-eighties.dark"),
+            },
         }
-        _ => None,
-    };
+    });
+    let hl_css_path =
+        transform::highlight::resolve_highlight_css(&cfg, project).unwrap_or_else(|e| {
+            diag::emit_warning(&format!("failed to resolve highlight CSS: {e:#}"));
+            None
+        });
 
     // --- Phase 1: content collections ---
     let aster_value = if project.content_dir().is_dir() {

@@ -3,6 +3,9 @@ use std::path::Path;
 use anyhow::{Context, Result, bail};
 use typst::foundations::{Dict, Str, Value};
 
+const DEFAULT_LIGHT: &str = "InspiredGitHub";
+const DEFAULT_DARK: &str = "base16-eighties.dark";
+
 /// Highlight theme configuration from `aster.toml`.
 pub struct HighlightConfig {
     pub themes: Themes,
@@ -13,33 +16,34 @@ pub struct Themes {
     pub dark: String,
 }
 
-/// Parse highlight-specific config from `aster.toml`.
-pub fn parse_highlight(path: &Path) -> Result<Option<HighlightConfig>> {
+/// Parse highlight-specific config from `aster.toml`, filling in reasonable
+/// defaults for any missing piece so the return is always `Some`.
+pub fn parse_highlight(path: &Path) -> Result<HighlightConfig> {
     let content = std::fs::read_to_string(path)
         .with_context(|| format!("failed to read {}", path.display()))?;
     let table: toml::Table = content
         .parse()
         .with_context(|| format!("failed to parse {}", path.display()))?;
-    let Some(highlight) = table.get("highlight") else {
-        return Ok(None);
-    };
-    let themes = highlight
-        .get("themes")
-        .and_then(|v| v.as_table())
-        .context("expected [highlight.themes] section")?;
-    let light = themes
-        .get("light")
+
+    let light = table
+        .get("highlight")
+        .and_then(|h| h.get("themes"))
+        .and_then(|t| t.get("light"))
         .and_then(|v| v.as_str())
         .map(String::from)
-        .context("expected [highlight.themes].light")?;
-    let dark = themes
-        .get("dark")
+        .unwrap_or_else(|| DEFAULT_LIGHT.to_string());
+
+    let dark = table
+        .get("highlight")
+        .and_then(|h| h.get("themes"))
+        .and_then(|t| t.get("dark"))
         .and_then(|v| v.as_str())
         .map(String::from)
-        .context("expected [highlight.themes].dark")?;
-    Ok(Some(HighlightConfig {
+        .unwrap_or_else(|| DEFAULT_DARK.to_string());
+
+    Ok(HighlightConfig {
         themes: Themes { light, dark },
-    }))
+    })
 }
 
 /// Parse `aster.toml` at the given path and return a [`Dict`] suitable for
