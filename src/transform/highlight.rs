@@ -13,9 +13,8 @@ use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 use crate::config::HighlightConfig;
 use crate::project::ProjectRoot;
 
-use super::{
-    ElementProcessor, ProcessingContext, WalkControl, html_util::HtmlElementExt, walk_mut,
-};
+use super::{ElementProcessor, ProcessingContext, WalkControl, walk_mut};
+use crate::utils::HtmlElementExt;
 
 static SS: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
 static THEMES: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);

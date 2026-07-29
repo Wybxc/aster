@@ -1,46 +1,20 @@
 pub mod css;
 pub mod highlight;
-pub mod html_util;
 pub mod image;
 
 use std::path::PathBuf;
 
 use anyhow::Result;
-use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
+use typst_html::HtmlDocument;
 
 use crate::project::ProjectRoot;
 
-/// Signal returned by the callback passed to [`walk_mut`] to control
-/// whether children of the current element should be visited.
-pub enum WalkControl {
-    Continue,
-    SkipChildren,
-}
+pub use crate::utils::{WalkControl, walk_mut};
 
 /// A processor that transforms the document as a whole — CSS bundling,
 /// image extraction, syntax highlighting, etc.
 pub trait ElementProcessor {
     fn process(&self, doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> Result<()>;
-}
-
-/// Recursively visit every descendant `HtmlElement` depth-first (mutable).
-///
-/// Processors that need element-level access can use this instead of
-/// writing their own traversal.  Capture external state (such as
-/// [`ProcessingContext`]) in the closure.
-pub fn walk_mut(
-    elem: &mut HtmlElement,
-    f: &mut impl FnMut(&mut HtmlElement) -> Result<WalkControl>,
-) -> Result<()> {
-    if matches!(f(elem)?, WalkControl::SkipChildren) {
-        return Ok(());
-    }
-    for child in elem.children.make_mut().iter_mut() {
-        if let HtmlNode::Element(e) = child {
-            walk_mut(e, f)?;
-        }
-    }
-    Ok(())
 }
 
 /// Per-page context for the document processing pipeline.

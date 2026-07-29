@@ -1,10 +1,35 @@
-//! Extension-trait helpers for common [`HtmlElement`] operations.
-//!
-//! Usage: `use transform::html_util::HtmlElementExt;` — then call methods
-//! directly on `HtmlElement` values.
+//! Utility helpers — DOM traversal, HTML element extension methods, etc.
 
+use anyhow::Result;
 use typst::ecow::EcoString;
 use typst_html::{HtmlElement, HtmlNode};
+
+/// Signal returned by the callback passed to [`walk_mut`] to control
+/// whether children of the current element should be visited.
+pub enum WalkControl {
+    Continue,
+    SkipChildren,
+}
+
+/// Recursively visit every descendant `HtmlElement` depth-first (mutable).
+///
+/// Capture external state (such as [`ProcessingContext`]) in the closure.
+pub fn walk_mut(
+    elem: &mut HtmlElement,
+    f: &mut impl FnMut(&mut HtmlElement) -> Result<WalkControl>,
+) -> Result<()> {
+    if matches!(f(elem)?, WalkControl::SkipChildren) {
+        return Ok(());
+    }
+    for child in elem.children.make_mut().iter_mut() {
+        if let HtmlNode::Element(e) = child {
+            walk_mut(e, f)?;
+        }
+    }
+    Ok(())
+}
+
+/// Extension-trait helpers for common [`HtmlElement`] operations.
 
 /// Extension methods on [`HtmlElement`] that DRY up the frequently
 /// repeated `elem.attrs.0.iter()` patterns.

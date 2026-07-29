@@ -6,7 +6,8 @@ use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions};
 use lightningcss::targets::Browsers;
 use typst_html::HtmlDocument;
 
-use super::{ElementProcessor, ProcessingContext, WalkControl, html_util::HtmlElementExt};
+use super::{ElementProcessor, ProcessingContext, WalkControl};
+use crate::utils::HtmlElementExt;
 
 pub(super) struct CssProcessor;
 

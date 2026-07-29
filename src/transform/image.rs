@@ -5,7 +5,8 @@ use base64::Engine;
 use typst::ecow::{EcoString, eco_format};
 use typst_html::HtmlDocument;
 
-use super::{ElementProcessor, ProcessingContext, WalkControl, html_util::HtmlElementExt};
+use super::{ElementProcessor, ProcessingContext, WalkControl};
+use crate::utils::HtmlElementExt;
 
 /// Minimum decoded size (bytes) below which a data URI stays inline.
 const IMAGE_EXTRACT_THRESHOLD: usize = 1024;

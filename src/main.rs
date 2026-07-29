@@ -6,6 +6,7 @@ mod pipeline;
 mod project;
 mod route;
 mod transform;
+mod utils;
 mod world;
 
 use anyhow::{Context, Result, bail};
