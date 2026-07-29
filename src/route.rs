@@ -9,10 +9,6 @@ use crate::project::ProjectRoot;
 /// Parameter assignments for a single generated page.
 pub type ParamSet = Vec<(String, String)>;
 
-// ---------------------------------------------------------------------------
-// Route template — pre-parsed, validated
-// ---------------------------------------------------------------------------
-
 /// A single part within a route segment.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Part {
@@ -45,10 +41,6 @@ pub enum RouteError {
     #[error("rest parameter `[...` in segment {0} must be a standalone segment")]
     SpreadNotStandalone(usize),
 }
-
-// ---------------------------------------------------------------------------
-// Parsing
-// ---------------------------------------------------------------------------
 
 /// Parse a template path (relative to `src_dir`) into a validated [`RouteTemplate`].
 pub fn parse_template(path: &Path) -> Result<RouteTemplate, RouteError> {
@@ -93,7 +85,7 @@ pub fn parse_template(path: &Path) -> Result<RouteTemplate, RouteError> {
 
 fn is_last_component(path: &Path, comp: std::path::Component<'_>) -> bool {
     let mut it = path.components().rev();
-    it.next().map_or(false, |last| last == comp)
+    it.next() == Some(comp)
 }
 
 /// Split a route component string into parts at `[...]` boundaries.
@@ -141,10 +133,6 @@ fn parse_component(s: &str) -> Result<Vec<Part>, RouteError> {
     Ok(parts)
 }
 
-// ---------------------------------------------------------------------------
-// Parameter name extraction
-// ---------------------------------------------------------------------------
-
 /// Extract all parameter names from a template path (convenience for probe).
 pub fn parse_params(path: &Path) -> Vec<String> {
     let Ok(tpl) = parse_template(path) else {
@@ -161,10 +149,6 @@ pub fn parse_params(path: &Path) -> Vec<String> {
     }
     params
 }
-
-// ---------------------------------------------------------------------------
-// Route extraction from compiled content
-// ---------------------------------------------------------------------------
 
 /// Extract route declarations from compiled content.
 pub fn extract(content: &Content) -> Vec<ParamSet> {
@@ -192,10 +176,6 @@ pub fn extract(content: &Content) -> Vec<ParamSet> {
     });
     result
 }
-
-// ---------------------------------------------------------------------------
-// Output path generation
-// ---------------------------------------------------------------------------
 
 impl RouteTemplate {
     /// Compute the output path for a given set of params.

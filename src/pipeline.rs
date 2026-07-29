@@ -130,6 +130,23 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<BuildResult> {
         }
     }
 
+    // --- Detect collisions ---
+    {
+        let mut seen = std::collections::HashSet::new();
+        page_docs.retain(|(output, _)| {
+            if seen.contains(output) {
+                eprintln!(
+                    "warning: duplicate output path `{}` — skipping",
+                    output.display()
+                );
+                false
+            } else {
+                seen.insert(output.clone());
+                true
+            }
+        });
+    }
+
     // --- Serialize ---
     for (output, doc) in &page_docs {
         let raw = typst_html::html(doc, &HtmlOptions::default())
