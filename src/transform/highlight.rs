@@ -12,7 +12,7 @@ use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 use crate::config::HighlightConfig;
 use crate::project::ProjectRoot;
 
-use super::{ElementProcessor, ProcessingContext, WalkControl};
+use super::{ElementProcessor, ProcessingContext, WalkControl, walk_mut};
 
 static SS: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
 static THEMES: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
@@ -23,69 +23,91 @@ const TOKEN_THEME: &str = "InspiredGitHub";
 /// Languages that Typst can parse with its own AST.
 const TYPST_LANGS: &[&str] = &["typ", "typst", "typc", "typm"];
 
-/// [`ElementProcessor`] that syntax-highlights `<code data-lang="...">` blocks.
 pub(super) struct HighlightProcessor;
 
 impl ElementProcessor for HighlightProcessor {
-    fn matches(&self, elem: &HtmlElement) -> bool {
-        elem.tag == typst_html::tag::code
-            && elem
+    fn process(&self, doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> Result<()> {
+        // First pass: syntax-highlight all <code data-lang="..."> blocks.
+        let theme = &THEMES.themes[TOKEN_THEME];
+        walk_mut(doc.root_mut(), ctx, &mut |elem, _ctx| {
+            if elem.tag != typst_html::tag::code {
+                return Ok(WalkControl::Continue);
+            }
+            if !elem
                 .attrs
                 .0
                 .iter()
                 .any(|(a, _v)| *a.resolve() == *"data-lang")
-    }
+            {
+                return Ok(WalkControl::Continue);
+            }
 
-    fn process(
-        &self,
-        elem: &mut HtmlElement,
-        _ctx: &ProcessingContext<'_>,
-    ) -> anyhow::Result<WalkControl> {
-        let theme = &THEMES.themes[TOKEN_THEME];
-        let lang = match elem
-            .attrs
-            .0
-            .iter()
-            .find(|(a, _)| *a.resolve() == *"data-lang")
-            .map(|(_, v)| v.clone())
-        {
-            Some(l) => l,
-            None => return Ok(WalkControl::Continue),
-        };
-
-        let raw = collect_text(elem);
-        if raw.is_empty() {
-            return Ok(WalkControl::SkipChildren);
-        }
-
-        let tokens = if TYPST_LANGS.contains(&lang.as_str()) {
-            do_typst_highlight(&raw, &lang, theme)
-        } else {
-            do_syntect_highlight(&raw, &lang, theme)
-        };
-
-        let mut new_children: EcoVec<HtmlNode> = EcoVec::new();
-        for (scope_name, bits, txt) in &tokens {
-            let span = if scope_name == "default" && *bits == 0 {
-                // Plain tokens: no inline style, inherit parent styling.
-                HtmlElement::new(typst_html::tag::span)
-                    .with_children(eco_vec![HtmlNode::Text(txt.clone(), Span::detached())])
-            } else {
-                let mut style = eco_format!("color:var(--hl-{scope_name})");
-                if bits & 1 != 0 {
-                    style.push_str(";font-weight:bold");
-                }
-                if bits & 2 != 0 {
-                    style.push_str(";font-style:italic");
-                }
-                HtmlElement::new(typst_html::tag::span)
-                    .with_attr(typst_html::attr::style, style)
-                    .with_children(eco_vec![HtmlNode::Text(txt.clone(), Span::detached())])
+            let lang = match elem
+                .attrs
+                .0
+                .iter()
+                .find(|(a, _)| *a.resolve() == *"data-lang")
+                .map(|(_, v)| v.clone())
+            {
+                Some(l) => l,
+                None => return Ok(WalkControl::Continue),
             };
-            new_children.push(HtmlNode::Element(span));
+
+            let raw = collect_text(elem);
+            if raw.is_empty() {
+                return Ok(WalkControl::SkipChildren);
+            }
+
+            let tokens = if TYPST_LANGS.contains(&lang.as_str()) {
+                do_typst_highlight(&raw, &lang, theme)
+            } else {
+                do_syntect_highlight(&raw, &lang, theme)
+            };
+
+            let mut new_children: EcoVec<HtmlNode> = EcoVec::new();
+            for (scope_name, bits, txt) in &tokens {
+                let span = if scope_name == "default" && *bits == 0 {
+                    HtmlElement::new(typst_html::tag::span)
+                        .with_children(eco_vec![HtmlNode::Text(txt.clone(), Span::detached())])
+                } else {
+                    let mut style = eco_format!("color:var(--hl-{scope_name})");
+                    if bits & 1 != 0 {
+                        style.push_str(";font-weight:bold");
+                    }
+                    if bits & 2 != 0 {
+                        style.push_str(";font-style:italic");
+                    }
+                    HtmlElement::new(typst_html::tag::span)
+                        .with_attr(typst_html::attr::style, style)
+                        .with_children(eco_vec![HtmlNode::Text(txt.clone(), Span::detached())])
+                };
+                new_children.push(HtmlNode::Element(span));
+            }
+            elem.children = new_children;
+            Ok(WalkControl::SkipChildren)
+        })?;
+
+        // Second step: inject highlight CSS link into <head> if configured.
+        if let Some(ref hl_css) = ctx.hl_css_path {
+            let mut found_head = false;
+            for child in doc.root_mut().children.make_mut().iter_mut() {
+                if let HtmlNode::Element(head) = child
+                    && head.tag == typst_html::tag::head
+                {
+                    let link = HtmlElement::new(typst_html::tag::link)
+                        .with_attr(typst_html::attr::rel, "stylesheet")
+                        .with_attr(typst_html::attr::href, hl_css.to_string_lossy().as_ref());
+                    head.children.push(HtmlNode::Element(link));
+                    found_head = true;
+                    break;
+                }
+            }
+            if !found_head {
+                anyhow::bail!("highlight CSS configured but found no <head> element");
+            }
         }
-        elem.children = new_children;
-        Ok(WalkControl::SkipChildren)
+
+        Ok(())
     }
 }
 
@@ -341,35 +363,6 @@ pub fn resolve_highlight_css(
 
 fn color_to_hex(c: syntect::highlighting::Color) -> String {
     format!("#{:02x}{:02x}{:02x}", c.r, c.g, c.b)
-}
-
-// ---------------------------------------------------------------------------
-// Post-processing
-// ---------------------------------------------------------------------------
-
-impl HighlightProcessor {
-    /// Run after all highlighting is done — inject the highlight CSS `<link>`
-    /// into `<head>` when a configured path is present.
-    pub fn finalize_document(doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) {
-        if let Some(ref hl_css) = ctx.hl_css_path {
-            Self::inject_css_link(doc, hl_css);
-        }
-    }
-
-    fn inject_css_link(doc: &mut HtmlDocument, href: &Path) {
-        use typst_html::{attr, tag};
-        for child in doc.root_mut().children.make_mut().iter_mut() {
-            if let HtmlNode::Element(head) = child
-                && head.tag == tag::head
-            {
-                let link = HtmlElement::new(tag::link)
-                    .with_attr(attr::rel, "stylesheet")
-                    .with_attr(attr::href, href.to_string_lossy().as_ref());
-                head.children.push(HtmlNode::Element(link));
-                return;
-            }
-        }
-    }
 }
 
 #[cfg(test)]

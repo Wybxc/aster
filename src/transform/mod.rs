@@ -16,12 +16,21 @@ pub enum WalkControl {
     SkipChildren,
 }
 
+/// A processor that transforms the document as a whole — CSS bundling,
+/// image extraction, syntax highlighting, etc.
+pub trait ElementProcessor {
+    fn process(&self, doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> Result<()>;
+}
+
 /// Recursively visit every descendant `HtmlElement` depth-first (mutable).
-pub fn walk_mut<'a, E>(
+///
+/// Processors that need element-level access can use this instead of
+/// writing their own traversal.
+pub fn walk_mut<'a>(
     elem: &mut HtmlElement,
     ctx: &ProcessingContext<'a>,
-    f: &mut impl FnMut(&mut HtmlElement, &ProcessingContext<'a>) -> Result<WalkControl, E>,
-) -> Result<(), E> {
+    f: &mut impl FnMut(&mut HtmlElement, &ProcessingContext<'a>) -> Result<WalkControl>,
+) -> Result<()> {
     if matches!(f(elem, ctx)?, WalkControl::SkipChildren) {
         return Ok(());
     }
@@ -31,28 +40,6 @@ pub fn walk_mut<'a, E>(
         }
     }
     Ok(())
-}
-
-/// A processor that matches and transforms individual [`HtmlElement`] nodes.
-pub trait ElementProcessor {
-    fn matches(&self, elem: &HtmlElement) -> bool;
-    fn process(&self, elem: &mut HtmlElement, ctx: &ProcessingContext<'_>) -> Result<WalkControl>;
-}
-
-/// Run a set of [`ElementProcessor`]s on the document in a single traversal.
-pub fn process_all(
-    doc: &mut HtmlDocument,
-    ctx: &ProcessingContext<'_>,
-    processors: &[&dyn ElementProcessor],
-) -> Result<()> {
-    walk_mut(doc.root_mut(), ctx, &mut |elem, ctx| {
-        for p in processors {
-            if p.matches(elem) && matches!(p.process(elem, ctx)?, WalkControl::SkipChildren) {
-                return Ok(WalkControl::SkipChildren);
-            }
-        }
-        Ok(WalkControl::Continue)
-    })
 }
 
 /// Per-page context for the document processing pipeline.
@@ -83,18 +70,14 @@ impl ProcessingContext<'_> {
     }
 }
 
-/// Run every built-in processor in a single DOM traversal.
+/// Run every built-in processor in order.
 pub fn process_document(doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> Result<()> {
-    process_all(
-        doc,
-        ctx,
-        &[
-            &css::CssProcessor,
-            &image::ImageProcessor,
-            &highlight::HighlightProcessor,
-        ],
-    )?;
-
-    highlight::HighlightProcessor::finalize_document(doc, ctx);
+    for p in &[
+        &css::CssProcessor as &dyn ElementProcessor,
+        &image::ImageProcessor,
+        &highlight::HighlightProcessor,
+    ] {
+        p.process(doc, ctx)?;
+    }
     Ok(())
 }

@@ -3,45 +3,48 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use base64::Engine;
 use typst::ecow::{EcoString, eco_format};
-use typst_html::HtmlElement;
+use typst_html::HtmlDocument;
 
 use super::{ElementProcessor, ProcessingContext, WalkControl};
 
 /// Minimum decoded size (bytes) below which a data URI stays inline.
 const IMAGE_EXTRACT_THRESHOLD: usize = 1024;
 
-/// Processor that extracts data URI images from `<img>` elements.
 pub(super) struct ImageProcessor;
 
 impl ElementProcessor for ImageProcessor {
-    fn matches(&self, elem: &HtmlElement) -> bool {
-        if elem.tag != typst_html::tag::img {
-            return false;
-        }
-        elem.attrs
-            .0
-            .iter()
-            .any(|(a, v)| *a.resolve() == *"src" && v.as_str().starts_with("data:"))
-    }
+    fn process(&self, doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> Result<()> {
+        super::walk_mut(doc.root_mut(), ctx, &mut |elem, ctx| {
+            if elem.tag != typst_html::tag::img {
+                return Ok(WalkControl::Continue);
+            }
+            if !elem
+                .attrs
+                .0
+                .iter()
+                .any(|(a, v)| *a.resolve() == *"src" && v.as_str().starts_with("data:"))
+            {
+                return Ok(WalkControl::Continue);
+            }
 
-    fn process(&self, elem: &mut HtmlElement, ctx: &ProcessingContext<'_>) -> Result<WalkControl> {
-        let src = elem
-            .attrs
-            .0
-            .iter()
-            .find_map(|(a, v)| (*a.resolve() == *"src").then(|| v.clone()));
-        let Some(src) = src else {
-            return Ok(WalkControl::Continue);
-        };
+            let src = elem
+                .attrs
+                .0
+                .iter()
+                .find_map(|(a, v)| (*a.resolve() == *"src").then(|| v.clone()));
+            let Some(src) = src else {
+                return Ok(WalkControl::Continue);
+            };
 
-        if let Some(new_src) = try_extract(&src, &ctx.output_dir())? {
-            for (a, v) in elem.attrs.0.make_mut().iter_mut() {
-                if *a.resolve() == *"src" {
-                    *v = new_src.clone();
+            if let Some(new_src) = try_extract(&src, &ctx.output_dir())? {
+                for (a, v) in elem.attrs.0.make_mut().iter_mut() {
+                    if *a.resolve() == *"src" {
+                        *v = new_src.clone();
+                    }
                 }
             }
-        }
-        Ok(WalkControl::Continue)
+            Ok(WalkControl::Continue)
+        })
     }
 }
 
