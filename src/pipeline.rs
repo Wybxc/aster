@@ -23,7 +23,6 @@ fn empty_aster() -> Value {
 /// responsible for printing errors and deciding whether they are fatal.
 pub fn build(project: &ProjectRoot, config: Dict) -> Result<(Vec<PathBuf>, Vec<anyhow::Error>)> {
     let builder = compile::CompileContext::new(project);
-    let diag_world = world::FileStoreWorld::new(builder.file_store());
 
     // --- Phase 1: content collections ---
     let aster_value = if project.content_dir().is_dir() {
@@ -57,10 +56,9 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<(Vec<PathBuf>, Vec<a
             .insert(output.clone(), RenderJob { template, library })
             .is_some()
         {
-            world::emit_message(
-                &diag_world,
-                typst::diag::Severity::Warning,
-                &format!("duplicate output path `{}` — skipping", output.display()),
+            eprintln!(
+                "warning: duplicate output path `{}` — skipping",
+                output.display()
             );
         }
     };
@@ -88,13 +86,9 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<(Vec<PathBuf>, Vec<a
                     })?,
             );
             if routes.is_empty() {
-                world::emit_message(
-                    &diag_world,
-                    typst::diag::Severity::Warning,
-                    &format!(
-                        "{} has `[slug]` pattern but no `<route>` metadata",
-                        entry.display()
-                    ),
+                eprintln!(
+                    "warning: {} has `[slug]` pattern but no `<route>` metadata",
+                    entry.display()
                 );
             }
 

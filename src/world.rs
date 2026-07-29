@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use termcolor::{ColorChoice, StandardStream};
-use typst::diag::{FileError, Severity, SourceDiagnostic};
+use typst::diag::{FileError, SourceDiagnostic};
 use typst::foundations::{Bytes, Datetime, Dict, Duration};
-use typst::syntax::{FileId, Span};
+use typst::syntax::FileId;
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
 use typst::{Feature, Features, Library, LibraryExt, World};
@@ -86,70 +86,4 @@ pub fn emit_diags(world: &impl DiagnosticWorld, diags: &[SourceDiagnostic]) {
             eprintln!("error: {diag:?}");
         }
     }
-}
-
-/// A [`DiagnosticWorld`] backed by a [`FileStore`], usable for emitting
-/// diagnostics that may have source-level span information.
-pub struct FileStoreWorld {
-    files: Arc<FileStore<SystemFiles>>,
-}
-
-impl FileStoreWorld {
-    pub fn new(files: Arc<FileStore<SystemFiles>>) -> Self {
-        Self { files }
-    }
-}
-
-impl World for FileStoreWorld {
-    fn library(&self) -> &LazyHash<typst::Library> {
-        panic!("FileStoreWorld does not provide a library")
-    }
-    fn book(&self) -> &LazyHash<FontBook> {
-        panic!("FileStoreWorld does not provide a font book")
-    }
-    fn main(&self) -> FileId {
-        panic!("FileStoreWorld does not have a main file")
-    }
-    fn source(&self, id: FileId) -> std::result::Result<typst::syntax::Source, FileError> {
-        self.files.source(id)
-    }
-    fn file(&self, id: FileId) -> std::result::Result<Bytes, FileError> {
-        self.files.file(id)
-    }
-    fn font(&self, _index: usize) -> Option<Font> {
-        None
-    }
-    fn today(&self, _offset: Option<Duration>) -> Option<Datetime> {
-        None
-    }
-}
-
-impl DiagnosticWorld for FileStoreWorld {
-    fn name(&self, id: FileId) -> String {
-        let cwd = std::env::current_dir().ok();
-        self.files
-            .loader()
-            .resolve(id)
-            .ok()
-            .and_then(|p| {
-                cwd.as_ref()
-                    .and_then(|cwd| p.strip_prefix(cwd).ok())
-                    .map(|p| p.display().to_string())
-                    .or_else(|| Some(p.display().to_string()))
-            })
-            .unwrap_or_else(|| id.vpath().get_with_slash().to_string())
-    }
-}
-
-/// Emit a simple message as a [`SourceDiagnostic`] without source location.
-pub fn emit_message(world: &impl DiagnosticWorld, severity: Severity, message: &str) {
-    let diag = SourceDiagnostic {
-        severity,
-        span: Span::detached().into(),
-        message: message.into(),
-        trace: typst::ecow::eco_vec![],
-        hints: typst::ecow::eco_vec![],
-    };
-    let mut writer = StandardStream::stderr(ColorChoice::Auto);
-    let _ = diagnostics::emit(&mut writer, world, Some(&diag), DiagnosticFormat::Human);
 }
