@@ -134,7 +134,7 @@ pub fn build(project: &ProjectRoot, config: Dict) -> Result<(Vec<PathBuf>, Vec<a
                 .with_context(|| format!("failed to write {}", output.display()))?;
 
             outputs.push(output.clone());
-            let out_rel = output.strip_prefix(project.output_dir()).unwrap_or(&output);
+            let out_rel = output.strip_prefix(project.output_dir()).unwrap_or(output);
             diag::emit_page(&out_rel.to_string_lossy());
             Ok(())
         };
