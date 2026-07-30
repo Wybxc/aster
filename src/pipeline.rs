@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
-use typst::comemo::{memoize, Track, Tracked};
 use typst::Library;
 use typst::World;
+use typst::comemo::{Track, Tracked, memoize};
 use typst::foundations::{Dict, Str, Value};
 use typst::utils::LazyHash;
 
@@ -18,8 +18,6 @@ fn empty_aster() -> Value {
         (Str::from("collections"), Value::Dict(Dict::new())),
     ]))
 }
-
-
 
 /// Execute the full Aster build lifecycle.
 ///
@@ -220,7 +218,11 @@ fn compute_page_output(
     let root = std::path::Path::new(root_path);
     let pctx = crate::transform::ProcessingContext::new(
         std::path::PathBuf::from(suffix),
-        if hl_css_path.is_empty() { None } else { Some(std::path::PathBuf::from(hl_css_path)) },
+        if hl_css_path.is_empty() {
+            None
+        } else {
+            Some(std::path::PathBuf::from(hl_css_path))
+        },
         root.join("src"),
         root.join("dist"),
     );
@@ -232,4 +234,3 @@ fn compute_page_output(
 
     Ok((raw, page_assets))
 }
-

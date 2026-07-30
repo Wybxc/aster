@@ -134,5 +134,4 @@ impl CompileContext {
         }
         world
     }
-
 }

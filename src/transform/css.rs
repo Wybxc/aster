@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use comemo::memoize;
 use lightningcss::bundler::{Bundler, FileProvider};
 use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions};
 use lightningcss::targets::Browsers;
@@ -34,7 +35,7 @@ impl ElementProcessor for CssProcessor {
                 .join(href.as_str());
             let source = std::fs::canonicalize(&source)
                 .with_context(|| format!("failed to resolve {}", source.display()))?;
-            let css = bundle_file(&source)?;
+            let css = bundle_file(&source).map_err(|e| anyhow::anyhow!("{}", e))?;
             let css_bytes = css.into_bytes();
 
             let h = href.as_str();
@@ -69,27 +70,31 @@ impl ElementProcessor for CssProcessor {
 }
 
 /// Bundle a single CSS entry point (resolve `@import`, prefix, minify).
-fn bundle_file(entry: &Path) -> Result<String> {
+///
+/// Memoized by file path — within a single build the same file produces the
+/// same bundle regardless of how many pages reference it.
+#[memoize]
+fn bundle_file(entry: &Path) -> Result<String, String> {
     let fs = FileProvider::new();
     let mut bundler = Bundler::new(&fs, None, ParserOptions::default());
 
     let mut stylesheet = bundler
         .bundle(entry)
-        .map_err(|e| anyhow::anyhow!("failed to bundle {}: {e:#}", entry.display()))?;
+        .map_err(|e| format!("failed to bundle {}: {e:#}", entry.display()))?;
 
     stylesheet
         .minify(MinifyOptions {
             targets: Browsers::default().into(),
             ..MinifyOptions::default()
         })
-        .map_err(|e| anyhow::anyhow!("failed to minify CSS: {e:#}"))?;
+        .map_err(|e| format!("failed to minify CSS: {e:#}"))?;
 
     let result = stylesheet
         .to_css(PrinterOptions {
             minify: true,
             ..PrinterOptions::default()
         })
-        .map_err(|e| anyhow::anyhow!("failed to serialize CSS: {e:#}"))?;
+        .map_err(|e| format!("failed to serialize CSS: {e:#}"))?;
 
     Ok(result.code)
 }
