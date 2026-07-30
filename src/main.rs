@@ -2,14 +2,14 @@ mod compile;
 mod config;
 mod content;
 mod diag;
+mod output;
 mod pipeline;
 mod project;
 mod route;
 mod transform;
 mod utils;
-mod world;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use clap::Parser;
 
 #[derive(Parser)]
@@ -60,16 +60,14 @@ fn build(project_dir: Option<std::path::PathBuf>) -> Result<()> {
     let aster_config =
         config::AsterConfig::load(&project.config_file()).context("failed to parse aster.toml")?;
 
-    let (_outputs, errors) = pipeline::build(&project, aster_config)?;
-
-    for err in &errors {
-        diag::emit_error(&format!("{err:#}"));
+    let outcome = pipeline::build(project.clone(), aster_config)?;
+    for warning in &outcome.warnings {
+        diag::emit_warning(warning);
     }
-
-    if !errors.is_empty() {
-        diag::emit_error(&format!("{} page(s) failed", errors.len()));
-        bail!("build failed");
+    for output in &outcome.outputs {
+        let relative = output.strip_prefix(project.output_dir()).unwrap_or(output);
+        diag::emit_page(&relative.to_string_lossy());
     }
-
+    diag::emit_summary(outcome.outputs.len(), outcome.elapsed);
     Ok(())
 }

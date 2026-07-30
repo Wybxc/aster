@@ -1,68 +1,69 @@
 use std::io::Write;
-use std::time::Instant;
+use std::time::Duration;
 
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, ColorSpec, NoColor, StandardStream, WriteColor};
 use typst::diag::SourceDiagnostic;
 use typst_kit::diagnostics::{self, DiagnosticFormat, DiagnosticWorld};
 
-/// Print Typst diagnostics to stderr using the given [`DiagnosticWorld`].
-pub fn emit_diags(world: &impl DiagnosticWorld, diags: &[SourceDiagnostic]) {
-    let mut writer = StandardStream::stderr(ColorChoice::Auto);
-    if diagnostics::emit(&mut writer, world, diags.iter(), DiagnosticFormat::Human).is_err() {
-        for diag in diags {
-            eprintln!("error: {diag:?}");
+pub fn format_diags(world: &impl DiagnosticWorld, diags: &[SourceDiagnostic]) -> String {
+    let mut buffer = Vec::new();
+    {
+        let mut writer = NoColor::new(&mut buffer);
+        if diagnostics::emit(&mut writer, world, diags.iter(), DiagnosticFormat::Human).is_err() {
+            for diagnostic in diags {
+                let _ = writeln!(writer, "error: {diagnostic:?}");
+            }
         }
     }
+    String::from_utf8_lossy(&buffer).trim_end().to_owned()
 }
 
-/// Ambient progress messages — no prefix, for phase announcements and final summaries.
+pub fn format_warning(world: &impl DiagnosticWorld, warning: &SourceDiagnostic) -> String {
+    let formatted = format_diags(world, std::slice::from_ref(warning));
+    formatted
+        .strip_prefix("warning: ")
+        .unwrap_or(&formatted)
+        .to_owned()
+}
 fn writer() -> StandardStream {
     StandardStream::stderr(ColorChoice::Auto)
 }
 
-/// Print a phase message (ambient progress, no prefix).
-pub fn emit_step(message: &str) {
-    let mut w = writer();
-    let _ = writeln!(w, "{message}");
-}
-
-/// Print the build summary (conclusive result, bold emphasis).
-pub fn emit_summary(count: usize, elapsed: &Instant) {
-    let secs = elapsed.elapsed().as_secs_f64();
-    let mut w = writer();
-    let _ = w.set_color(ColorSpec::new().set_bold(true));
-    let _ = write!(w, "built {count} page");
+pub fn emit_summary(count: usize, elapsed: Duration) {
+    let mut writer = writer();
+    let _ = writer.set_color(ColorSpec::new().set_bold(true));
+    let _ = write!(writer, "built {count} page");
     if count != 1 {
-        let _ = write!(w, "s");
+        let _ = write!(writer, "s");
     }
-    let _ = w.reset();
-    let _ = writeln!(w, " in {secs:.1}s");
+    let _ = writer.reset();
+    let _ = writeln!(writer, " in {:.1}s", elapsed.as_secs_f64());
 }
 
-/// Actionable messages — colored `action:` prefix, for results that need attention.
-fn styled_prefix(prefix: &str, color: Color, message: &str) {
-    let mut w = writer();
-    let _ = w.set_color(ColorSpec::new().set_fg(Some(color)).set_bold(true));
-    let _ = write!(w, "{prefix}");
-    let _ = w.reset();
-    let _ = writeln!(w, ": {message}");
+fn styled_warning(message: &str) {
+    let mut writer = writer();
+    let _ = writer.set_color(
+        ColorSpec::new()
+            .set_fg(Some(termcolor::Color::Yellow))
+            .set_bold(true),
+    );
+    let _ = write!(writer, "warning");
+    let _ = writer.reset();
+    let _ = writeln!(writer, ": {message}");
 }
 
-/// Print an output file line (action: green `write` prefix).
 pub fn emit_page(path: &str) {
-    let mut w = writer();
-    let _ = w.set_color(ColorSpec::new().set_fg(Some(Color::Green)).set_bold(true));
-    let _ = write!(w, "write");
-    let _ = w.reset();
-    let _ = writeln!(w, "  {path}");
+    let mut writer = writer();
+    let _ = writer.set_color(
+        ColorSpec::new()
+            .set_fg(Some(termcolor::Color::Green))
+            .set_bold(true),
+    );
+    let _ = write!(writer, "write");
+    let _ = writer.reset();
+    let _ = writeln!(writer, "  {path}");
 }
 
-/// Print a styled `error:` message to stderr.
-pub fn emit_error(message: &str) {
-    styled_prefix("error", Color::Red, message);
-}
-
-/// Print a styled `warning:` message to stderr.
 pub fn emit_warning(message: &str) {
-    styled_prefix("warning", Color::Yellow, message);
+    styled_warning(message);
 }

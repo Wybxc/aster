@@ -1,5 +1,5 @@
 use std::fmt::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
@@ -13,8 +13,9 @@ use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 use crate::config::HighlightConfig;
 use crate::project::ProjectRoot;
 
-use super::{ElementProcessor, ProcessingContext, WalkControl};
-use crate::utils::{Asset, HtmlElementExt};
+use super::{ElementProcessor, WalkControl};
+use crate::output::{AssetPath, PagePublication};
+use crate::utils::HtmlElementExt;
 
 static SS: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
 static THEMES: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
@@ -25,7 +26,7 @@ const TYPST_LANGS: &[&str] = &["typ", "typst", "typc", "typm"];
 pub(super) struct HighlightProcessor;
 
 impl ElementProcessor for HighlightProcessor {
-    fn process(&self, doc: &mut HtmlDocument, ctx: &ProcessingContext) -> Result<Vec<Asset>> {
+    fn process(&self, doc: &mut HtmlDocument, _page: &mut PagePublication<'_>) -> Result<()> {
         // Syntax-highlight all <code data-lang="..."> blocks.
         // Theme-independent: we only derive CSS class names from scopes.
         doc.root_mut().walk_mut(&mut |elem| {
@@ -66,20 +67,25 @@ impl ElementProcessor for HighlightProcessor {
             Ok(WalkControl::SkipChildren)
         })?;
 
-        // Second step: inject highlight CSS link into <head> if configured.
-        if let Some(ref hl_css) = ctx.hl_css_path {
-            let root = doc.root_mut();
-            let Some(head) = root.find_child_mut(typst_html::tag::head) else {
-                anyhow::bail!("highlight CSS configured but found no <head> element");
-            };
-            let link = HtmlElement::new(typst_html::tag::link)
-                .with_attr(typst_html::attr::rel, "stylesheet")
-                .with_attr(typst_html::attr::href, hl_css.to_string_lossy().as_ref());
-            head.children.push(HtmlNode::Element(link));
-        }
-
-        Ok(Vec::new())
+        Ok(())
     }
+}
+
+pub fn inject_stylesheet(
+    doc: &mut HtmlDocument,
+    page: &mut PagePublication<'_>,
+    asset: &AssetPath,
+) -> Result<()> {
+    let root = doc.root_mut();
+    let Some(head) = root.find_child_mut(typst_html::tag::head) else {
+        anyhow::bail!("highlight CSS configured but found no <head> element");
+    };
+    let url = page.reference(asset)?;
+    let link = HtmlElement::new(typst_html::tag::link)
+        .with_attr(typst_html::attr::rel, "stylesheet")
+        .with_attr(typst_html::attr::href, url.as_str());
+    head.children.push(HtmlNode::Element(link));
+    Ok(())
 }
 
 /// Derive a semantic CSS variable suffix from a slice of scopes.
@@ -223,13 +229,12 @@ fn load_theme(name_or_path: &str, project_root: &Path) -> Result<Theme> {
 
 /// Resolve highlight theme colours and return the CSS content.
 ///
-/// Returns `(css_content, filename)` where filename is
-/// `hl.{hash}.css` — ready to be registered in an [`AssetCollector`](crate::utils::AssetCollector).
-/// Returns `None` when no scopes need highlighting.
+/// Returns `None` when no scopes need highlighting. Asset identity and naming
+/// are owned by the output publication module.
 pub fn compute_highlight_css(
     config: &HighlightConfig,
     project: &ProjectRoot,
-) -> Result<Option<(String, PathBuf)>> {
+) -> Result<Option<String>> {
     let light = load_theme(&config.themes.light, project.root())?;
     let dark = load_theme(&config.themes.dark, project.root())?;
     let light_h = Highlighter::new(&light);
@@ -317,9 +322,7 @@ pub fn compute_highlight_css(
         );
     }
 
-    let hash = crate::utils::content_hash(css.as_bytes());
-    let filename = format!("hl.{hash}.css");
-    Ok(Some((css, PathBuf::from(filename))))
+    Ok(Some(css))
 }
 
 #[cfg(test)]

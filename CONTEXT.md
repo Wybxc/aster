@@ -1,0 +1,55 @@
+# Aster domain context
+
+Aster builds Typst-authored sites into a complete static output tree.
+
+## Project
+
+An **Aster project** is a directory containing `aster.toml`. Its conventional directories are:
+
+- `src/` — page templates
+- `content/` — content entries grouped into collections
+- `dist/` — the published output tree
+
+Project discovery selects the nearest ancestor containing an `aster.toml` file. A build requires `src/`; `content/` is optional.
+
+## Content protocol
+
+The **content protocol** is the `_aster` Typst input. Rust owns its version and complete value, including the empty state. It contains content collections and entries. Each **content entry** has an id, collection name, project-relative content path, compiled Typst body, and frontmatter metadata.
+
+`_aster` is reserved. Route parameters also cannot replace configuration inputs.
+
+The Typst adapter in `lib/aster/content.typ` exposes the protocol through `get-collection`, `get-entry`, and `render`.
+
+## Route plan
+
+A **page template** is a `.typ` file under `src/`. A template without bracket parameters defines one static route. A template with `[name]` or `[...name]` parameters is a **dynamic route** and declares parameter sets through `<route>` metadata.
+
+A **route plan** is the deterministic, collision-free set of pages produced before rendering. It owns template parsing, route metadata validation, parameter matching, output confinement, ordering, and collisions.
+
+A normal parameter fills one path segment and cannot contain separators. A spread parameter is a standalone segment and may expand into multiple validated segments. Generated output paths are always relative to `dist/` and cannot contain `.` or `..` components.
+
+## Typst build session
+
+A **Typst build session** is bound to one Aster project. It owns shared fonts, package and file access, input libraries, Typst world construction, content evaluation, page compilation, and source-aware diagnostics.
+
+Callers do not construct or track Typst worlds. Files read outside the Typst world are not memoized unless their content is part of the cache key.
+
+## Output publication
+
+An **output publication** is the complete candidate output tree for one successful build. It owns:
+
+- output-path confinement
+- source-reference resolution relative to the actual page template
+- generated-asset identity and content-addressed naming
+- browser-facing references relative to each output page
+- deduplication
+- locked, recoverable replacement of `dist/`
+- removal of stale pages and assets
+
+Rendering and document transformation accumulate a publication in memory. The previous `dist/` remains untouched until every page succeeds and the complete publication is ready.
+
+## Build outcome
+
+A **build outcome** records published pages, collected warnings, and elapsed time. Build modules decide whether an operation succeeds and preserve diagnostic context. The terminal adapter in `diag.rs` decides only how outcomes are displayed.
+
+Aster warnings are non-fatal by explicit policy. Page compilation, route planning, transformation, and output publication failures are fatal, so a failed build does not publish a partial output tree.

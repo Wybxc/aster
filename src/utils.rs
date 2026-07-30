@@ -1,10 +1,7 @@
 //! Utility helpers — DOM traversal, HTML element extension methods, path
 //! utilities, colour formatting, etc.
 
-use std::path::{Path, PathBuf};
-
-use anyhow::{Context, Result};
-use indexmap::IndexMap;
+use anyhow::Result;
 use typst::ecow::EcoString;
 use typst_html::{HtmlElement, HtmlNode};
 
@@ -13,19 +10,9 @@ pub fn color_to_hex(c: syntect::highlighting::Color) -> String {
     format!("#{:02x}{:02x}{:02x}", c.r, c.g, c.b)
 }
 
-/// Compute a content-hash hex string (seahash, first 16 hex chars).
+/// Compute a collision-resistant content identity for persistent asset URLs.
 pub fn content_hash(data: &[u8]) -> String {
-    format!("{:016x}", seahash::hash(data))
-}
-
-/// Write `data` to `path`, creating parent directories first.
-pub fn write_file(path: &Path, data: &[u8]) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("failed to create directory {}", parent.display()))?;
-    }
-    std::fs::write(path, data).with_context(|| format!("failed to write {}", path.display()))?;
-    Ok(())
+    blake3::hash(data).to_hex().to_string()
 }
 
 /// Signal returned by the callback passed to [`walk_mut`] to control
@@ -138,65 +125,5 @@ impl HtmlElementExt for HtmlElement {
         let mut out = String::new();
         collect_impl(self, &mut out);
         out
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Asset management — separate generation from file I/O
-// ---------------------------------------------------------------------------
-
-/// A generated file asset, returned by processors and batch-written
-/// via [`AssetCollector`].
-#[derive(Clone)]
-pub struct Asset {
-    pub path: PathBuf,
-    pub content: Vec<u8>,
-}
-
-/// Collects generated assets and writes them in batch, deduplicated by
-/// content hash via [`IndexMap`] (first path wins, insertion order preserved).
-pub struct AssetCollector {
-    entries: IndexMap<String, (PathBuf, Vec<u8>)>,
-}
-
-impl AssetCollector {
-    pub fn new() -> Self {
-        Self {
-            entries: IndexMap::new(),
-        }
-    }
-
-    /// Register content.  `dir` is the **absolute** output directory
-    /// (typically `project.output_dir()`).  Returns the absolute path
-    /// `{dir}/{stem}.{hash}.{ext}`.  If the same content was already
-    /// registered, the **earlier** path is returned (dedup).
-    pub fn add(&mut self, dir: &Path, stem: &str, ext: &str, content: Vec<u8>) -> PathBuf {
-        let hash = content_hash(&content);
-        let path = dir.join(format!("{stem}.{hash}.{ext}"));
-        self.entries
-            .entry(hash)
-            .or_insert((path, content))
-            .0
-            .clone()
-    }
-
-    /// Register a pre‑computed asset (path + content, already named).
-    /// Returns the actual path (first registration wins on dedup).
-    pub fn add_path(&mut self, path: PathBuf, content: Vec<u8>) -> PathBuf {
-        let hash = content_hash(&content);
-        self.entries
-            .entry(hash)
-            .or_insert((path, content))
-            .0
-            .clone()
-    }
-
-    /// Write every unique asset to disk.  Each asset's stored path is
-    /// already absolute, so no `output_dir` parameter is needed.
-    pub fn flush(&self) -> Result<()> {
-        for (_, (path, content)) in &self.entries {
-            write_file(path, content)?;
-        }
-        Ok(())
     }
 }

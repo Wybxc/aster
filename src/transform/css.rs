@@ -1,100 +1,152 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
-use anyhow::{Context, Result};
-use comemo::memoize;
-use lightningcss::bundler::{Bundler, FileProvider};
+use anyhow::Result;
+use lightningcss::bundler::{Bundler, ResolveResult, SourceProvider};
 use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions};
 use lightningcss::targets::Browsers;
 use typst_html::HtmlDocument;
 
-use super::{ElementProcessor, ProcessingContext, WalkControl};
-use crate::utils::{Asset, HtmlElementExt};
+use super::{ElementProcessor, WalkControl};
+use crate::output::PagePublication;
+use crate::utils::HtmlElementExt;
 
 pub(super) struct CssProcessor;
 
 impl ElementProcessor for CssProcessor {
-    fn process(&self, doc: &mut HtmlDocument, ctx: &ProcessingContext) -> Result<Vec<Asset>> {
-        let mut assets: Vec<Asset> = Vec::new();
+    fn process(&self, doc: &mut HtmlDocument, page: &mut PagePublication<'_>) -> Result<()> {
         doc.root_mut().walk_mut(&mut |elem| {
             if !elem.is_tag(typst_html::tag::link) {
                 return Ok(WalkControl::Continue);
             }
-            if !elem.has_attr("rel", |v| v.as_str() == "css") {
+            if !elem.has_attr("rel", |value| value.as_str() == "css") {
                 return Ok(WalkControl::Continue);
             }
 
-            let href = match elem.get_attr("href") {
-                Some(h) => h,
-                None => return Ok(WalkControl::Continue),
+            let Some(href) = elem.get_attr("href") else {
+                return Ok(WalkControl::Continue);
             };
+            let source = page.resolve_source(href.as_str())?;
+            let css = bundle_file(&source, &page.source_root()?)?;
+            let url = page.add_asset("css", "css", css.into_bytes())?;
 
-            // Resolve the source CSS file relative to the template's subdirectory.
-            let source = ctx
-                .src_dir()
-                .join(ctx.template_subdir())
-                .join(href.as_str());
-            let source = std::fs::canonicalize(&source)
-                .with_context(|| format!("failed to resolve {}", source.display()))?;
-            let css = bundle_file(&source).map_err(|e| anyhow::anyhow!("{}", e))?;
-            let css_bytes = css.into_bytes();
-
-            let h = href.as_str();
-            let stem = Path::new(h)
-                .file_stem()
-                .unwrap_or_default()
-                .to_string_lossy();
-            let ext = Path::new(h)
-                .extension()
-                .unwrap_or_default()
-                .to_string_lossy();
-            let hash = crate::utils::content_hash(&css_bytes);
-            let filename = format!("{stem}.{hash}.{ext}");
-            let full_path = ctx.output_dir().join(&filename);
-
-            assets.push(Asset {
-                path: full_path.clone(),
-                content: css_bytes,
-            });
-
-            // Compute relative path from the page to the CSS file.
-            let page_dir = ctx.page_path.parent().expect("page has a parent");
-            let relative =
-                pathdiff::diff_paths(&full_path, page_dir).expect("both paths under output_dir");
-
-            elem.update_attr("href", |v| *v = relative.to_string_lossy().into());
-            elem.update_attr("rel", |v| *v = "stylesheet".into());
+            elem.update_attr("href", |value| *value = url.as_str().into());
+            elem.update_attr("rel", |value| *value = "stylesheet".into());
             Ok(WalkControl::Continue)
-        })?;
-        Ok(assets)
+        })
     }
 }
 
-/// Bundle a single CSS entry point (resolve `@import`, prefix, minify).
+/// Bundle a CSS entry point while confining every transitive import to `src/`.
 ///
-/// Memoized by file path — within a single build the same file produces the
-/// same bundle regardless of how many pages reference it.
-#[memoize]
-fn bundle_file(entry: &Path) -> Result<String, String> {
-    let fs = FileProvider::new();
-    let mut bundler = Bundler::new(&fs, None, ParserOptions::default());
-
+/// This is deliberately not memoized: the provider reads external files directly,
+/// so a path-only cache key cannot observe CSS or imported-file changes.
+fn bundle_file(entry: &Path, source_root: &Path) -> Result<String> {
+    let provider = ConfinedFileProvider::new(source_root.to_owned());
+    let mut bundler = Bundler::new(&provider, None, ParserOptions::default());
     let mut stylesheet = bundler
         .bundle(entry)
-        .map_err(|e| format!("failed to bundle {}: {e:#}", entry.display()))?;
-
+        .map_err(|error| anyhow::anyhow!("failed to bundle {}: {error:#}", entry.display()))?;
     stylesheet
         .minify(MinifyOptions {
             targets: Browsers::default().into(),
             ..MinifyOptions::default()
         })
-        .map_err(|e| format!("failed to minify CSS: {e:#}"))?;
-
+        .map_err(|error| anyhow::anyhow!("failed to minify CSS: {error:#}"))?;
     let result = stylesheet
         .to_css(PrinterOptions {
             minify: true,
             ..PrinterOptions::default()
         })
-        .map_err(|e| format!("failed to serialize CSS: {e:#}"))?;
-
+        .map_err(|error| anyhow::anyhow!("failed to serialize CSS: {error:#}"))?;
     Ok(result.code)
+}
+
+struct ConfinedFileProvider {
+    source_root: PathBuf,
+    inputs: Mutex<Vec<*mut String>>,
+}
+
+impl ConfinedFileProvider {
+    fn new(source_root: PathBuf) -> Self {
+        Self {
+            source_root,
+            inputs: Mutex::new(Vec::new()),
+        }
+    }
+
+    fn confined(&self, path: &Path) -> std::io::Result<PathBuf> {
+        let path = std::fs::canonicalize(path)?;
+        if !path.starts_with(&self.source_root) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                format!(
+                    "CSS import {} escapes {}",
+                    path.display(),
+                    self.source_root.display()
+                ),
+            ));
+        }
+        Ok(path)
+    }
+}
+
+// The pointers are owned by `inputs`, guarded by the mutex, and freed in Drop.
+unsafe impl Send for ConfinedFileProvider {}
+unsafe impl Sync for ConfinedFileProvider {}
+
+impl SourceProvider for ConfinedFileProvider {
+    type Error = std::io::Error;
+
+    fn read<'a>(&'a self, file: &Path) -> std::result::Result<&'a str, Self::Error> {
+        let file = self.confined(file)?;
+        let source = std::fs::read_to_string(file)?;
+        let pointer = Box::into_raw(Box::new(source));
+        self.inputs.lock().unwrap().push(pointer);
+        // SAFETY: the allocation remains owned by this provider until Drop. Entries
+        // are never removed and all mutation of the pointer list is synchronized.
+        Ok(unsafe { &*pointer })
+    }
+
+    fn resolve(
+        &self,
+        specifier: &str,
+        originating_file: &Path,
+    ) -> std::result::Result<ResolveResult, Self::Error> {
+        let candidate = originating_file.with_file_name(specifier);
+        Ok(ResolveResult::File(self.confined(&candidate)?))
+    }
+}
+
+impl Drop for ConfinedFileProvider {
+    fn drop(&mut self) {
+        for pointer in self.inputs.get_mut().unwrap().drain(..) {
+            // SAFETY: each pointer was allocated once in `read`, remains unique,
+            // and is removed exactly once while the provider is being dropped.
+            drop(unsafe { Box::from_raw(pointer) });
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use super::*;
+
+    static NEXT_DIR: AtomicUsize = AtomicUsize::new(0);
+
+    #[test]
+    fn rejects_transitive_import_outside_source_root() {
+        let id = NEXT_DIR.fetch_add(1, Ordering::Relaxed);
+        let root = std::env::temp_dir().join(format!("aster-css-test-{}-{id}", std::process::id()));
+        let src = root.join("src");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(src.join("style.css"), "@import \"../secret.css\";").unwrap();
+        std::fs::write(root.join("secret.css"), ".secret { color: red; }").unwrap();
+
+        let source_root = std::fs::canonicalize(&src).unwrap();
+        assert!(bundle_file(&src.join("style.css"), &source_root).is_err());
+        let _ = std::fs::remove_dir_all(root);
+    }
 }
