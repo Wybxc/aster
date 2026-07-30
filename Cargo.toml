@@ -5,20 +5,20 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1"
+base64 = "0.23.0"
 clap = { version = "4", features = ["derive"] }
 comemo = "0.5"
+lightningcss = "=1.0.0-alpha.72"
+pathdiff = "0.2"
+seahash = "4.1.0"
 syntect = { version = "5.3", features = ["default-syntaxes", "default-themes", "dump-load"] }
+termcolor = "1"
+thiserror = "2"
 toml = "1.1"
 typst = "0.15.1"
+typst-eval = "0.15.1"
 typst-html = "0.15.1"
 typst-kit = { version = "0.15.1", features = ["system-files", "system-downloader", "scan-fonts", "emit-diagnostics"] }
-typst-svg = "0.15.1"
-termcolor = "1"
-typst-eval = "0.15.1"
-lightningcss = "=1.0.0-alpha.72"
-seahash = "4.1.0"
-base64 = "0.22"
 typst-library = "0.15.1"
-pathdiff = "0.2"
-thiserror = "2"
+typst-svg = "0.15.1"
 walkdir = "2.5"
