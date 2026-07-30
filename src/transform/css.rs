@@ -12,7 +12,7 @@ use crate::utils::{Asset, HtmlElementExt};
 pub(super) struct CssProcessor;
 
 impl ElementProcessor for CssProcessor {
-    fn process(&self, doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> Result<Vec<Asset>> {
+    fn process(&self, doc: &mut HtmlDocument, ctx: &ProcessingContext) -> Result<Vec<Asset>> {
         let mut assets: Vec<Asset> = Vec::new();
         doc.root_mut().walk_mut(&mut |elem| {
             if !elem.is_tag(typst_html::tag::link) {

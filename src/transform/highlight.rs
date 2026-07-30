@@ -25,7 +25,7 @@ const TYPST_LANGS: &[&str] = &["typ", "typst", "typc", "typm"];
 pub(super) struct HighlightProcessor;
 
 impl ElementProcessor for HighlightProcessor {
-    fn process(&self, doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> Result<Vec<Asset>> {
+    fn process(&self, doc: &mut HtmlDocument, ctx: &ProcessingContext) -> Result<Vec<Asset>> {
         // Syntax-highlight all <code data-lang="..."> blocks.
         // Theme-independent: we only derive CSS class names from scopes.
         doc.root_mut().walk_mut(&mut |elem| {

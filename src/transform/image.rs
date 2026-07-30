@@ -11,7 +11,7 @@ const IMAGE_EXTRACT_THRESHOLD: usize = 1024;
 pub(super) struct ImageProcessor;
 
 impl ElementProcessor for ImageProcessor {
-    fn process(&self, doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> Result<Vec<Asset>> {
+    fn process(&self, doc: &mut HtmlDocument, ctx: &ProcessingContext) -> Result<Vec<Asset>> {
         let mut assets: Vec<Asset> = Vec::new();
         doc.root_mut().walk_mut(&mut |elem| {
             if !elem.is_tag(typst_html::tag::img) {

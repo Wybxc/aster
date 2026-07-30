@@ -147,6 +147,7 @@ impl HtmlElementExt for HtmlElement {
 
 /// A generated file asset, returned by processors and batch-written
 /// via [`AssetCollector`].
+#[derive(Clone)]
 pub struct Asset {
     pub path: PathBuf,
     pub content: Vec<u8>,

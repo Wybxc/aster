@@ -120,6 +120,22 @@ impl CompileContext {
         Ok(module.content())
     }
 
+    /// Create a world with the template source pre-loaded as a
+    /// [`Source`](typst::syntax::Source), bypassing the file store for the
+    /// main entry.
+    pub fn world_with_source(
+        &self,
+        entry: &Path,
+        project: &ProjectRoot,
+        library: &LazyHash<Library>,
+    ) -> CompileWorld {
+        let mut world = self.world(entry, project, library);
+        if let Ok(source) = self.files.source(world.main) {
+            world.source_override = Some(source);
+        }
+        world
+    }
+
     /// Compile from a pre-loaded [`Source`] (no file‑system read for the
     /// main source — other files are still read through the file store).
     ///

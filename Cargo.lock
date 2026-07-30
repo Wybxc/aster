@@ -134,6 +134,7 @@ dependencies = [
  "anyhow",
  "base64",
  "clap",
+ "comemo",
  "indexmap",
  "lightningcss",
  "pathdiff",
