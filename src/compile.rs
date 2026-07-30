@@ -318,6 +318,7 @@ impl DiagnosticWorld for CompileWorld<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::content;
 
     #[test]
     fn dependencies_include_missing_tracked_paths_and_reset_between_builds() {
@@ -372,5 +373,65 @@ mod tests {
             .compile_page(&entry, Path::new("index.html"), &library)
             .unwrap();
         assert!(!comemo::testing::last_was_hit());
+    }
+
+    #[test]
+    fn dynamic_content_imports_only_invalidate_dependent_pages() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let marker = root.file_name().unwrap().to_string_lossy();
+        std::fs::create_dir_all(root.join("content/blog")).unwrap();
+        std::fs::create_dir_all(root.join("lib/aster")).unwrap();
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::write(root.join("aster.toml"), "").unwrap();
+        std::fs::write(
+            root.join("lib/aster/content.typ"),
+            include_str!("../lib/aster/content.typ"),
+        )
+        .unwrap();
+        let content_entry = root.join("content/blog/post.typ");
+        std::fs::write(&content_entry, format!("= First {marker}")).unwrap();
+        let dependent = root.join("src/dependent.typ");
+        std::fs::write(
+            &dependent,
+            concat!(
+                "#import \"/lib/aster/content.typ\": get-entry\n",
+                "#let post = get-entry(\"blog\", \"post\")\n",
+                "#let rendered = post.render()\n",
+                "#html.elem(\"p\")[#rendered.content]\n",
+            ),
+        )
+        .unwrap();
+        let independent = root.join("src/independent.typ");
+        std::fs::write(&independent, format!("#html.elem(\"p\")[{marker}]")).unwrap();
+
+        let project = ProjectRoot::new(root.to_owned()).unwrap();
+        let mut session = TypstSession::new(project.clone());
+        let inputs = content::install(Dict::new(), content::load(&project).unwrap()).unwrap();
+        let library = session.library(inputs);
+        session
+            .compile_page(&dependent, &root.join("dependent.html"), &library)
+            .unwrap();
+        session
+            .compile_page(&independent, &root.join("independent.html"), &library)
+            .unwrap();
+
+        std::fs::write(&content_entry, format!("= Second {marker}")).unwrap();
+        session.reset();
+        let inputs = content::install(Dict::new(), content::load(&project).unwrap()).unwrap();
+        let library = session.library(inputs);
+
+        session
+            .compile_page(&independent, &root.join("independent.html"), &library)
+            .unwrap();
+        assert!(comemo::testing::last_was_hit());
+
+        let compiled = session
+            .compile_page(&dependent, &root.join("dependent.html"), &library)
+            .unwrap();
+        assert!(!comemo::testing::last_was_hit());
+        let html =
+            typst_html::html(&compiled.document, &typst_html::HtmlOptions::default()).unwrap();
+        assert!(html.contains(&format!("Second {marker}")));
     }
 }

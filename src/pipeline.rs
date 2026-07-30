@@ -68,11 +68,8 @@ fn build_once(session: &TypstSession, config: AsterConfig) -> Result<BuildOutcom
         }
     };
 
-    let content_library = session.library(config.dict.clone());
-    let loaded =
-        content::load(session, &content_library).context("failed to load content collections")?;
-    warnings.extend(loaded.warnings);
-    let base_inputs = content::install(config.dict, loaded.protocol)?;
+    let protocol = content::load(&project).context("failed to load content collections")?;
+    let base_inputs = content::install(config.dict, protocol)?;
     let base_library = session.library(base_inputs.clone());
     let mut probe_warnings = Vec::new();
     let plan = route::RoutePlan::build(&project, |template| {
@@ -158,6 +155,15 @@ mod tests {
         (path, content)
     }
 
+    fn install_content_adapter(root: &std::path::Path) {
+        std::fs::create_dir_all(root.join("lib/aster")).unwrap();
+        std::fs::write(
+            root.join("lib/aster/content.typ"),
+            include_str!("../lib/aster/content.typ"),
+        )
+        .unwrap();
+    }
+
     #[test]
     fn build_reuses_the_session_and_observes_source_changes() {
         let temp = tempfile::tempdir().unwrap();
@@ -187,6 +193,57 @@ mod tests {
         let changed = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
         assert_ne!(changed, first);
         assert!(changed.contains("second"));
+    }
+
+    #[test]
+    fn build_loads_content_and_frontmatter_through_entry_module() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        std::fs::create_dir_all(root.join("content/blog")).unwrap();
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::write(root.join("aster.toml"), "").unwrap();
+        install_content_adapter(root);
+        let content_entry = root.join("content/blog/post.typ");
+        std::fs::write(
+            &content_entry,
+            "#metadata((title: \"First\",)) <frontmatter>\n\nFirst body",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("src/index.typ"),
+            concat!(
+                "#import \"/lib/aster/content.typ\": get-entry\n",
+                "#let post = get-entry(\"blog\", \"post\")\n",
+                "#let rendered = post.render()\n",
+                "#html.html({\n",
+                "  html.head[]\n",
+                "  html.body[#rendered.metadata.title #rendered.content]\n",
+                "})\n",
+            ),
+        )
+        .unwrap();
+
+        let project = ProjectRoot::new(root.to_owned()).unwrap();
+        let mut driver = BuildDriver::new(project.clone());
+        driver
+            .build(AsterConfig::load(&project.config_file()).unwrap())
+            .unwrap();
+        let first = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
+        assert!(first.contains("First"));
+        assert!(first.contains("First body"));
+
+        std::fs::write(
+            &content_entry,
+            "#metadata((title: \"Second\",)) <frontmatter>\n\nSecond body",
+        )
+        .unwrap();
+        driver
+            .build(AsterConfig::load(&project.config_file()).unwrap())
+            .unwrap();
+        let second = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
+        assert!(second.contains("Second"));
+        assert!(second.contains("Second body"));
+        assert_ne!(second, first);
     }
 
     #[test]

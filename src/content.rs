@@ -1,30 +1,26 @@
 use std::collections::BTreeMap;
-use std::ops::ControlFlow;
 use std::path::PathBuf;
+use std::sync::LazyLock;
 
 use anyhow::{Context, Result, bail};
-use typst::Library;
 use typst::ecow::EcoString;
-use typst::foundations::{Content, Dict, Str, Value, dict};
-use typst::introspection::MetadataElem;
-use typst::utils::LazyHash;
+use typst::foundations::{
+    Capturer, Closure, ClosureNode, Dict, Func, Module, Scope, Scopes, Str, Value, dict,
+};
+use typst::syntax::ast::{self, AstNode};
+use typst::syntax::{RootedPath, SyntaxNode, VirtualPath, VirtualRoot, parse_code};
+use typst::{Library, LibraryExt};
+use typst_eval::CapturesVisitor;
 
-use crate::compile::TypstSession;
+use crate::project::ProjectRoot;
 
-pub const PROTOCOL_VERSION: i64 = 1;
+pub const PROTOCOL_VERSION: i64 = 3;
 pub const INPUT_NAME: &str = "_aster";
 
-pub struct LoadedContent {
-    pub protocol: Value,
-    pub warnings: Vec<String>,
-}
-
-/// Build the complete `_aster` protocol value, including the empty state.
-pub fn load(session: &TypstSession, library: &LazyHash<Library>) -> Result<LoadedContent> {
-    let project = session.project();
+/// Build the `_aster` lazy entry manifest, including the empty state.
+pub fn load(project: &ProjectRoot) -> Result<Value> {
     let content_dir = project.content_dir();
-    let mut collections: BTreeMap<EcoString, Vec<(EcoString, PathBuf, Content)>> = BTreeMap::new();
-    let mut warnings = Vec::new();
+    let mut collections: BTreeMap<EcoString, Vec<(EcoString, RootedPath)>> = BTreeMap::new();
 
     for path in project
         .content_files()?
@@ -34,8 +30,7 @@ pub fn load(session: &TypstSession, library: &LazyHash<Library>) -> Result<Loade
         let content_relative = path
             .strip_prefix(&content_dir)
             .context("content path error")?;
-        let project_relative = path
-            .strip_prefix(project.root())
+        let virtual_path = VirtualPath::virtualize(project.root(), &path)
             .context("content path is outside project")?;
         if content_relative.components().count() < 2 {
             bail!(
@@ -58,19 +53,13 @@ pub fn load(session: &TypstSession, library: &LazyHash<Library>) -> Result<Loade
             EcoString::from(path.to_string_lossy().replace('\\', "/"))
         };
 
-        let evaluated = session.evaluate(&path, library)?;
-        warnings.extend(evaluated.warnings);
-        collections.entry(collection).or_default().push((
-            id,
-            project_relative.to_owned(),
-            evaluated.content,
-        ));
+        collections
+            .entry(collection)
+            .or_default()
+            .push((id, RootedPath::new(VirtualRoot::Project, virtual_path)));
     }
 
-    Ok(LoadedContent {
-        protocol: protocol_value(collections),
-        warnings,
-    })
+    Ok(protocol_value(collections))
 }
 
 #[cfg(test)]
@@ -104,20 +93,14 @@ pub fn with_route_params(base: &Dict, params: &crate::route::ParamSet) -> Result
     Ok(inputs)
 }
 
-fn protocol_value(collections: BTreeMap<EcoString, Vec<(EcoString, PathBuf, Content)>>) -> Value {
+fn protocol_value(collections: BTreeMap<EcoString, Vec<(EcoString, RootedPath)>>) -> Value {
     let mut packed_collections = Dict::new();
     for (collection_name, entries) in collections {
         let mut packed_entries = Dict::new();
-        for (id, relative_path, body) in entries {
+        for (id, source) in entries {
             packed_entries.insert(
                 Str::from(id.as_str()),
-                Value::Dict(dict! {
-                    "id" => id.as_str(),
-                    "collection" => collection_name.as_str(),
-                    "file-path" => relative_path.to_string_lossy().replace('\\', "/"),
-                    "body" => body.clone(),
-                    "metadata" => frontmatter(&body).unwrap_or_default(),
-                }),
+                Value::Module(entry_module(&collection_name, &id, source)),
             );
         }
         packed_collections.insert(
@@ -132,28 +115,86 @@ fn protocol_value(collections: BTreeMap<EcoString, Vec<(EcoString, PathBuf, Cont
     })
 }
 
-#[comemo::memoize]
-fn frontmatter(content: &Content) -> Option<Dict> {
-    content
-        .traverse(&mut |element| {
-            if element
-                .label()
-                .is_some_and(|label| *label.resolve() == *"frontmatter")
-                && let Some(metadata) = element.to_packed::<MetadataElem>()
-                && let Value::Dict(dict) = &metadata.value
-            {
-                ControlFlow::Break(dict.clone())
-            } else {
-                ControlFlow::Continue(())
-            }
-        })
-        .break_value()
+fn entry_module(collection: &EcoString, id: &EcoString, source: RootedPath) -> Module {
+    let mut scope = Scope::new();
+    scope.define("id", Str::from(id.as_str()));
+    scope.define("collection", Str::from(collection.as_str()));
+    scope.define("render", render_closure(source));
+    Module::new(format!("{collection}/{id}"), scope)
+}
+
+fn render_closure(source: RootedPath) -> Func {
+    const RENDER_CLOSURE_SOURCE: &str = r#"() => {
+  let find-frontmatter(node) = {
+    let fields = node.fields()
+    if fields.at("label", default: none) == <frontmatter> {
+      let value = fields.at("value", default: (:))
+      return if type(value) == dictionary { value } else { (:) }
+    }
+
+    for value in fields.values() {
+      if type(value) == content {
+        let found = find-frontmatter(value)
+        if found != none { return found }
+      } else if type(value) == array {
+        for child in value {
+          if type(child) == content {
+            let found = find-frontmatter(child)
+            if found != none { return found }
+          }
+        }
+      }
+    }
+
+    none
+  }
+
+  import source as entry-module
+  let entry-content = include entry-module
+  let metadata = find-frontmatter(entry-content)
+  (
+    metadata: if metadata == none { (:) } else { metadata },
+    content: entry-content,
+  )
+}"#;
+
+    static RENDER_CLOSURE_NODE: LazyLock<SyntaxNode> = LazyLock::new(|| {
+        let root = parse_code(RENDER_CLOSURE_SOURCE);
+        let (errors, _) = root.errors_and_warnings();
+        assert!(errors.is_empty(), "Aster render closure must parse");
+        let code = root
+            .cast::<ast::Code>()
+            .expect("render closure must be code");
+        let mut expressions = code.exprs();
+        let ast::Expr::Closure(closure) = expressions.next().expect("render closure must exist")
+        else {
+            panic!("render expression must be a closure");
+        };
+        assert!(
+            expressions.next().is_none(),
+            "render closure must be the only expression"
+        );
+        closure.to_untyped().clone()
+    });
+
+    static CAPTURE_LIBRARY: LazyLock<Library> = LazyLock::new(Library::default);
+
+    let mut scopes = Scopes::new(Some(&CAPTURE_LIBRARY));
+    scopes.top.define("source", source);
+
+    let mut captures = CapturesVisitor::new(Some(&scopes), Capturer::Function);
+    captures.visit(&RENDER_CLOSURE_NODE);
+    Func::from(Closure {
+        node: ClosureNode::Closure(RENDER_CLOSURE_NODE.clone()),
+        defaults: Vec::new(),
+        captured: captures.finish(),
+        num_pos_params: 0,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use typst::text::TextElem;
 
     #[test]
     fn empty_protocol_has_one_owner() {
@@ -200,18 +241,36 @@ mod tests {
     }
 
     #[test]
-    fn frontmatter_analysis_is_memoized_by_content() {
+    fn protocol_contains_lazy_entry_modules() {
         let temp = tempfile::tempdir().unwrap();
-        let marker = temp.path().display().to_string();
-        let content = TextElem::packed(marker.clone());
+        let root = temp.path();
+        std::fs::create_dir_all(root.join("content/blog/nested")).unwrap();
+        std::fs::write(root.join("aster.toml"), "").unwrap();
+        std::fs::write(root.join("content/blog/nested/post.typ"), "= Post").unwrap();
+        let project = ProjectRoot::new(root.to_owned()).unwrap();
 
-        assert!(frontmatter(&content).is_none());
-        assert!(!comemo::testing::last_was_hit());
-
-        assert!(frontmatter(&content).is_none());
-        assert!(comemo::testing::last_was_hit());
-
-        assert!(frontmatter(&TextElem::packed(format!("{marker}-changed"))).is_none());
-        assert!(!comemo::testing::last_was_hit());
+        let Value::Dict(protocol) = load(&project).unwrap() else {
+            panic!("protocol must be a dictionary");
+        };
+        let Value::Dict(collections) = protocol.get("collections").unwrap() else {
+            panic!("collections must be a dictionary");
+        };
+        let Value::Dict(blog) = collections.get("blog").unwrap() else {
+            panic!("collection must be a dictionary");
+        };
+        let Value::Module(entry) = blog.get("nested/post").unwrap() else {
+            panic!("entry must be a module");
+        };
+        assert_eq!(
+            entry.field("id", ()).unwrap(),
+            &Value::Str(Str::from("nested/post"))
+        );
+        assert_eq!(
+            entry.field("collection", ()).unwrap(),
+            &Value::Str(Str::from("blog"))
+        );
+        assert!(matches!(entry.field("render", ()).unwrap(), Value::Func(_)));
+        assert!(entry.field("file-path", ()).is_err());
+        assert!(entry.field("content", ()).is_err());
     }
 }

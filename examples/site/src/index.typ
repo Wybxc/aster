@@ -4,7 +4,7 @@
 // from the tmTheme themes declared in aster.toml and injected directly
 // into <head> as a separate stylesheet.
 
-#import "/lib/aster/content.typ": get-collection, render
+#import "/lib/aster/content.typ": get-collection
 
 #html.html({
   html.head[
@@ -27,14 +27,15 @@
 
     #for post in posts {
       html.article[
-        #let meta = post.metadata
+        #let rendered = post.render()
+        #let meta = rendered.metadata
         #if meta != (:) {
           html.p[
             #meta.at("title", default: "Untitled") \
             Published: #meta.at("date", default: "unknown")
           ]
         }
-        #render(post)
+        #rendered.content
       ]
     }
   ]

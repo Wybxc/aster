@@ -14,11 +14,11 @@ Project discovery selects the nearest ancestor containing an `aster.toml` file. 
 
 ## Content protocol
 
-The **content protocol** is the `_aster` Typst input. Rust owns its version and complete value, including the empty state. It contains content collections and entries. Each **content entry** has an id, collection name, project-relative content path, compiled Typst body, and frontmatter metadata.
+The **content protocol** is the `_aster` Typst input. Rust owns its version and complete value, including the empty state. It maps each collection and entry id to a lazy entry module. Each module exposes `id`, `collection`, and a Typst `render` closure; it does not expose a source path or contain evaluated content or frontmatter.
 
 `_aster` is reserved. Route parameters also cannot replace configuration inputs.
 
-The Typst adapter in `lib/aster/content.typ` exposes the protocol through `get-collection`, `get-entry`, and `render`.
+The Typst adapter in `lib/aster/content.typ` exposes the protocol through `get-collection`, `get-collection-ids`, and `get-entry`, returning the Rust-provided entry modules unchanged. Calling `entry.render()` runs a Rust-constructed Typst user closure that dynamically imports the entry source, includes its content, extracts labelled frontmatter, and returns `(metadata: ..., content: ...)`. These imports become tracked `World::source` dependencies, so editing an entry invalidates only pages that rendered it. Route declarations use `get-collection-ids` when they only need membership and should not depend on entry bodies. Adding, removing, or renaming an entry changes the shared entry manifest and invalidates all page libraries.
 
 ## Route plan
 
@@ -30,7 +30,7 @@ A normal parameter fills one path segment and cannot contain separators. A sprea
 
 ## Typst build session
 
-A **Typst build session** is bound to one Aster project. It owns shared fonts, package and project-file access, input libraries, Typst world construction, content evaluation, page compilation, and source-aware diagnostics. The project-file store is also the tracked filesystem surface for build transforms that need incremental file access.
+A **Typst build session** is bound to one Aster project. It owns shared fonts, package and project-file access, input libraries, Typst world construction, page compilation, and source-aware diagnostics. The project-file store is also the tracked filesystem surface for dynamically imported content and build transforms that need incremental file access.
 
 The session is reused across builds. The first build compiles directly. Before each later build, the build driver marks loaded files stale; subsequent reads update Typst sources in place so comemo can validate and reuse unchanged compilation and transformation results. After the build attempt, the driver ages the global comemo cache. Page compilation is memoized through a tracked Typst world.
 

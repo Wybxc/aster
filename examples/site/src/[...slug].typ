@@ -1,13 +1,14 @@
 // Catch-all: renders any first-level slug not handled by static routes.
-#import "/lib/aster/content.typ": get-collection, get-entry, render
+#import "/lib/aster/content.typ": get-collection-ids, get-entry
 #metadata(
-  get-collection("blog").map(e => (slug: e.id))
+  get-collection-ids("blog").map(id => (slug: id))
     + ((slug: "about"),)
 ) <route>
 
 #let slug = sys.inputs.at("slug", default: "")
 #let post = get-entry("blog", slug)
 #if post != none {
+  let rendered = post.render()
   html.html({
     html.head[
       #html.meta(charset: "utf-8")
@@ -15,7 +16,8 @@
     ]
     html.body[
       = Catch-All Page
-      #render(post)
+      #raw(repr(rendered.metadata))
+      #rendered.content
     ]
   })
 } else if slug == "about" {
