@@ -10,9 +10,9 @@ pub fn color_to_hex(c: syntect::highlighting::Color) -> String {
     format!("#{:02x}{:02x}{:02x}", c.r, c.g, c.b)
 }
 
-/// Compute a collision-resistant content identity for persistent asset URLs.
+/// Compute a compact 64-bit content fingerprint for generated asset URLs.
 pub fn content_hash(data: &[u8]) -> String {
-    blake3::hash(data).to_hex().to_string()
+    format!("{:016x}", seahash::hash(data))
 }
 
 /// Signal returned by the callback passed to [`walk_mut`] to control
