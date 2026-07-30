@@ -43,13 +43,13 @@ An **output publication** is the complete candidate output tree for one successf
 - generated-asset identity and content-addressed naming
 - browser-facing references relative to each output page
 - deduplication
-- locked, recoverable replacement of `dist/`
+- deterministic replacement of `dist/`
 - removal of stale pages and assets
 
-Rendering and document transformation accumulate a publication in memory. The previous `dist/` remains untouched until every page succeeds and the complete publication is ready.
+Rendering and document transformation accumulate a publication in memory. Once every page succeeds, publication clears `dist/` and writes the complete output tree directly.
 
 ## Build outcome
 
 A **build outcome** records published pages, collected warnings, and elapsed time. Build modules decide whether an operation succeeds and preserve diagnostic context. The terminal adapter in `diag.rs` decides only how outcomes are displayed.
 
-Aster warnings are non-fatal by explicit policy. Page compilation, route planning, transformation, and output publication failures are fatal, so a failed build does not publish a partial output tree.
+Aster warnings are non-fatal by explicit policy. Page compilation, route planning, transformation, and output publication failures are fatal. Failures before publication leave the prior `dist/` untouched; an output write failure may leave a partial output tree.

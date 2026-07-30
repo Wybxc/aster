@@ -75,7 +75,6 @@ pub fn build(project: ProjectRoot, config: AsterConfig) -> Result<BuildOutcome> 
     }
 
     let published = publication.publish()?;
-    warnings.extend(published.warnings);
     Ok(BuildOutcome {
         outputs: published.pages,
         warnings,

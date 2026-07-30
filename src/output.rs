@@ -1,10 +1,7 @@
 use std::collections::BTreeMap;
-use std::fs::{File, OpenOptions};
-use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 
 use anyhow::{Context, Result, bail, ensure};
-use fs2::FileExt;
 
 use crate::project::ProjectRoot;
 use crate::utils::content_hash;
@@ -49,7 +46,6 @@ pub struct AssetPath(OutputPath);
 
 pub struct PublishedOutput {
     pub pages: Vec<PathBuf>,
-    pub warnings: Vec<String>,
 }
 
 /// Collects an entire successful build before replacing `dist/`.
@@ -113,92 +109,21 @@ impl OutputPublication {
 
     /// Replace the prior output tree with this complete build.
     ///
-    /// Building in a sibling directory means a failed build leaves the prior
-    /// `dist/` untouched. Replacing the directory removes every stale page and
-    /// content-addressed asset from earlier builds.
+    /// The complete file set is collected before publication. Clearing the
+    /// output directory removes every stale page and content-addressed asset,
+    /// so publishing the same build repeatedly produces the same tree.
     pub fn publish(self) -> Result<PublishedOutput> {
-        let parent = self
-            .output_dir
-            .parent()
-            .context("output directory has no parent")?;
-        let name = self
-            .output_dir
-            .file_name()
-            .context("output directory has no file name")?
-            .to_string_lossy();
-        let lock_path = parent.join(format!(".{name}.aster-lock"));
-        let mut lock = OpenOptions::new()
-            .create(true)
-            .truncate(false)
-            .read(true)
-            .write(true)
-            .open(&lock_path)
-            .with_context(|| format!("failed to open build lock {}", lock_path.display()))?;
-        lock.try_lock_exclusive().with_context(|| {
-            format!(
-                "another build is publishing {} (lock {})",
-                self.output_dir.display(),
-                lock_path.display()
-            )
-        })?;
-        let build_id = next_build_id(&mut lock)?;
-        cleanup_staging_dirs(parent, &format!(".{name}.aster-staging-"))?;
-        let staging = parent.join(format!(".{name}.aster-staging-{build_id}"));
-        let backup = parent.join(format!(".{name}.aster-backup"));
-
-        if !self.output_dir.exists() && backup.exists() {
-            std::fs::rename(&backup, &self.output_dir).with_context(|| {
-                format!("failed to recover prior output from {}", backup.display())
-            })?;
-        } else if self.output_dir.exists() && backup.exists() {
-            remove_if_exists(&backup)?;
-        }
-        std::fs::create_dir(&staging)
-            .with_context(|| format!("failed to create {}", staging.display()))?;
-
-        if let Err(error) = write_staging_files(&staging, &self.files) {
-            let _ = remove_if_exists(&staging);
-            return Err(error);
-        }
-
-        let had_previous = self.output_dir.exists();
-        if had_previous {
-            std::fs::rename(&self.output_dir, &backup).with_context(|| {
-                format!(
-                    "failed to move existing output {} aside",
-                    self.output_dir.display()
-                )
-            })?;
-        }
-
-        if let Err(publish_error) = std::fs::rename(&staging, &self.output_dir) {
-            let message = format!(
-                "failed to publish output directory {}: {publish_error}",
-                self.output_dir.display()
-            );
-            if had_previous && let Err(restore_error) = std::fs::rename(&backup, &self.output_dir) {
-                bail!(
-                    "{message}; also failed to restore prior output from {}: {restore_error}",
-                    backup.display()
-                );
-            }
-            bail!("{message}");
-        }
-
-        let mut warnings = Vec::new();
-        if had_previous && let Err(error) = remove_if_exists(&backup) {
-            warnings.push(format!(
-                "published output but failed to remove backup {}: {error:#}",
-                backup.display()
-            ));
-        }
+        remove_if_exists(&self.output_dir)?;
+        std::fs::create_dir_all(&self.output_dir)
+            .with_context(|| format!("failed to create {}", self.output_dir.display()))?;
+        write_output_files(&self.output_dir, &self.files)?;
 
         let pages = self
             .pages
             .into_iter()
             .map(|path| self.output_dir.join(path.as_path()))
             .collect();
-        Ok(PublishedOutput { pages, warnings })
+        Ok(PublishedOutput { pages })
     }
 
     fn insert(&mut self, path: OutputPath, content: Vec<u8>) -> Result<()> {
@@ -293,37 +218,11 @@ impl PagePublication<'_> {
     }
 }
 
-fn write_staging_files(staging: &Path, files: &BTreeMap<OutputPath, Vec<u8>>) -> Result<()> {
+fn write_output_files(output_dir: &Path, files: &BTreeMap<OutputPath, Vec<u8>>) -> Result<()> {
     for (relative, content) in files {
-        write_file(&staging.join(relative.as_path()), content)?;
+        write_file(&output_dir.join(relative.as_path()), content)?;
     }
     Ok(())
-}
-
-fn cleanup_staging_dirs(parent: &Path, prefix: &str) -> Result<()> {
-    for entry in
-        std::fs::read_dir(parent).with_context(|| format!("failed to list {}", parent.display()))?
-    {
-        let entry = entry?;
-        if entry.file_name().to_string_lossy().starts_with(prefix) {
-            remove_if_exists(&entry.path())?;
-        }
-    }
-    Ok(())
-}
-
-fn next_build_id(lock: &mut File) -> Result<u64> {
-    use std::io::{Read, Seek, SeekFrom};
-
-    lock.seek(SeekFrom::Start(0))?;
-    let mut current = String::new();
-    lock.read_to_string(&mut current)?;
-    let next = current.trim().parse::<u64>().unwrap_or(0).saturating_add(1);
-    lock.set_len(0)?;
-    lock.seek(SeekFrom::Start(0))?;
-    write!(lock, "{next}")?;
-    lock.sync_data()?;
-    Ok(next)
 }
 
 fn valid_name_part(part: &str) -> bool {
@@ -383,6 +282,18 @@ mod tests {
         (root, project)
     }
 
+    fn snapshot_tree(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
+        let mut snapshot = BTreeMap::new();
+        for entry in walkdir::WalkDir::new(root) {
+            let entry = entry.unwrap();
+            if entry.file_type().is_file() {
+                let relative = entry.path().strip_prefix(root).unwrap().to_owned();
+                snapshot.insert(relative, std::fs::read(entry.path()).unwrap());
+            }
+        }
+        snapshot
+    }
+
     #[test]
     fn rejects_paths_outside_output() {
         assert!(OutputPath::new("../index.html").is_err());
@@ -429,7 +340,7 @@ mod tests {
     }
 
     #[test]
-    fn publication_replaces_stale_output_and_deduplicates_assets() {
+    fn publication_is_idempotent_and_removes_stale_output() {
         let (root, project) = fixture();
         std::fs::create_dir_all(project.output_dir()).unwrap();
         std::fs::write(project.output_dir().join("stale.html"), "old").unwrap();
@@ -453,17 +364,39 @@ mod tests {
             .unwrap();
         publication.publish().unwrap();
 
-        assert!(!project.output_dir().join("stale.html").exists());
+        let expected = snapshot_tree(&project.output_dir());
+        std::fs::write(project.output_dir().join("stale.html"), "old").unwrap();
+
+        let mut repeated = OutputPublication::new(&project);
         assert_eq!(
-            std::fs::read_to_string(project.output_dir().join("index.html")).unwrap(),
-            "new"
+            repeated
+                .add_asset("css", "css", b"body{}".to_vec())
+                .unwrap(),
+            first
         );
-        assert_eq!(
-            std::fs::read_dir(project.output_dir().join("_assets"))
-                .unwrap()
-                .count(),
-            1
-        );
+        repeated
+            .page(&template, &output)
+            .unwrap()
+            .add_html("new".into())
+            .unwrap();
+        repeated.publish().unwrap();
+
+        assert_eq!(snapshot_tree(&project.output_dir()), expected);
+        assert!(!root.join(".dist.aster-lock").exists());
+        assert_eq!(expected.len(), 2);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn empty_publication_replaces_output_with_empty_directory() {
+        let (root, project) = fixture();
+        std::fs::create_dir_all(project.output_dir()).unwrap();
+        std::fs::write(project.output_dir().join("stale.html"), "old").unwrap();
+
+        OutputPublication::new(&project).publish().unwrap();
+
+        assert!(project.output_dir().is_dir());
+        assert_eq!(std::fs::read_dir(project.output_dir()).unwrap().count(), 0);
         let _ = std::fs::remove_dir_all(root);
     }
 }
