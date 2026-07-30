@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="430" viewBox="0 0 1200 430" role="img" aria-labelledby="title desc">
+  <title id="title">Aster build pipeline</title>
+  <desc id="desc">Typst templates and collections flow through route planning, tracked compilation, document transforms, and deterministic publication.</desc>
+  <rect width="1200" height="430" fill="#edf2ef"/>
+  <rect x="48" y="58" width="226" height="132" rx="6" fill="#ffffff" stroke="#9eada5" stroke-width="2"/>
+  <rect x="48" y="240" width="226" height="132" rx="6" fill="#ffffff" stroke="#9eada5" stroke-width="2"/>
+  <rect x="358" y="149" width="196" height="132" rx="6" fill="#dceee9" stroke="#0b6b5e" stroke-width="3"/>
+  <rect x="638" y="149" width="196" height="132" rx="6" fill="#edf3fa" stroke="#315a8a" stroke-width="3"/>
+  <rect x="918" y="149" width="234" height="132" rx="6" fill="#ffffff" stroke="#c94f3b" stroke-width="3"/>
+  <path d="M274 124 H322 Q338 124 338 140 V187 Q338 203 354 203" fill="none" stroke="#4b5b53" stroke-width="4"/>
+  <path d="M274 306 H322 Q338 306 338 290 V243 Q338 227 354 227" fill="none" stroke="#4b5b53" stroke-width="4"/>
+  <path d="M554 215 H628" fill="none" stroke="#4b5b53" stroke-width="4"/>
+  <path d="M834 215 H908" fill="none" stroke="#4b5b53" stroke-width="4"/>
+  <path d="M342 203 l-14 -9 v18 z" fill="#4b5b53"/>
+  <path d="M342 227 l-14 -9 v18 z" fill="#4b5b53"/>
+  <path d="M628 215 l-14 -9 v18 z" fill="#4b5b53"/>
+  <path d="M908 215 l-14 -9 v18 z" fill="#4b5b53"/>
+  <g font-family="Inter, system-ui, sans-serif" fill="#17201c">
+    <text x="76" y="112" font-size="18" font-weight="700">Templates define pages.</text>
+    <text x="76" y="146" font-size="16" fill="#5b6761">They live under src/.</text>
+    <text x="76" y="284" font-size="17" font-weight="700">Collections provide</text>
+    <text x="76" y="312" font-size="17" font-weight="700">entries.</text>
+    <text x="76" y="344" font-size="16" fill="#5b6761">They live under content/.</text>
+    <text x="386" y="208" font-size="19" font-weight="700" fill="#0b6b5e">Aster validates</text>
+    <text x="386" y="238" font-size="19" font-weight="700">every route.</text>
+    <text x="666" y="208" font-size="19" font-weight="700" fill="#315a8a">A tracked world</text>
+    <text x="666" y="238" font-size="19" font-weight="700">compiles each page.</text>
+    <text x="946" y="190" font-size="19" font-weight="700" fill="#c94f3b">Aster publishes</text>
+    <text x="946" y="220" font-size="19" font-weight="700">HTML together with</text>
+    <text x="946" y="250" font-size="19" font-weight="700">hashed assets.</text>
+  </g>
+  <g font-family="ui-monospace, monospace" font-size="14" fill="#5b6761">
+    <text x="48" y="410">Aster keeps publication deterministic while reusing unchanged page compilations.</text>
+  </g>
+</svg>

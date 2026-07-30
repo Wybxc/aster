@@ -1,5 +1,30 @@
 [project]
-name = "sample-site"
+name = "aster-field-notes"
+
+[site]
+title = "Aster Field Notes"
+description = "This complete example shows how Aster builds a static site from Typst templates, content collections, and file-based routes."
+language = "en"
+edition = "2026"
+
+[author]
+name = "Aster contributors"
+
+[[navigation]]
+label = "Overview"
+href = "index.html"
+
+[[navigation]]
+label = "Capabilities"
+href = "features.html"
+
+[[navigation]]
+label = "Journal"
+href = "journal/incremental-by-default.html"
+
+[[navigation]]
+label = "Docs"
+href = "docs/guides/getting-started.html"
 
 [highlight]
 themes = { light = "InspiredGitHub", dark = "base16-eighties.dark" }

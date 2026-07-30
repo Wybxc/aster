@@ -1,2 +1,4 @@
-/* Global site styles — syntax highlighting CSS variables are generated
-   automatically by Aster during the build. */
+@import "styles/index.css";
+
+/* This entry file is resolved from each page template. Aster bundles its
+   transitive imports, minifies the result, and publishes one hashed asset. */
