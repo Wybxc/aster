@@ -50,13 +50,12 @@ impl ElementProcessor for CssProcessor {
                 .extension()
                 .unwrap_or_default()
                 .to_string_lossy();
-            let hashed_path = assets.add(Path::new(""), &stem, &ext, css_bytes);
+            let full_path = assets.add(&ctx.output_dir(), &stem, &ext, css_bytes);
 
             // Compute relative path from the page to the CSS file.
             let page_dir = ctx.page_path.parent().expect("page has a parent");
-            let css_output = ctx.output_dir().join(&hashed_path);
             let relative =
-                pathdiff::diff_paths(&css_output, page_dir).expect("both paths under output_dir");
+                pathdiff::diff_paths(&full_path, page_dir).expect("both paths under output_dir");
 
             elem.update_attr("href", |v| *v = relative.to_string_lossy().into());
             elem.update_attr("rel", |v| *v = "stylesheet".into());

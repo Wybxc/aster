@@ -151,7 +151,7 @@ pub fn build(
     }
 
     // Flush all generated assets (duplicate content → single file).
-    if let Err(e) = all_assets.flush(&project.output_dir()) {
+    if let Err(e) = all_assets.flush() {
         diag::emit_warning(&format!("failed to write assets: {e:#}"));
     }
 

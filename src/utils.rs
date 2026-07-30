@@ -158,10 +158,10 @@ impl AssetCollector {
         }
     }
 
-    /// Register content; computes the hash and returns the relative path
-    /// `{dir}/{stem}.{hash}.{ext}`.  `dir` is relative to the output
-    /// directory (use `Path::new("")` for root).  If the same content was
-    /// already registered, the **earlier** path is returned (dedup).
+    /// Register content.  `dir` is the **absolute** output directory
+    /// (typically `project.output_dir()`).  Returns the absolute path
+    /// `{dir}/{stem}.{hash}.{ext}`.  If the same content was already
+    /// registered, the **earlier** path is returned (dedup).
     pub fn add(&mut self, dir: &Path, stem: &str, ext: &str, content: Vec<u8>) -> PathBuf {
         let hash = content_hash(&content);
         let path = dir.join(format!("{stem}.{hash}.{ext}"));
@@ -172,10 +172,11 @@ impl AssetCollector {
             .clone()
     }
 
-    /// Write every unique asset to `output_dir`.
-    pub fn flush(&self, output_dir: &Path) -> Result<()> {
+    /// Write every unique asset to disk.  Each asset's stored path is
+    /// already absolute, so no `output_dir` parameter is needed.
+    pub fn flush(&self) -> Result<()> {
         for (_, (path, content)) in &self.entries {
-            write_file(&output_dir.join(path), content)?;
+            write_file(path, content)?;
         }
         Ok(())
     }
