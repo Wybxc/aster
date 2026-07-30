@@ -37,10 +37,10 @@ impl World for CompileWorld {
     }
 
     fn source(&self, id: FileId) -> Result<typst::syntax::Source, FileError> {
-        if let Some(ref src) = self.source_override {
-            if src.id() == id {
-                return Ok(src.clone());
-            }
+        if let Some(ref src) = self.source_override
+            && src.id() == id
+        {
+            return Ok(src.clone());
         }
         self.files.source(id)
     }
