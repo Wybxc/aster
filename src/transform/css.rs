@@ -1,8 +1,7 @@
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 
 use anyhow::Result;
-use lightningcss::bundler::{Bundler, ResolveResult, SourceProvider};
+use lightningcss::bundler::{Bundler, FileProvider, ResolveResult, SourceProvider};
 use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions};
 use lightningcss::targets::Browsers;
 use typst_html::HtmlDocument;
@@ -64,14 +63,14 @@ fn bundle_file(entry: &Path, source_root: &Path) -> Result<String> {
 
 struct ConfinedFileProvider {
     source_root: PathBuf,
-    inputs: Mutex<Vec<*mut String>>,
+    files: FileProvider,
 }
 
 impl ConfinedFileProvider {
     fn new(source_root: PathBuf) -> Self {
         Self {
             source_root,
-            inputs: Mutex::new(Vec::new()),
+            files: FileProvider::new(),
         }
     }
 
@@ -91,21 +90,12 @@ impl ConfinedFileProvider {
     }
 }
 
-// The pointers are owned by `inputs`, guarded by the mutex, and freed in Drop.
-unsafe impl Send for ConfinedFileProvider {}
-unsafe impl Sync for ConfinedFileProvider {}
-
 impl SourceProvider for ConfinedFileProvider {
     type Error = std::io::Error;
 
     fn read<'a>(&'a self, file: &Path) -> std::result::Result<&'a str, Self::Error> {
         let file = self.confined(file)?;
-        let source = std::fs::read_to_string(file)?;
-        let pointer = Box::into_raw(Box::new(source));
-        self.inputs.lock().unwrap().push(pointer);
-        // SAFETY: the allocation remains owned by this provider until Drop. Entries
-        // are never removed and all mutation of the pointer list is synchronized.
-        Ok(unsafe { &*pointer })
+        self.files.read(&file)
     }
 
     fn resolve(
@@ -118,28 +108,14 @@ impl SourceProvider for ConfinedFileProvider {
     }
 }
 
-impl Drop for ConfinedFileProvider {
-    fn drop(&mut self) {
-        for pointer in self.inputs.get_mut().unwrap().drain(..) {
-            // SAFETY: each pointer was allocated once in `read`, remains unique,
-            // and is removed exactly once while the provider is being dropped.
-            drop(unsafe { Box::from_raw(pointer) });
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
     use super::*;
-
-    static NEXT_DIR: AtomicUsize = AtomicUsize::new(0);
 
     #[test]
     fn rejects_transitive_import_outside_source_root() {
-        let id = NEXT_DIR.fetch_add(1, Ordering::Relaxed);
-        let root = std::env::temp_dir().join(format!("aster-css-test-{}-{id}", std::process::id()));
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
         let src = root.join("src");
         std::fs::create_dir_all(&src).unwrap();
         std::fs::write(src.join("style.css"), "@import \"../secret.css\";").unwrap();
@@ -147,6 +123,24 @@ mod tests {
 
         let source_root = std::fs::canonicalize(&src).unwrap();
         assert!(bundle_file(&src.join("style.css"), &source_root).is_err());
-        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn bundles_imports_through_the_upstream_file_provider() {
+        let temp = tempfile::tempdir().unwrap();
+        let src = temp.path().join("src");
+        std::fs::create_dir_all(src.join("styles")).unwrap();
+        std::fs::write(
+            src.join("style.css"),
+            "@import \"styles/base.css\"; .page { color: red; }",
+        )
+        .unwrap();
+        std::fs::write(src.join("styles/base.css"), ".base { color: blue; }").unwrap();
+
+        let source_root = std::fs::canonicalize(&src).unwrap();
+        let bundled = bundle_file(&src.join("style.css"), &source_root).unwrap();
+
+        assert!(bundled.contains(".base"));
+        assert!(bundled.contains(".page"));
     }
 }

@@ -265,21 +265,15 @@ fn remove_if_exists(path: &Path) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
     use super::*;
 
-    static NEXT_DIR: AtomicUsize = AtomicUsize::new(0);
-
-    fn fixture() -> (PathBuf, ProjectRoot) {
-        let id = NEXT_DIR.fetch_add(1, Ordering::Relaxed);
-        let root =
-            std::env::temp_dir().join(format!("aster-output-test-{}-{id}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
+    fn fixture() -> (tempfile::TempDir, ProjectRoot) {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
         std::fs::create_dir_all(root.join("src/blog")).unwrap();
         std::fs::write(root.join("aster.toml"), "").unwrap();
-        let project = ProjectRoot::new(root.clone()).unwrap();
-        (root, project)
+        let project = ProjectRoot::new(root.to_owned()).unwrap();
+        (temp, project)
     }
 
     fn snapshot_tree(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
@@ -303,7 +297,7 @@ mod tests {
 
     #[test]
     fn nested_page_gets_relative_asset_url() {
-        let (root, project) = fixture();
+        let (_temp, project) = fixture();
         let mut publication = OutputPublication::new(&project);
         let asset = publication
             .add_asset("css", "css", b"body{}".to_vec())
@@ -318,12 +312,11 @@ mod tests {
                 .unwrap()
                 .starts_with("../_assets/css.")
         );
-        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
     fn source_resolution_uses_template_directory_and_is_confined() {
-        let (root, project) = fixture();
+        let (_temp, project) = fixture();
         std::fs::write(project.src_dir().join("style.css"), "body{}").unwrap();
         let template = project.src_dir().join("blog/[slug].typ");
         std::fs::write(&template, "").unwrap();
@@ -336,12 +329,11 @@ mod tests {
             std::fs::canonicalize(project.src_dir().join("style.css")).unwrap()
         );
         assert!(page.resolve_source("../../aster.toml").is_err());
-        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
     fn publication_is_idempotent_and_removes_stale_output() {
-        let (root, project) = fixture();
+        let (temp, project) = fixture();
         std::fs::create_dir_all(project.output_dir()).unwrap();
         std::fs::write(project.output_dir().join("stale.html"), "old").unwrap();
 
@@ -382,14 +374,13 @@ mod tests {
         repeated.publish().unwrap();
 
         assert_eq!(snapshot_tree(&project.output_dir()), expected);
-        assert!(!root.join(".dist.aster-lock").exists());
+        assert!(!temp.path().join(".dist.aster-lock").exists());
         assert_eq!(expected.len(), 2);
-        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
     fn empty_publication_replaces_output_with_empty_directory() {
-        let (root, project) = fixture();
+        let (_temp, project) = fixture();
         std::fs::create_dir_all(project.output_dir()).unwrap();
         std::fs::write(project.output_dir().join("stale.html"), "old").unwrap();
 
@@ -397,6 +388,5 @@ mod tests {
 
         assert!(project.output_dir().is_dir());
         assert_eq!(std::fs::read_dir(project.output_dir()).unwrap().count(), 0);
-        let _ = std::fs::remove_dir_all(root);
     }
 }

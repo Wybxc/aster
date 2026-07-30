@@ -5,9 +5,9 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1"
-base64 = "0.23.0"
 clap = { version = "4", features = ["derive"] }
 comemo = "0.5"
+data-url = "0.3"
 lightningcss = "=1.0.0-alpha.72"
 pathdiff = "0.2"
 seahash = "4.1.0"
@@ -25,3 +25,4 @@ walkdir = "2.5"
 
 [dev-dependencies]
 comemo = { version = "0.5", features = ["testing"] }
+tempfile = "3"

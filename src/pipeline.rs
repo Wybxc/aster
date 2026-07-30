@@ -130,25 +130,19 @@ fn render_page(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
     use super::*;
     use crate::project::ProjectRoot;
 
-    static NEXT_DIR: AtomicUsize = AtomicUsize::new(0);
-
     #[test]
     fn build_reuses_the_session_and_observes_source_changes() {
-        let id = NEXT_DIR.fetch_add(1, Ordering::Relaxed);
-        let root =
-            std::env::temp_dir().join(format!("aster-pipeline-test-{}-{id}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
         std::fs::create_dir_all(root.join("src")).unwrap();
         std::fs::write(root.join("aster.toml"), "").unwrap();
         let entry = root.join("src/index.typ");
-        std::fs::write(&entry, format!("#html.elem(\"p\")[first-{id}]")).unwrap();
+        std::fs::write(&entry, "#html.elem(\"p\")[first]").unwrap();
 
-        let project = ProjectRoot::new(root.clone()).unwrap();
+        let project = ProjectRoot::new(root.to_owned()).unwrap();
         let mut driver = BuildDriver::new(project.clone());
         driver
             .build(AsterConfig::load(&project.config_file()).unwrap())
@@ -161,14 +155,12 @@ mod tests {
         let repeated = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
         assert_eq!(repeated, first);
 
-        std::fs::write(&entry, format!("#html.elem(\"p\")[second-{id}]")).unwrap();
+        std::fs::write(&entry, "#html.elem(\"p\")[second]").unwrap();
         driver
             .build(AsterConfig::load(&project.config_file()).unwrap())
             .unwrap();
         let changed = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
         assert_ne!(changed, first);
-        assert!(changed.contains(&format!("second-{id}")));
-
-        let _ = std::fs::remove_dir_all(root);
+        assert!(changed.contains("second"));
     }
 }

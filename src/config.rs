@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
-use typst::foundations::{Dict, Str, Value};
+use typst::foundations::{Dict, Value};
 
 const DEFAULT_LIGHT: &str = "InspiredGitHub";
 const DEFAULT_DARK: &str = "base16-eighties.dark";
@@ -36,9 +36,11 @@ impl AsterConfig {
             .parse()
             .with_context(|| format!("failed to parse {}", path.display()))?;
         let highlight = parse_highlight_inner(&table);
-        let value = toml::Value::Table(table);
+        let value: Value = toml::Value::Table(table)
+            .try_into()
+            .with_context(|| format!("failed to convert {} to Typst inputs", path.display()))?;
 
-        let dict = match toml_to_typst(value) {
+        let dict = match value {
             Value::Dict(d) => d,
             _ => bail!("unexpected value type from toml conversion"),
         };
@@ -69,20 +71,45 @@ fn parse_highlight_inner(table: &toml::Table) -> HighlightConfig {
     }
 }
 
-/// Convert a parsed `toml::Value` into a typst [`Value`].
-fn toml_to_typst(value: toml::Value) -> Value {
-    match value {
-        toml::Value::String(s) => Value::Str(Str::from(s)),
-        toml::Value::Integer(i) => Value::Int(i),
-        toml::Value::Float(f) => Value::Float(f),
-        toml::Value::Boolean(b) => Value::Bool(b),
-        toml::Value::Datetime(dt) => Value::Str(Str::from(dt.to_string())),
-        toml::Value::Array(arr) => Value::Array(arr.into_iter().map(toml_to_typst).collect()),
-        toml::Value::Table(table) => Value::Dict(
-            table
-                .into_iter()
-                .map(|(k, v)| (Str::from(k), toml_to_typst(v)))
-                .collect(),
-        ),
+#[cfg(test)]
+mod tests {
+    use typst::foundations::{Str, Value};
+
+    use super::*;
+
+    #[test]
+    fn loads_typst_inputs_through_serde() {
+        let temp = tempfile::tempdir().unwrap();
+        let config_file = temp.path().join("aster.toml");
+        std::fs::write(
+            &config_file,
+            concat!(
+                "title = \"Aster\"\n",
+                "published = 1979-05-27T07:32:00Z\n",
+                "[site]\n",
+                "enabled = true\n",
+                "[highlight.themes]\n",
+                "light = \"Solarized (light)\"\n",
+                "dark = \"Solarized (dark)\"\n",
+            ),
+        )
+        .unwrap();
+
+        let config = AsterConfig::load(&config_file).unwrap();
+
+        assert_eq!(
+            config.dict.get("title").unwrap(),
+            &Value::Str(Str::from("Aster"))
+        );
+        assert_eq!(
+            config.dict.get("published").unwrap(),
+            &Value::Str(Str::from("1979-05-27T07:32:00Z"))
+        );
+        let Value::Dict(site) = config.dict.get("site").unwrap() else {
+            panic!("site must be a dictionary");
+        };
+        assert_eq!(site.get("enabled").unwrap(), &Value::Bool(true));
+        assert_eq!(config.highlight.themes.light, "Solarized (light)");
+        assert_eq!(config.highlight.themes.dark, "Solarized (dark)");
     }
 }

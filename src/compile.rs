@@ -210,26 +210,21 @@ impl DiagnosticWorld for CompileWorld<'_> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
     use super::*;
-
-    static NEXT_DIR: AtomicUsize = AtomicUsize::new(0);
 
     #[test]
     fn page_compilation_is_reused_and_invalidated_by_dependency_changes() {
-        let id = NEXT_DIR.fetch_add(1, Ordering::Relaxed);
-        let root =
-            std::env::temp_dir().join(format!("aster-compile-test-{}-{id}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let marker = root.file_name().unwrap().to_string_lossy();
         std::fs::create_dir_all(root.join("src")).unwrap();
         std::fs::write(root.join("aster.toml"), "").unwrap();
         let entry = root.join("src/index.typ");
         let dependency = root.join("src/data.typ");
         std::fs::write(&entry, "#import \"data.typ\": marker\n#let value = marker").unwrap();
-        std::fs::write(&dependency, format!("#let marker = \"first-{id}\"")).unwrap();
+        std::fs::write(&dependency, format!("#let marker = \"first-{marker}\"")).unwrap();
 
-        let project = ProjectRoot::new(root.clone()).unwrap();
+        let project = ProjectRoot::new(root.to_owned()).unwrap();
         let mut session = TypstSession::new(project);
         let library = session.library(Dict::new());
 
@@ -240,11 +235,9 @@ mod tests {
         session.compile_page(&entry, &library).unwrap();
         assert!(comemo::testing::last_was_hit());
 
-        std::fs::write(&dependency, format!("#let marker = \"second-{id}\"")).unwrap();
+        std::fs::write(&dependency, format!("#let marker = \"second-{marker}\"")).unwrap();
         session.reset();
         session.compile_page(&entry, &library).unwrap();
         assert!(!comemo::testing::last_was_hit());
-
-        let _ = std::fs::remove_dir_all(root);
     }
 }

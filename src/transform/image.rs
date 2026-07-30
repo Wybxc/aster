@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use base64::Engine;
+use data_url::{DataUrl, mime::Mime};
 use typst_html::HtmlDocument;
 
 use super::{ElementProcessor, WalkControl};
@@ -17,10 +17,6 @@ impl ElementProcessor for ImageProcessor {
             if !elem.is_tag(typst_html::tag::img) {
                 return Ok(WalkControl::Continue);
             }
-            if !elem.has_attr("src", |value| value.as_str().starts_with("data:")) {
-                return Ok(WalkControl::Continue);
-            }
-
             let Some(src) = elem.get_attr("src") else {
                 return Ok(WalkControl::Continue);
             };
@@ -34,34 +30,75 @@ impl ElementProcessor for ImageProcessor {
 }
 
 fn try_extract(src: &str) -> Result<Option<(Vec<u8>, &'static str)>> {
-    let Some(data) = src.strip_prefix("data:") else {
+    let Ok(data_url) = DataUrl::process(src) else {
         return Ok(None);
     };
-    let Some((header, encoded)) = data.split_once(',') else {
-        return Ok(None);
-    };
-    if !header.contains(";base64") {
-        return Ok(None);
-    }
-
-    let mediatype = header.trim_end_matches(";base64");
-    let decoded = base64::engine::general_purpose::STANDARD
-        .decode(encoded.trim_end())
-        .context("failed to decode base64 image data")?;
+    let (decoded, _) = data_url
+        .decode_to_vec()
+        .context("failed to decode image data URL")?;
     if decoded.len() < IMAGE_EXTRACT_THRESHOLD {
         return Ok(None);
     }
-    Ok(Some((decoded, media_type_to_ext(mediatype))))
+    Ok(Some((decoded, media_type_to_ext(data_url.mime_type()))))
 }
 
-fn media_type_to_ext(mediatype: &str) -> &'static str {
-    match mediatype {
-        "image/png" => "png",
-        "image/jpeg" | "image/jpg" => "jpg",
-        "image/gif" => "gif",
-        "image/svg+xml" => "svg",
-        "image/webp" => "webp",
-        "image/avif" => "avif",
-        _ => "bin",
+fn media_type_to_ext(mediatype: &Mime) -> &'static str {
+    if mediatype.matches("image", "png") {
+        "png"
+    } else if mediatype.matches("image", "jpeg") || mediatype.matches("image", "jpg") {
+        "jpg"
+    } else if mediatype.matches("image", "gif") {
+        "gif"
+    } else if mediatype.matches("image", "svg+xml") {
+        "svg"
+    } else if mediatype.matches("image", "webp") {
+        "webp"
+    } else if mediatype.matches("image", "avif") {
+        "avif"
+    } else {
+        "bin"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extracts_standard_base64_data_urls_with_mime_parameters() {
+        let source = format!(
+            "DATA:image/png;charset=utf-8;base64,{}#ignored",
+            "AAAA".repeat(342)
+        );
+
+        let (content, extension) = try_extract(&source).unwrap().unwrap();
+
+        assert_eq!(content.len(), 1026);
+        assert_eq!(extension, "png");
+    }
+
+    #[test]
+    fn extracts_percent_encoded_data_urls() {
+        let source = format!(
+            "data:image/svg+xml,{}",
+            "%78".repeat(IMAGE_EXTRACT_THRESHOLD)
+        );
+
+        let (content, extension) = try_extract(&source).unwrap().unwrap();
+
+        assert_eq!(content, vec![b'x'; IMAGE_EXTRACT_THRESHOLD]);
+        assert_eq!(extension, "svg");
+    }
+
+    #[test]
+    fn keeps_small_or_non_data_urls_inline() {
+        assert!(try_extract("data:image/png;base64,AAAA").unwrap().is_none());
+        assert!(try_extract("image.png").unwrap().is_none());
+        assert!(try_extract("data:image/png").unwrap().is_none());
+    }
+
+    #[test]
+    fn rejects_invalid_base64_data() {
+        assert!(try_extract("data:image/png;base64,%%%!").is_err());
     }
 }

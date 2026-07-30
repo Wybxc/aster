@@ -397,17 +397,11 @@ fn is_component_prefix(left: &[String], right: &[String]) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
     use super::*;
 
-    static NEXT_DIR: AtomicUsize = AtomicUsize::new(0);
-
-    fn fixture(files: &[&str]) -> (PathBuf, ProjectRoot) {
-        let id = NEXT_DIR.fetch_add(1, Ordering::Relaxed);
-        let root =
-            std::env::temp_dir().join(format!("aster-route-test-{}-{id}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
+    fn fixture(files: &[&str]) -> (tempfile::TempDir, ProjectRoot) {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
         std::fs::create_dir_all(root.join("src")).unwrap();
         std::fs::write(root.join("aster.toml"), "").unwrap();
         for file in files {
@@ -415,8 +409,8 @@ mod tests {
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, "").unwrap();
         }
-        let project = ProjectRoot::new(root.clone()).unwrap();
-        (root, project)
+        let project = ProjectRoot::new(root.to_owned()).unwrap();
+        (temp, project)
     }
 
     fn parse(path: &str) -> Result<RouteTemplate, RouteError> {
@@ -487,7 +481,7 @@ mod tests {
 
     #[test]
     fn route_plan_is_sorted_and_probes_dynamic_templates_once() {
-        let (root, project) = fixture(&["z.typ", "blog/[slug].typ", "a.typ"]);
+        let (_temp, project) = fixture(&["z.typ", "blog/[slug].typ", "a.typ"]);
         let mut probes = 0;
         let plan = RoutePlan::build(&project, |_| {
             probes += 1;
@@ -508,17 +502,15 @@ mod tests {
                 Path::new("z.html"),
             ]
         );
-        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
     fn route_plan_rejects_static_dynamic_collision() {
-        let (root, project) = fixture(&["post.typ", "[slug].typ"]);
+        let (_temp, project) = fixture(&["post.typ", "[slug].typ"]);
         let result = RoutePlan::build(&project, |_| {
             Ok(vec![ParamSet::from([("slug".into(), "post".into())])])
         });
         assert!(result.is_err());
-        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
@@ -543,7 +535,7 @@ mod tests {
 
     #[test]
     fn route_plan_rejects_portable_and_ancestor_collisions() {
-        let (root, project) = fixture(&["[slug].typ"]);
+        let (_temp, project) = fixture(&["[slug].typ"]);
         let case_collision = RoutePlan::build(&project, |_| {
             Ok(vec![
                 ParamSet::from([("slug".into(), "Case".into())]),
@@ -551,30 +543,26 @@ mod tests {
             ])
         });
         assert!(case_collision.is_err());
-        let _ = std::fs::remove_dir_all(root);
 
-        let (root, project) = fixture(&["foo.typ", "foo.html/bar.typ"]);
+        let (_temp, project) = fixture(&["foo.typ", "foo.html/bar.typ"]);
         assert!(RoutePlan::build(&project, |_| Ok(Vec::new())).is_err());
-        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
     fn route_plan_rejects_nonportable_static_paths() {
         for template in ["CON.typ", "bad:name.typ", "trailing./page.typ"] {
-            let (root, project) = fixture(&[template]);
+            let (_temp, project) = fixture(&[template]);
             assert!(RoutePlan::build(&project, |_| Ok(Vec::new())).is_err());
-            let _ = std::fs::remove_dir_all(root);
         }
     }
 
     #[test]
     fn route_plan_reports_missing_dynamic_metadata() {
-        let (root, project) = fixture(&["[slug].typ"]);
+        let (_temp, project) = fixture(&["[slug].typ"]);
         let plan = RoutePlan::build(&project, |_| Ok(Vec::new())).unwrap();
         let (jobs, warnings) = plan.into_parts();
         assert!(jobs.is_empty());
         assert_eq!(warnings.len(), 1);
-        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
