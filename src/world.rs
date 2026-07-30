@@ -19,6 +19,8 @@ pub(crate) struct CompileWorld {
     pub(crate) fonts: Arc<FontStore>,
     pub(crate) files: Arc<FileStore<SystemFiles>>,
     pub(crate) main: FileId,
+    /// When set, `source()` returns this instead of reading from `files`.
+    pub(crate) source_override: Option<typst::syntax::Source>,
 }
 
 impl World for CompileWorld {
@@ -35,6 +37,11 @@ impl World for CompileWorld {
     }
 
     fn source(&self, id: FileId) -> Result<typst::syntax::Source, FileError> {
+        if let Some(ref src) = self.source_override {
+            if src.id() == id {
+                return Ok(src.clone());
+            }
+        }
         self.files.source(id)
     }
 

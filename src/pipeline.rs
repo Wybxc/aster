@@ -1,4 +1,6 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+
+use typst::World;
 
 use anyhow::{Context, Result, bail};
 use typst::Library;
@@ -131,13 +133,20 @@ pub fn build(
     let mut errors: Vec<anyhow::Error> = Vec::new();
     for (output, job) in &render_queue {
         let mut page = || -> Result<()> {
+            // Load the template source so render_page receives content,
+            // not a path — the cache key will depend on the actual content.
+            let world = builder.world(&job.template, project, &job.library);
+            let source = world
+                .source(world.main())
+                .map_err(|e| anyhow::anyhow!("failed to load source: {e}"))?;
+
             let (raw, page_assets) = render_page(
                 &builder,
-                project,
-                &job.template,
+                source,
                 &job.library,
-                &hl_css_path,
+                project,
                 output,
+                &hl_css_path,
             )?;
 
             for asset in page_assets {
@@ -168,21 +177,25 @@ pub fn build(
 
 /// Compute a single page: compile → transform → serialize.
 /// Returns the HTML string and any generated assets.
+///
+/// The `source` is the pre‑loaded Typst source for the page template.
+/// Passing content (rather than a path) makes the cache key depend on
+/// the actual template content — the prerequisite for [`#[memoize]`](comemo::memoize).
 fn render_page(
     builder: &compile::CompileContext,
-    project: &ProjectRoot,
-    template: &Path,
+    source: typst::syntax::Source,
     library: &LazyHash<Library>,
+    project: &ProjectRoot,
+    page_path: &PathBuf,
     hl_css_path: &Option<PathBuf>,
-    output: &PathBuf,
 ) -> Result<(String, Vec<Asset>)> {
     let mut doc = builder
-        .document(template, project, library)
+        .document_with_source(source, library)
         .map_err(|_| anyhow::anyhow!("compilation failed"))?;
 
     let pctx = transform::ProcessingContext {
         project,
-        page_path: output.clone(),
+        page_path: page_path.clone(),
         hl_css_path: hl_css_path.clone(),
     };
     let page_assets = transform::process_document(&mut doc, &pctx)?;
