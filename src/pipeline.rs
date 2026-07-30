@@ -8,7 +8,7 @@ use typst_html::HtmlOptions;
 
 use crate::config::AsterConfig;
 use crate::project::ProjectRoot;
-use crate::utils::AssetCollector;
+use crate::utils::Asset;
 use crate::{compile, diag, route, transform};
 
 /// Return a complete `_aster` protocol value with empty collections.
@@ -131,15 +131,18 @@ pub fn build(
     let mut errors: Vec<anyhow::Error> = Vec::new();
     for (output, job) in &render_queue {
         let mut page = || -> Result<()> {
-            let raw = render_page(
+            let (raw, page_assets) = render_page(
                 &builder,
                 project,
                 &job.template,
                 &job.library,
-                &mut all_assets,
                 &hl_css_path,
                 output,
             )?;
+
+            for asset in page_assets {
+                all_assets.add_path(asset.path, asset.content);
+            }
 
             crate::utils::write_file(output, raw.as_bytes())?;
 
@@ -164,17 +167,15 @@ pub fn build(
 }
 
 /// Compute a single page: compile → transform → serialize.
-/// I/O-free except for Typst's internal file access through `World`.
-/// Returns the HTML string.
+/// Returns the HTML string and any generated assets.
 fn render_page(
     builder: &compile::CompileContext,
     project: &ProjectRoot,
     template: &Path,
     library: &LazyHash<Library>,
-    assets: &mut AssetCollector,
     hl_css_path: &Option<PathBuf>,
     output: &PathBuf,
-) -> Result<String> {
+) -> Result<(String, Vec<Asset>)> {
     let mut doc = builder
         .document(template, project, library)
         .map_err(|_| anyhow::anyhow!("compilation failed"))?;
@@ -184,10 +185,10 @@ fn render_page(
         page_path: output.clone(),
         hl_css_path: hl_css_path.clone(),
     };
-    transform::process_document(&mut doc, assets, &pctx)?;
+    let page_assets = transform::process_document(&mut doc, &pctx)?;
 
     let raw = typst_html::html(&doc, &HtmlOptions::default())
         .map_err(|_| anyhow::anyhow!("HTML encoding failed"))?;
 
-    Ok(raw)
+    Ok((raw, page_assets))
 }

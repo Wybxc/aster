@@ -3,7 +3,7 @@ use base64::Engine;
 use typst_html::HtmlDocument;
 
 use super::{ElementProcessor, ProcessingContext, WalkControl};
-use crate::utils::{AssetCollector, HtmlElementExt};
+use crate::utils::{Asset, HtmlElementExt};
 
 /// Minimum decoded size (bytes) below which a data URI stays inline.
 const IMAGE_EXTRACT_THRESHOLD: usize = 1024;
@@ -11,12 +11,8 @@ const IMAGE_EXTRACT_THRESHOLD: usize = 1024;
 pub(super) struct ImageProcessor;
 
 impl ElementProcessor for ImageProcessor {
-    fn process(
-        &self,
-        doc: &mut HtmlDocument,
-        assets: &mut AssetCollector,
-        ctx: &ProcessingContext<'_>,
-    ) -> Result<()> {
+    fn process(&self, doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> Result<Vec<Asset>> {
+        let mut assets: Vec<Asset> = Vec::new();
         doc.root_mut().walk_mut(&mut |elem| {
             if !elem.is_tag(typst_html::tag::img) {
                 return Ok(WalkControl::Continue);
@@ -31,11 +27,18 @@ impl ElementProcessor for ImageProcessor {
             };
 
             if let Some((content, ext)) = try_extract(&src)? {
-                let full_path = assets.add(&ctx.output_dir(), "img", ext, content);
+                let hash = crate::utils::content_hash(&content);
+                let filename = format!("img.{hash}.{ext}");
+                let full_path = ctx.output_dir().join(&filename);
+                assets.push(Asset {
+                    path: full_path.clone(),
+                    content,
+                });
                 elem.update_attr("src", |v| *v = full_path.to_string_lossy().into());
             }
             Ok(WalkControl::Continue)
-        })
+        })?;
+        Ok(assets)
     }
 }
 

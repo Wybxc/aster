@@ -145,6 +145,13 @@ impl HtmlElementExt for HtmlElement {
 // Asset management — separate generation from file I/O
 // ---------------------------------------------------------------------------
 
+/// A generated file asset, returned by processors and batch-written
+/// via [`AssetCollector`].
+pub struct Asset {
+    pub path: PathBuf,
+    pub content: Vec<u8>,
+}
+
 /// Collects generated assets and writes them in batch, deduplicated by
 /// content hash via [`IndexMap`] (first path wins, insertion order preserved).
 pub struct AssetCollector {
@@ -165,6 +172,17 @@ impl AssetCollector {
     pub fn add(&mut self, dir: &Path, stem: &str, ext: &str, content: Vec<u8>) -> PathBuf {
         let hash = content_hash(&content);
         let path = dir.join(format!("{stem}.{hash}.{ext}"));
+        self.entries
+            .entry(hash)
+            .or_insert((path, content))
+            .0
+            .clone()
+    }
+
+    /// Register a pre‑computed asset (path + content, already named).
+    /// Returns the actual path (first registration wins on dedup).
+    pub fn add_path(&mut self, path: PathBuf, content: Vec<u8>) -> PathBuf {
+        let hash = content_hash(&content);
         self.entries
             .entry(hash)
             .or_insert((path, content))

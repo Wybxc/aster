@@ -14,7 +14,7 @@ use crate::config::HighlightConfig;
 use crate::project::ProjectRoot;
 
 use super::{ElementProcessor, ProcessingContext, WalkControl};
-use crate::utils::{AssetCollector, HtmlElementExt};
+use crate::utils::{Asset, HtmlElementExt};
 
 static SS: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
 static THEMES: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
@@ -25,12 +25,7 @@ const TYPST_LANGS: &[&str] = &["typ", "typst", "typc", "typm"];
 pub(super) struct HighlightProcessor;
 
 impl ElementProcessor for HighlightProcessor {
-    fn process(
-        &self,
-        doc: &mut HtmlDocument,
-        _assets: &mut AssetCollector,
-        ctx: &ProcessingContext<'_>,
-    ) -> Result<()> {
+    fn process(&self, doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> Result<Vec<Asset>> {
         // Syntax-highlight all <code data-lang="..."> blocks.
         // Theme-independent: we only derive CSS class names from scopes.
         doc.root_mut().walk_mut(&mut |elem| {
@@ -83,7 +78,7 @@ impl ElementProcessor for HighlightProcessor {
             head.children.push(HtmlNode::Element(link));
         }
 
-        Ok(())
+        Ok(Vec::new())
     }
 }
 
@@ -229,7 +224,7 @@ fn load_theme(name_or_path: &str, project_root: &Path) -> Result<Theme> {
 /// Resolve highlight theme colours and return the CSS content.
 ///
 /// Returns `(css_content, filename)` where filename is
-/// `hl.{hash}.css` — ready to be written via [`AssetCollector`].
+/// `hl.{hash}.css` — ready to be registered in an [`AssetCollector`](crate::utils::AssetCollector).
 /// Returns `None` when no scopes need highlighting.
 pub fn compute_highlight_css(
     config: &HighlightConfig,

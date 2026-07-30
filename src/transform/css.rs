@@ -7,17 +7,13 @@ use lightningcss::targets::Browsers;
 use typst_html::HtmlDocument;
 
 use super::{ElementProcessor, ProcessingContext, WalkControl};
-use crate::utils::{AssetCollector, HtmlElementExt};
+use crate::utils::{Asset, HtmlElementExt};
 
 pub(super) struct CssProcessor;
 
 impl ElementProcessor for CssProcessor {
-    fn process(
-        &self,
-        doc: &mut HtmlDocument,
-        assets: &mut AssetCollector,
-        ctx: &ProcessingContext<'_>,
-    ) -> Result<()> {
+    fn process(&self, doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> Result<Vec<Asset>> {
+        let mut assets: Vec<Asset> = Vec::new();
         doc.root_mut().walk_mut(&mut |elem| {
             if !elem.is_tag(typst_html::tag::link) {
                 return Ok(WalkControl::Continue);
@@ -50,7 +46,14 @@ impl ElementProcessor for CssProcessor {
                 .extension()
                 .unwrap_or_default()
                 .to_string_lossy();
-            let full_path = assets.add(&ctx.output_dir(), &stem, &ext, css_bytes);
+            let hash = crate::utils::content_hash(&css_bytes);
+            let filename = format!("{stem}.{hash}.{ext}");
+            let full_path = ctx.output_dir().join(&filename);
+
+            assets.push(Asset {
+                path: full_path.clone(),
+                content: css_bytes,
+            });
 
             // Compute relative path from the page to the CSS file.
             let page_dir = ctx.page_path.parent().expect("page has a parent");
@@ -60,7 +63,8 @@ impl ElementProcessor for CssProcessor {
             elem.update_attr("href", |v| *v = relative.to_string_lossy().into());
             elem.update_attr("rel", |v| *v = "stylesheet".into());
             Ok(WalkControl::Continue)
-        })
+        })?;
+        Ok(assets)
     }
 }
 
