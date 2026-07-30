@@ -158,11 +158,12 @@ impl AssetCollector {
         }
     }
 
-    /// Register content at the given output path.  Returns the **actual**
-    /// path the content will be written to — if the same content was already
-    /// registered, the earlier path is returned (dedup).
-    pub fn add(&mut self, path: PathBuf, content: Vec<u8>) -> PathBuf {
+    /// Register content; computes the hash and returns the relative path
+    /// `{stem}.{hash}.{ext}`.  If the same content was already registered,
+    /// the **earlier** path is returned (dedup).
+    pub fn add(&mut self, stem: &str, ext: &str, content: Vec<u8>) -> PathBuf {
         let hash = content_hash(&content);
+        let path = PathBuf::from(format!("{stem}.{hash}.{ext}"));
         self.entries
             .entry(hash)
             .or_insert((path, content))
