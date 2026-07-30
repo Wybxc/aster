@@ -8,7 +8,6 @@ use typst::utils::LazyHash;
 use crate::compile::TypstSession;
 use crate::config::AsterConfig;
 use crate::output::{AssetPath, OutputPath, OutputPublication};
-use crate::project::ProjectRoot;
 use crate::{content, route, transform};
 
 /// The complete build outcome. No build stage decides terminal formatting or
@@ -19,9 +18,36 @@ pub struct BuildOutcome {
     pub elapsed: Duration,
 }
 
-pub fn build(project: ProjectRoot, config: AsterConfig) -> Result<BuildOutcome> {
+pub struct BuildDriver {
+    session: TypstSession,
+    started: bool,
+}
+
+impl BuildDriver {
+    pub fn new(project: crate::project::ProjectRoot) -> Self {
+        Self {
+            session: TypstSession::new(project),
+            started: false,
+        }
+    }
+
+    pub fn build(&mut self, config: AsterConfig) -> Result<BuildOutcome> {
+        let rebuilding = std::mem::replace(&mut self.started, true);
+        if rebuilding {
+            self.session.reset();
+        }
+
+        let outcome = build_once(&self.session, config);
+        if rebuilding {
+            comemo::evict(10);
+        }
+        outcome
+    }
+}
+
+fn build_once(session: &TypstSession, config: AsterConfig) -> Result<BuildOutcome> {
     let started = Instant::now();
-    let session = TypstSession::new(project.clone());
+    let project = session.project().clone();
     let mut warnings = Vec::new();
     let mut publication = OutputPublication::new(&project);
 
@@ -37,7 +63,7 @@ pub fn build(project: ProjectRoot, config: AsterConfig) -> Result<BuildOutcome> 
 
     let content_library = session.library(config.dict.clone());
     let loaded =
-        content::load(&session, &content_library).context("failed to load content collections")?;
+        content::load(session, &content_library).context("failed to load content collections")?;
     warnings.extend(loaded.warnings);
     let base_inputs = content::install(config.dict, loaded.protocol)?;
     let base_library = session.library(base_inputs.clone());
@@ -63,7 +89,7 @@ pub fn build(project: ProjectRoot, config: AsterConfig) -> Result<BuildOutcome> 
             session.library(content::with_route_params(&base_inputs, &job.params)?)
         };
         render_page(
-            &session,
+            session,
             &mut publication,
             &job.template,
             &job.output,
@@ -100,4 +126,49 @@ fn render_page(
     let html = typst_html::html(&document, &typst_html::HtmlOptions::default())
         .map_err(|error| anyhow::anyhow!("HTML encoding failed: {error:?}"))?;
     page.add_html(html)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use super::*;
+    use crate::project::ProjectRoot;
+
+    static NEXT_DIR: AtomicUsize = AtomicUsize::new(0);
+
+    #[test]
+    fn build_reuses_the_session_and_observes_source_changes() {
+        let id = NEXT_DIR.fetch_add(1, Ordering::Relaxed);
+        let root =
+            std::env::temp_dir().join(format!("aster-pipeline-test-{}-{id}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::write(root.join("aster.toml"), "").unwrap();
+        let entry = root.join("src/index.typ");
+        std::fs::write(&entry, format!("#html.elem(\"p\")[first-{id}]")).unwrap();
+
+        let project = ProjectRoot::new(root.clone()).unwrap();
+        let mut driver = BuildDriver::new(project.clone());
+        driver
+            .build(AsterConfig::load(&project.config_file()).unwrap())
+            .unwrap();
+        let first = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
+
+        driver
+            .build(AsterConfig::load(&project.config_file()).unwrap())
+            .unwrap();
+        let repeated = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
+        assert_eq!(repeated, first);
+
+        std::fs::write(&entry, format!("#html.elem(\"p\")[second-{id}]")).unwrap();
+        driver
+            .build(AsterConfig::load(&project.config_file()).unwrap())
+            .unwrap();
+        let changed = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
+        assert_ne!(changed, first);
+        assert!(changed.contains(&format!("second-{id}")));
+
+        let _ = std::fs::remove_dir_all(root);
+    }
 }

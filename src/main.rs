@@ -60,7 +60,8 @@ fn build(project_dir: Option<std::path::PathBuf>) -> Result<()> {
     let aster_config =
         config::AsterConfig::load(&project.config_file()).context("failed to parse aster.toml")?;
 
-    let outcome = pipeline::build(project.clone(), aster_config)?;
+    let mut driver = pipeline::BuildDriver::new(project.clone());
+    let outcome = driver.build(aster_config)?;
     for warning in &outcome.warnings {
         diag::emit_warning(warning);
     }
