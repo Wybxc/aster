@@ -226,14 +226,15 @@ fn load_theme(name_or_path: &str, project_root: &Path) -> Result<Theme> {
     Ok(theme)
 }
 
-/// Resolve highlight theme colours and write the CSS file.
+/// Resolve highlight theme colours and return the CSS content.
 ///
-/// Returns the relative (from output_dir) path for `<link>` injection,
-/// or `None` if no [highlight] config is provided.
-pub fn resolve_highlight_css(
+/// Returns `(css_content, filename)` where filename is
+/// `hl.{hash}.css` — ready to be written via [`AssetCollector`].
+/// Returns `None` when no scopes need highlighting.
+pub fn compute_highlight_css(
     config: &HighlightConfig,
     project: &ProjectRoot,
-) -> Result<Option<PathBuf>> {
+) -> Result<Option<(String, PathBuf)>> {
     let light = load_theme(&config.themes.light, project.root())?;
     let dark = load_theme(&config.themes.dark, project.root())?;
     let light_h = Highlighter::new(&light);
@@ -321,13 +322,9 @@ pub fn resolve_highlight_css(
         );
     }
 
-    // Write to output directory with content hash.
     let hash = crate::utils::content_hash(css.as_bytes());
     let filename = format!("hl.{hash}.css");
-    let output = project.output_dir().join(&filename);
-    crate::utils::write_file(&output, css.as_bytes())?;
-
-    Ok(Some(PathBuf::from(filename)))
+    Ok(Some((css, PathBuf::from(filename))))
 }
 
 #[cfg(test)]

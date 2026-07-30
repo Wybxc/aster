@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use typst::Library;
@@ -8,6 +8,7 @@ use typst_html::HtmlOptions;
 
 use crate::config::AsterConfig;
 use crate::project::ProjectRoot;
+use crate::utils::AssetCollector;
 use crate::{compile, diag, route, transform};
 
 /// Return a complete `_aster` protocol value with empty collections.
@@ -28,11 +29,20 @@ pub fn build(
 ) -> Result<(Vec<PathBuf>, Vec<anyhow::Error>)> {
     let builder = compile::CompileContext::new(project);
 
+    // Shared asset collector — registers all generated files, flushed at end.
+    let mut all_assets = crate::utils::AssetCollector::new();
+
     // Pre-resolve highlight theme colours (non-fatal on failure).
-    let hl_css_path = transform::highlight::resolve_highlight_css(&aster_config.highlight, project)
+    // Computation and I/O are separate: compute returns content, pipeline
+    // registers it in the collector for batch writing.
+    let hl_css_path = transform::highlight::compute_highlight_css(&aster_config.highlight, project)
         .unwrap_or_else(|e| {
             diag::emit_warning(&format!("failed to resolve highlight CSS: {e:#}"));
             None
+        })
+        .map(|(css_content, filename)| {
+            all_assets.add(&project.output_dir(), "hl", "css", css_content.into_bytes());
+            filename
         });
 
     // --- Phase 1: content collections ---
@@ -119,23 +129,17 @@ pub fn build(
     let render_start = std::time::Instant::now();
     let mut outputs: Vec<PathBuf> = Vec::new();
     let mut errors: Vec<anyhow::Error> = Vec::new();
-    let mut all_assets = crate::utils::AssetCollector::new();
-
     for (output, job) in &render_queue {
         let mut page = || -> Result<()> {
-            let mut doc = builder
-                .document(&job.template, project, &job.library)
-                .map_err(|_| anyhow::anyhow!("compilation failed"))?;
-
-            let pctx = transform::ProcessingContext {
+            let raw = render_page(
+                &builder,
                 project,
-                page_path: output.clone(),
-                hl_css_path: hl_css_path.clone(),
-            };
-            transform::process_document(&mut doc, &mut all_assets, &pctx)?;
-
-            let raw = typst_html::html(&doc, &HtmlOptions::default())
-                .map_err(|_| anyhow::anyhow!("HTML encoding failed"))?;
+                &job.template,
+                &job.library,
+                &mut all_assets,
+                &hl_css_path,
+                output,
+            )?;
 
             crate::utils::write_file(output, raw.as_bytes())?;
 
@@ -157,4 +161,33 @@ pub fn build(
 
     diag::emit_summary(outputs.len(), &render_start);
     Ok((outputs, errors))
+}
+
+/// Compute a single page: compile → transform → serialize.
+/// I/O-free except for Typst's internal file access through `World`.
+/// Returns the HTML string.
+fn render_page(
+    builder: &compile::CompileContext,
+    project: &ProjectRoot,
+    template: &Path,
+    library: &LazyHash<Library>,
+    assets: &mut AssetCollector,
+    hl_css_path: &Option<PathBuf>,
+    output: &PathBuf,
+) -> Result<String> {
+    let mut doc = builder
+        .document(template, project, library)
+        .map_err(|_| anyhow::anyhow!("compilation failed"))?;
+
+    let pctx = transform::ProcessingContext {
+        project,
+        page_path: output.clone(),
+        hl_css_path: hl_css_path.clone(),
+    };
+    transform::process_document(&mut doc, assets, &pctx)?;
+
+    let raw = typst_html::html(&doc, &HtmlOptions::default())
+        .map_err(|_| anyhow::anyhow!("HTML encoding failed"))?;
+
+    Ok(raw)
 }
