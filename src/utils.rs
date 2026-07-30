@@ -1,10 +1,10 @@
 //! Utility helpers — DOM traversal, HTML element extension methods, path
 //! utilities, colour formatting, etc.
 
-use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use indexmap::IndexMap;
 use typst::ecow::EcoString;
 use typst_html::{HtmlElement, HtmlNode};
 
@@ -145,74 +145,35 @@ impl HtmlElementExt for HtmlElement {
 // Asset management — separate generation from file I/O
 // ---------------------------------------------------------------------------
 
-/// A generated file asset (CSS bundle, extracted image, etc.).
-pub struct Asset {
-    pub stem: String,
-    pub ext: String,
-    pub content: Vec<u8>,
-    hash: String,
-}
-
-impl Asset {
-    /// Construct an asset, computing its content hash.
-    #[allow(dead_code)]
-    pub fn new(stem: &str, ext: &str, content: Vec<u8>) -> Self {
-        let hash = content_hash(&content);
-        Self {
-            stem: stem.into(),
-            ext: ext.into(),
-            content,
-            hash,
-        }
-    }
-
-    /// The content hash for this asset.
-    #[allow(dead_code)]
-    pub fn hash(&self) -> &str {
-        &self.hash
-    }
-
-    /// The output filename: `{stem}.{hash}.{ext}`.
-    pub fn filename(&self) -> String {
-        format!("{}.{}.{}", self.stem, self.hash, self.ext)
-    }
-}
-
 /// Collects generated assets and writes them in batch, deduplicated by
-/// content hash.
+/// content hash via [`IndexMap`] (first path wins, insertion order preserved).
 pub struct AssetCollector {
-    assets: Vec<Asset>,
-    seen: HashSet<String>,
+    entries: IndexMap<String, (PathBuf, Vec<u8>)>,
 }
 
 impl AssetCollector {
     pub fn new() -> Self {
         Self {
-            assets: Vec::new(),
-            seen: HashSet::new(),
+            entries: IndexMap::new(),
         }
     }
 
-    /// Register an asset. Returns its (hash-based) filename.
-    /// If the exact content already exists, the earlier filename is returned.
-    pub fn add(&mut self, stem: &str, ext: &str, content: Vec<u8>) -> String {
+    /// Register content at the given output path.  Returns the **actual**
+    /// path the content will be written to — if the same content was already
+    /// registered, the earlier path is returned (dedup).
+    pub fn add(&mut self, path: PathBuf, content: Vec<u8>) -> PathBuf {
         let hash = content_hash(&content);
-        let filename = format!("{stem}.{hash}.{ext}");
-        if self.seen.insert(hash.clone()) {
-            self.assets.push(Asset {
-                stem: stem.into(),
-                ext: ext.into(),
-                content,
-                hash,
-            });
-        }
-        filename
+        self.entries
+            .entry(hash)
+            .or_insert((path, content))
+            .0
+            .clone()
     }
 
     /// Write every unique asset to `output_dir`.
     pub fn flush(&self, output_dir: &Path) -> Result<()> {
-        for asset in &self.assets {
-            write_file(&output_dir.join(asset.filename()), &asset.content)?;
+        for (_, (path, content)) in &self.entries {
+            write_file(&output_dir.join(path), content)?;
         }
         Ok(())
     }

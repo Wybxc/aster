@@ -39,6 +39,7 @@ impl ElementProcessor for CssProcessor {
             let source = std::fs::canonicalize(&source)
                 .with_context(|| format!("failed to resolve {}", source.display()))?;
             let css = bundle_file(&source)?;
+            let css_bytes = css.into_bytes();
 
             let h = href.as_str();
             let stem = Path::new(h)
@@ -49,13 +50,15 @@ impl ElementProcessor for CssProcessor {
                 .extension()
                 .unwrap_or_default()
                 .to_string_lossy();
-            let hashed_name = assets.add(&stem, &ext, css.into_bytes());
+            let hash = crate::utils::content_hash(&css_bytes);
+            let filename = format!("{stem}.{hash}.{ext}");
+            let css_output = ctx.output_dir().join(&filename);
+            let actual = assets.add(css_output, css_bytes);
 
             // Compute relative path from the page to the CSS file.
             let page_dir = ctx.page_path.parent().expect("page has a parent");
-            let css_output = ctx.output_dir().join(&hashed_name);
             let relative =
-                pathdiff::diff_paths(&css_output, page_dir).expect("both paths under output_dir");
+                pathdiff::diff_paths(&actual, page_dir).expect("both paths under output_dir");
 
             elem.update_attr("href", |v| *v = relative.to_string_lossy().into());
             elem.update_attr("rel", |v| *v = "stylesheet".into());
