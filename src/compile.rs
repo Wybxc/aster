@@ -1,14 +1,13 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use anyhow::{Result, bail};
-use typst::comemo::Track;
+use anyhow::Result;
+use comemo::Track;
 use typst::engine::{Route, Sink, Traced};
 use typst::foundations::{Content, Dict};
 use typst::syntax::{RootedPath, VirtualPath, VirtualRoot};
 use typst::utils::LazyHash;
 use typst::{Feature, Library, LibraryExt, World};
-use typst_html::HtmlDocument;
 use typst_kit::downloader::SystemDownloader;
 use typst_kit::files::{FileStore, FsRoot, SystemFiles};
 use typst_kit::fonts::FontStore;
@@ -136,40 +135,4 @@ impl CompileContext {
         world
     }
 
-    /// Compile from a pre-loaded [`Source`] (no file‑system read for the
-    /// main source — other files are still read through the file store).
-    ///
-    /// The source's [`FileId`] must match the virtual path it would have
-    /// inside the project.  This is the key preparation for memoization:
-    /// the caller provides the source content, making the cache key
-    /// depend on the content rather than a path.
-    pub fn document_with_source(
-        &self,
-        source: typst::syntax::Source,
-        library: &LazyHash<Library>,
-    ) -> Result<HtmlDocument> {
-        let main = source.id();
-        let world = CompileWorld {
-            library: library.clone(),
-            fonts: Arc::clone(&self.fonts),
-            files: Arc::clone(&self.files),
-            main,
-            source_override: Some(source),
-        };
-        self.compile(world, library)
-    }
-
-    /// Shared compile implementation used by both `document` and
-    /// `document_with_source`.
-    fn compile(&self, world: CompileWorld, _library: &LazyHash<Library>) -> Result<HtmlDocument> {
-        let warned = typst::compile::<HtmlDocument>(&world);
-
-        match warned.output {
-            Ok(doc) => Ok(doc),
-            Err(errors) => {
-                diag::emit_diags(&world, &errors);
-                bail!("compilation failed");
-            }
-        }
-    }
 }

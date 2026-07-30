@@ -1,16 +1,11 @@
-use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
-use std::sync::LazyLock;
-use std::sync::Mutex;
 
 use anyhow::{Context, Result, bail};
+use typst::comemo::{memoize, Track, Tracked};
 use typst::Library;
 use typst::World;
 use typst::foundations::{Dict, Str, Value};
-use typst::syntax::Source;
 use typst::utils::LazyHash;
-use typst_html::HtmlOptions;
 
 use crate::config::AsterConfig;
 use crate::project::ProjectRoot;
@@ -23,6 +18,8 @@ fn empty_aster() -> Value {
         (Str::from("collections"), Value::Dict(Dict::new())),
     ]))
 }
+
+
 
 /// Execute the full Aster build lifecycle.
 ///
@@ -136,30 +133,30 @@ pub fn build(
     let mut errors: Vec<anyhow::Error> = Vec::new();
     for (output, job) in &render_queue {
         let mut page = || -> Result<()> {
-            // Pre‑load the template source for cache‑key computation.
+            // Create a CompileWorld with the template source pre‑loaded,
+            // then pass it as a tracked World — changes to the source
+            // content invalidate comemo's cache automatically.
             let world = builder.world_with_source(&job.template, project, &job.library);
-            let source = world
-                .source(world.main)
-                .map_err(|e| anyhow::anyhow!("failed to load source: {e}"))?;
 
             let suffix = output
                 .strip_prefix(project.output_dir())
                 .unwrap_or(output)
                 .to_string_lossy()
                 .into_owned();
-            let hl_text = hl_css_path
+            let hl_str = hl_css_path
                 .as_ref()
                 .map(|p| p.to_string_lossy().into_owned())
                 .unwrap_or_default();
+            let root_str = project.root().to_string_lossy().into_owned();
 
-            let (raw, page_assets) = cached_page(
-                &builder,
-                source,
+            let (raw, page_assets) = compute_page_output(
+                &suffix,
+                &hl_str,
+                &root_str,
+                (&world as &dyn World).track(),
                 &job.library,
-                project,
-                output,
-                &hl_css_path,
-            )?;
+            )
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
 
             for asset in page_assets {
                 all_assets.add_path(asset.path, asset.content);
@@ -187,63 +184,52 @@ pub fn build(
     Ok((outputs, errors))
 }
 
-/// Per‑build page cache: `(source_hash, lib_hash, suffix) → HTML + assets`.
-static PAGE_CACHE: LazyLock<Mutex<HashMap<u128, (String, Vec<Asset>)>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
+// (memoization handled by #[comemo::memoize])
 
-/// Compute a single page, using an in‑memory cache keyed by the content
-/// hash of the source and library.
-fn cached_page(
-    builder: &compile::CompileContext,
-    source: Source,
-    library: &LazyHash<Library>,
-    project: &ProjectRoot,
-    page_path: &PathBuf,
-    hl_css_path: &Option<PathBuf>,
-) -> Result<(String, Vec<Asset>)> {
-    // Build a composite key from everything that affects the output.
-    let source_hash = seahash::hash(source.text().as_bytes()) as u128;
-    let mut h = std::collections::hash_map::DefaultHasher::new();
-    library.hash(&mut h);
-    let lib_hash = h.finish() as u128;
-    let suffix = page_path
-        .strip_prefix(project.output_dir())
-        .unwrap_or(page_path)
-        .to_string_lossy();
-    let key = source_hash ^ lib_hash.rotate_left(64) ^ seahash::hash(suffix.as_bytes()) as u128;
+/// Memoized page rendering.
+///
+/// `world` is a tracked Typst [`World`] — changes to source content,
+/// fonts, or files invalidate the cache through comemo's constraint
+/// tracking.  `suffix`, `hl_css_path`, and `root_path` are hashed into
+/// the cache key.
+#[memoize]
+fn compute_page_output(
+    suffix: &str,
+    hl_css_path: &str,
+    root_path: &str,
+    world: Tracked<dyn World + '_>,
+    _library: &LazyHash<Library>,
+) -> Result<(String, Vec<Asset>), String> {
+    let main = world.main();
+    let _source = world
+        .source(main)
+        .map_err(|e| format!("failed to load source: {e}"))?;
 
-    if let Some(cached) = PAGE_CACHE.lock().unwrap().get(&key) {
-        return Ok(cached.clone());
-    }
+    let warned = typst::compile::<typst_html::HtmlDocument>(&*world);
 
-    let result = render_page(builder, source, library, project, page_path, hl_css_path)?;
-    PAGE_CACHE.lock().unwrap().insert(key, result.clone());
-    Ok(result)
-}
+    let mut doc = match warned.output {
+        Ok(d) => d,
+        Err(errors) => {
+            for e in &errors {
+                eprintln!("error: {e:?}");
+            }
+            return Err("compilation failed".into());
+        }
+    };
 
-/// The actual (uncached) page rendering.
-fn render_page(
-    builder: &compile::CompileContext,
-    source: Source,
-    library: &LazyHash<Library>,
-    project: &ProjectRoot,
-    page_path: &PathBuf,
-    hl_css_path: &Option<PathBuf>,
-) -> Result<(String, Vec<Asset>)> {
-    let mut doc = builder
-        .document_with_source(source, library)
-        .map_err(|_| anyhow::anyhow!("compilation failed"))?;
-
-    let pctx = transform::ProcessingContext::new(
-        page_path.clone(),
-        hl_css_path.clone(),
-        project.src_dir(),
-        project.output_dir(),
+    let root = std::path::Path::new(root_path);
+    let pctx = crate::transform::ProcessingContext::new(
+        std::path::PathBuf::from(suffix),
+        if hl_css_path.is_empty() { None } else { Some(std::path::PathBuf::from(hl_css_path)) },
+        root.join("src"),
+        root.join("dist"),
     );
-    let page_assets = transform::process_document(&mut doc, &pctx)?;
+    let page_assets = crate::transform::process_document(&mut doc, &pctx)
+        .map_err(|e| format!("transform failed: {e}"))?;
 
-    let raw = typst_html::html(&doc, &HtmlOptions::default())
-        .map_err(|_| anyhow::anyhow!("HTML encoding failed"))?;
+    let raw = typst_html::html(&doc, &typst_html::HtmlOptions::default())
+        .map_err(|e| format!("HTML encoding failed: {e:?}"))?;
 
     Ok((raw, page_assets))
 }
+
