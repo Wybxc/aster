@@ -3,8 +3,10 @@ pub mod highlight;
 pub mod image;
 
 use anyhow::Result;
+use comemo::Tracked;
 use typst_html::HtmlDocument;
 
+use crate::compile::ProjectFiles;
 use crate::output::{AssetPath, PagePublication};
 
 pub use crate::utils::WalkControl;
@@ -18,9 +20,10 @@ pub trait ElementProcessor {
 pub fn process_document(
     doc: &mut HtmlDocument,
     page: &mut PagePublication<'_>,
+    project_files: Tracked<ProjectFiles>,
     highlight_css: Option<&AssetPath>,
 ) -> Result<()> {
-    css::CssProcessor.process(doc, page)?;
+    css::CssProcessor::new(project_files).process(doc, page)?;
     image::ImageProcessor.process(doc, page)?;
     highlight::HighlightProcessor.process(doc, page)?;
     if let Some(asset) = highlight_css {

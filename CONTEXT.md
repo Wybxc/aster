@@ -30,11 +30,11 @@ A normal parameter fills one path segment and cannot contain separators. A sprea
 
 ## Typst build session
 
-A **Typst build session** is bound to one Aster project. It owns shared fonts, package and file access, input libraries, Typst world construction, content evaluation, page compilation, and source-aware diagnostics.
+A **Typst build session** is bound to one Aster project. It owns shared fonts, package and project-file access, input libraries, Typst world construction, content evaluation, page compilation, and source-aware diagnostics. The project-file store is also the tracked filesystem surface for build transforms that need incremental file access.
 
-The session is reused across builds. The first build compiles directly. Before each later build, the build driver marks loaded files stale; subsequent reads update Typst sources in place so comemo can validate and reuse unchanged compilation results. After the build attempt, the driver ages the global comemo cache. Page compilation is memoized through a tracked Typst world.
+The session is reused across builds. The first build compiles directly. Before each later build, the build driver marks loaded files stale; subsequent reads update Typst sources in place so comemo can validate and reuse unchanged compilation and transformation results. After the build attempt, the driver ages the global comemo cache. Page compilation is memoized through a tracked Typst world.
 
-Callers do not construct or track Typst worlds. Files read outside the Typst world are not memoized unless their content is part of the cache key, so document transforms that read project files directly remain uncached.
+Callers do not construct or track Typst worlds. CSS bundling is memoized through the session's tracked project-file surface: path resolution and every entry or transitive import read become comemo constraints. Other document transforms that read files directly remain uncached unless they adopt the same tracked surface or include file content in their cache key.
 
 ## Output publication
 

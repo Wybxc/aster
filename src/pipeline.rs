@@ -122,7 +122,12 @@ fn render_page(
 
     let mut document = compiled.document;
     let mut page = publication.page(template, output)?;
-    transform::process_document(&mut document, &mut page, highlight_css)?;
+    transform::process_document(
+        &mut document,
+        &mut page,
+        session.project_files(),
+        highlight_css,
+    )?;
     let html = typst_html::html(&document, &typst_html::HtmlOptions::default())
         .map_err(|error| anyhow::anyhow!("HTML encoding failed: {error:?}"))?;
     page.add_html(html)
@@ -132,6 +137,19 @@ fn render_page(
 mod tests {
     use super::*;
     use crate::project::ProjectRoot;
+
+    fn generated_css(project: &ProjectRoot) -> (PathBuf, String) {
+        let path = std::fs::read_dir(project.output_dir().join("_assets"))
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .find(|path| {
+                path.file_name()
+                    .is_some_and(|name| name.to_string_lossy().starts_with("css."))
+            })
+            .unwrap();
+        let content = std::fs::read_to_string(&path).unwrap();
+        (path, content)
+    }
 
     #[test]
     fn build_reuses_the_session_and_observes_source_changes() {
@@ -162,5 +180,58 @@ mod tests {
         let changed = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
         assert_ne!(changed, first);
         assert!(changed.contains("second"));
+    }
+
+    #[test]
+    fn build_reuses_css_bundles_and_observes_import_changes() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::write(root.join("aster.toml"), "").unwrap();
+        std::fs::write(
+            root.join("src/index.typ"),
+            concat!(
+                "#html.html({\n",
+                "  html.head[\n",
+                "    #html.elem(\"link\", attrs: (\"rel\": \"css\", \"href\": \"style.css\"))\n",
+                "  ]\n",
+                "  html.body[Page]\n",
+                "})\n",
+            ),
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("src/style.css"),
+            "@import \"theme.css\"; .page { color: red; }",
+        )
+        .unwrap();
+        let dependency = root.join("src/theme.css");
+        std::fs::write(&dependency, ".theme { color: blue; }").unwrap();
+
+        let project = ProjectRoot::new(root.to_owned()).unwrap();
+        let mut driver = BuildDriver::new(project.clone());
+        driver
+            .build(AsterConfig::load(&project.config_file()).unwrap())
+            .unwrap();
+        assert!(!comemo::testing::last_was_hit());
+        let (first_path, first_css) = generated_css(&project);
+
+        driver
+            .build(AsterConfig::load(&project.config_file()).unwrap())
+            .unwrap();
+        assert!(comemo::testing::last_was_hit());
+        let (repeated_path, repeated_css) = generated_css(&project);
+        assert_eq!(repeated_path, first_path);
+        assert_eq!(repeated_css, first_css);
+
+        std::fs::write(&dependency, ".theme { color: green; }").unwrap();
+        driver
+            .build(AsterConfig::load(&project.config_file()).unwrap())
+            .unwrap();
+        assert!(!comemo::testing::last_was_hit());
+        let (changed_path, changed_css) = generated_css(&project);
+        assert_ne!(changed_path, first_path);
+        assert_ne!(changed_css, first_css);
+        assert!(!first_path.exists());
     }
 }

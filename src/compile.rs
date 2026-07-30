@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use comemo::{Track, Tracked};
@@ -26,7 +26,12 @@ use crate::project::ProjectRoot;
 pub struct TypstSession {
     project: ProjectRoot,
     fonts: FontStore,
-    files: FileStore<SystemFiles>,
+    files: ProjectFiles,
+}
+
+pub(crate) struct ProjectFiles {
+    root: PathBuf,
+    store: FileStore<SystemFiles>,
 }
 
 pub struct EvaluatedContent {
@@ -46,12 +51,7 @@ impl TypstSession {
             fonts.extend(typst_kit::fonts::system());
             fonts
         };
-        let files = {
-            let downloader = SystemDownloader::new("aster/0.1.0");
-            let packages = SystemPackages::new(downloader);
-            let fs_root = FsRoot::new(project.root().to_owned());
-            FileStore::new(SystemFiles::new(fs_root, packages))
-        };
+        let files = ProjectFiles::new(&project);
         Self {
             project,
             fonts,
@@ -65,6 +65,10 @@ impl TypstSession {
 
     pub fn reset(&mut self) {
         self.files.reset();
+    }
+
+    pub(crate) fn project_files(&self) -> Tracked<'_, ProjectFiles> {
+        self.files.track()
     }
 
     pub fn library(&self, inputs: Dict) -> LazyHash<Library> {
@@ -132,12 +136,66 @@ impl TypstSession {
             })?;
         let main = RootedPath::new(VirtualRoot::Project, virtual_path).intern();
         Ok(CompileWorld {
-            project_root: self.project.root(),
+            project_root: self.files.root(),
             library,
             fonts: &self.fonts,
             files: &self.files,
             main,
         })
+    }
+}
+
+impl ProjectFiles {
+    fn new(project: &ProjectRoot) -> Self {
+        let root =
+            std::fs::canonicalize(project.root()).unwrap_or_else(|_| project.root().to_owned());
+        let downloader = SystemDownloader::new("aster/0.1.0");
+        let packages = SystemPackages::new(downloader);
+        let fs_root = FsRoot::new(root.clone());
+        let store = FileStore::new(SystemFiles::new(fs_root, packages));
+        Self { root, store }
+    }
+
+    fn reset(&mut self) {
+        self.store.reset();
+    }
+
+    fn root(&self) -> &Path {
+        &self.root
+    }
+
+    fn source(&self, id: FileId) -> Result<typst::syntax::Source, FileError> {
+        self.store.source(id)
+    }
+
+    fn file(&self, id: FileId) -> Result<Bytes, FileError> {
+        self.store.file(id)
+    }
+
+    fn resolve(&self, id: FileId) -> Result<PathBuf, FileError> {
+        self.store.loader().resolve(id)
+    }
+}
+
+#[comemo::track]
+impl ProjectFiles {
+    pub(crate) fn canonicalize(&self, path: &Path) -> Result<PathBuf, String> {
+        std::fs::canonicalize(path)
+            .map_err(|error| format!("failed to resolve {}: {error}", path.display()))
+    }
+
+    pub(crate) fn read(&self, path: &Path) -> Result<Bytes, String> {
+        let virtual_path = VirtualPath::virtualize(&self.root, path).map_err(|error| {
+            format!(
+                "{} is outside {}: {error}",
+                path.display(),
+                self.root.display()
+            )
+        })?;
+        let id = RootedPath::new(VirtualRoot::Project, virtual_path).intern();
+        self.store
+            .file(id)
+            .map_err(|error| format!("failed to read {}: {error}", path.display()))
     }
 }
 
@@ -158,7 +216,7 @@ struct CompileWorld<'a> {
     project_root: &'a Path,
     library: &'a LazyHash<Library>,
     fonts: &'a FontStore,
-    files: &'a FileStore<SystemFiles>,
+    files: &'a ProjectFiles,
     main: FileId,
 }
 
@@ -195,7 +253,6 @@ impl World for CompileWorld<'_> {
 impl DiagnosticWorld for CompileWorld<'_> {
     fn name(&self, id: FileId) -> String {
         self.files
-            .loader()
             .resolve(id)
             .ok()
             .map(|path| {
