@@ -124,7 +124,7 @@ fn render_page(
     highlight_css: Option<&AssetPath>,
     warnings: &mut Vec<String>,
 ) -> Result<()> {
-    let compiled = session.compile_page(template, library)?;
+    let compiled = session.compile_page(template, output.as_path(), library)?;
     warnings.extend(compiled.warnings);
 
     let mut document = compiled.document;

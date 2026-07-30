@@ -53,14 +53,15 @@ fn styled_warning(message: &str) {
     let _ = writeln!(writer, ": {message}");
 }
 
-pub fn emit_page(path: &str) {
+#[cfg(not(test))]
+pub fn emit_built_page(path: &str) {
     let mut writer = writer();
     let _ = writer.set_color(
         ColorSpec::new()
             .set_fg(Some(termcolor::Color::Green))
             .set_bold(true),
     );
-    let _ = write!(writer, "write");
+    let _ = write!(writer, "build");
     let _ = writer.reset();
     let _ = writeln!(writer, "  {path}");
 }
@@ -91,4 +92,16 @@ pub fn emit_watching(project: &Path) {
     let _ = write!(writer, "watch");
     let _ = writer.reset();
     let _ = writeln!(writer, "  {}", project.display());
+}
+
+pub fn emit_rebuilding() {
+    let mut writer = writer();
+    let _ = writer.set_color(
+        ColorSpec::new()
+            .set_fg(Some(termcolor::Color::Cyan))
+            .set_bold(true),
+    );
+    let _ = write!(writer, "rebuild");
+    let _ = writer.reset();
+    let _ = writeln!(writer, "  change detected");
 }

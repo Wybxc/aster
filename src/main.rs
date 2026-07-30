@@ -54,7 +54,7 @@ fn build(project_dir: Option<std::path::PathBuf>) -> Result<()> {
 
     let mut driver = pipeline::BuildDriver::new(project.clone());
     let outcome = driver.build(aster_config)?;
-    report_outcome(&project, &outcome);
+    report_outcome(&outcome);
     Ok(())
 }
 
@@ -78,13 +78,9 @@ fn resolve_project(project_dir: Option<std::path::PathBuf>) -> Result<project::P
     }
 }
 
-pub(crate) fn report_outcome(project: &project::ProjectRoot, outcome: &pipeline::BuildOutcome) {
+pub(crate) fn report_outcome(outcome: &pipeline::BuildOutcome) {
     for warning in &outcome.warnings {
         diag::emit_warning(warning);
-    }
-    for output in &outcome.outputs {
-        let relative = output.strip_prefix(project.output_dir()).unwrap_or(output);
-        diag::emit_page(&relative.to_string_lossy());
     }
     diag::emit_summary(outcome.outputs.len(), outcome.elapsed);
 }

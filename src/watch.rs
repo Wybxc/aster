@@ -27,7 +27,7 @@ pub fn run(project: ProjectRoot) -> Result<()> {
                 let result = driver.build(config);
                 dependencies = driver.dependencies();
                 match result {
-                    Ok(outcome) => report_outcome(&project, &outcome),
+                    Ok(outcome) => report_outcome(&outcome),
                     Err(error) => diag::emit_error(&format!("{error:#}")),
                 }
             }
@@ -42,6 +42,7 @@ pub fn run(project: ProjectRoot) -> Result<()> {
             .wait()
             .map_err(anyhow::Error::msg)
             .context("failed while watching project inputs")?;
+        diag::emit_rebuilding();
     }
 }
 

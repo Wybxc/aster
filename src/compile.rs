@@ -114,9 +114,14 @@ impl TypstSession {
         })
     }
 
-    pub fn compile_page(&self, entry: &Path, library: &LazyHash<Library>) -> Result<CompiledPage> {
+    pub fn compile_page(
+        &self,
+        entry: &Path,
+        output: &Path,
+        library: &LazyHash<Library>,
+    ) -> Result<CompiledPage> {
         let world = self.world(entry, library)?;
-        let warned = compile_html((&world as &dyn World).track());
+        let warned = compile_html((&world as &dyn World).track(), output);
         let document = warned
             .output
             .map_err(|diagnostics| diagnostic_error(&world, "compilation failed", &diagnostics))?;
@@ -239,7 +244,13 @@ impl ProjectFiles {
 }
 
 #[comemo::memoize]
-fn compile_html(world: Tracked<dyn World + '_>) -> Warned<SourceResult<typst_html::HtmlDocument>> {
+fn compile_html(
+    world: Tracked<dyn World + '_>,
+    _output: &Path,
+) -> Warned<SourceResult<typst_html::HtmlDocument>> {
+    // Keep this inside the memoized body so cache hits remain quiet.
+    #[cfg(not(test))]
+    diag::emit_built_page(&_output.to_string_lossy());
     typst::compile::<typst_html::HtmlDocument>(&*world)
 }
 
@@ -341,11 +352,15 @@ mod tests {
         let mut session = TypstSession::new(project);
         let library = session.library(Dict::new());
 
-        session.compile_page(&entry, &library).unwrap();
+        session
+            .compile_page(&entry, Path::new("index.html"), &library)
+            .unwrap();
         assert!(!comemo::testing::last_was_hit());
 
         session.reset();
-        session.compile_page(&entry, &library).unwrap();
+        session
+            .compile_page(&entry, Path::new("index.html"), &library)
+            .unwrap();
         assert!(comemo::testing::last_was_hit());
         let dependencies = session.dependencies();
         assert!(dependencies.contains(&std::fs::canonicalize(&entry).unwrap()));
@@ -353,7 +368,9 @@ mod tests {
 
         std::fs::write(&dependency, format!("#let marker = \"second-{marker}\"")).unwrap();
         session.reset();
-        session.compile_page(&entry, &library).unwrap();
+        session
+            .compile_page(&entry, Path::new("index.html"), &library)
+            .unwrap();
         assert!(!comemo::testing::last_was_hit());
     }
 }
