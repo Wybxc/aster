@@ -43,6 +43,10 @@ impl BuildDriver {
         }
         outcome
     }
+
+    pub fn dependencies(&mut self) -> Vec<PathBuf> {
+        self.session.dependencies()
+    }
 }
 
 fn build_once(session: &TypstSession, config: AsterConfig) -> Result<BuildOutcome> {
@@ -236,5 +240,67 @@ mod tests {
         assert_ne!(changed_path, first_path);
         assert_ne!(changed_css, first_css);
         assert!(!first_path.exists());
+    }
+
+    #[test]
+    fn reentrant_build_discovers_added_and_removed_pages() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::write(root.join("aster.toml"), "").unwrap();
+        let index = root.join("src/index.typ");
+        let about = root.join("src/about.typ");
+        std::fs::write(&index, "#html.elem(\"p\")[Index]").unwrap();
+
+        let project = ProjectRoot::new(root.to_owned()).unwrap();
+        let mut driver = BuildDriver::new(project.clone());
+        driver
+            .build(AsterConfig::load(&project.config_file()).unwrap())
+            .unwrap();
+        assert!(project.output_dir().join("index.html").is_file());
+
+        std::fs::write(&about, "#html.elem(\"p\")[About]").unwrap();
+        driver
+            .build(AsterConfig::load(&project.config_file()).unwrap())
+            .unwrap();
+        assert!(project.output_dir().join("index.html").is_file());
+        assert!(project.output_dir().join("about.html").is_file());
+
+        std::fs::remove_file(index).unwrap();
+        driver
+            .build(AsterConfig::load(&project.config_file()).unwrap())
+            .unwrap();
+        assert!(!project.output_dir().join("index.html").exists());
+        assert!(project.output_dir().join("about.html").is_file());
+    }
+
+    #[test]
+    fn reentrant_build_recovers_after_compilation_failure() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::write(root.join("aster.toml"), "").unwrap();
+        let entry = root.join("src/index.typ");
+        std::fs::write(&entry, "#html.elem(\"p\")[First]").unwrap();
+
+        let project = ProjectRoot::new(root.to_owned()).unwrap();
+        let mut driver = BuildDriver::new(project.clone());
+        driver
+            .build(AsterConfig::load(&project.config_file()).unwrap())
+            .unwrap();
+
+        std::fs::write(&entry, "#let broken =").unwrap();
+        assert!(
+            driver
+                .build(AsterConfig::load(&project.config_file()).unwrap())
+                .is_err()
+        );
+
+        std::fs::write(&entry, "#html.elem(\"p\")[Recovered]").unwrap();
+        driver
+            .build(AsterConfig::load(&project.config_file()).unwrap())
+            .unwrap();
+        let html = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
+        assert!(html.contains("Recovered"));
     }
 }

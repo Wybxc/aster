@@ -58,6 +58,29 @@ impl ProjectRoot {
     pub fn content_files(&self) -> Result<Vec<PathBuf>> {
         walk_files(&self.content_dir(), false)
     }
+
+    pub fn structural_watch_paths(&self) -> Vec<PathBuf> {
+        let directories = [self.src_dir(), self.content_dir()];
+        let mut paths = vec![self.config_file()];
+        paths.extend(directories.iter().cloned());
+        for directory in directories {
+            if !directory.is_dir() {
+                continue;
+            }
+            // Builds report traversal errors; watching every reachable directory
+            // lets a later filesystem change recover without exiting watch mode.
+            paths.extend(
+                WalkDir::new(directory)
+                    .into_iter()
+                    .filter_map(|entry| entry.ok())
+                    .filter(|entry| entry.file_type().is_dir())
+                    .map(|entry| entry.into_path()),
+            );
+        }
+        paths.sort();
+        paths.dedup();
+        paths
+    }
 }
 
 fn normalize(path: &Path) -> PathBuf {
@@ -111,4 +134,26 @@ fn walk_files(directory: &Path, required: bool) -> Result<Vec<PathBuf>> {
         .collect::<Vec<_>>();
     files.sort();
     Ok(files)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn structural_watch_paths_include_nested_and_missing_layout_directories() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        std::fs::create_dir_all(root.join("src/blog/nested")).unwrap();
+        std::fs::write(root.join("aster.toml"), "").unwrap();
+        let project = ProjectRoot::new(root.to_owned()).unwrap();
+
+        let paths = project.structural_watch_paths();
+
+        assert!(paths.contains(&project.config_file()));
+        assert!(paths.contains(&project.src_dir()));
+        assert!(paths.contains(&project.src_dir().join("blog")));
+        assert!(paths.contains(&project.src_dir().join("blog/nested")));
+        assert!(paths.contains(&project.content_dir()));
+    }
 }

@@ -207,6 +207,9 @@ mod tests {
         let repeated = bundle_file(session.project_files(), &entry, &source_root).unwrap();
         assert!(comemo::testing::last_was_hit());
         assert_eq!(repeated, first);
+        let dependencies = session.dependencies();
+        assert!(dependencies.contains(&std::fs::canonicalize(&entry).unwrap()));
+        assert!(dependencies.contains(&std::fs::canonicalize(&dependency).unwrap()));
 
         std::fs::write(src.join("unrelated.css"), ".unused { color: black; }").unwrap();
         session.reset();
@@ -249,6 +252,7 @@ mod tests {
         session.reset();
         assert!(bundle_file(session.project_files(), &entry, &source_root).is_err());
         assert!(comemo::testing::last_was_hit());
+        assert!(session.dependencies().contains(&dependency));
 
         std::fs::write(&dependency, ".created { color: green; }").unwrap();
         session.reset();

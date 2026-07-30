@@ -18,7 +18,7 @@ toml = "1.1"
 typst = "0.15.1"
 typst-eval = "0.15.1"
 typst-html = "0.15.1"
-typst-kit = { version = "0.15.1", features = ["system-files", "system-downloader", "scan-fonts", "emit-diagnostics"] }
+typst-kit = { version = "0.15.1", features = ["emit-diagnostics", "scan-fonts", "system-downloader", "system-files", "watcher"] }
 typst-library = "0.15.1"
 typst-svg = "0.15.1"
 walkdir = "2.5"

@@ -8,6 +8,7 @@ mod project;
 mod route;
 mod transform;
 mod utils;
+mod watch;
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -28,18 +29,37 @@ enum Commands {
         #[arg(short = 'p', long = "project")]
         project_dir: Option<std::path::PathBuf>,
     },
+    /// Build the project and rebuild when its inputs change
+    Watch {
+        /// Project root directory (containing aster.toml).
+        /// Defaults to the nearest ancestor with aster.toml from cwd.
+        #[arg(short = 'p', long = "project")]
+        project_dir: Option<std::path::PathBuf>,
+    },
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Commands::Build { project_dir } => build(project_dir)?,
+        Commands::Watch { project_dir } => watch::run(resolve_project(project_dir)?)?,
     }
     Ok(())
 }
 
 fn build(project_dir: Option<std::path::PathBuf>) -> Result<()> {
-    let project = match project_dir {
+    let project = resolve_project(project_dir)?;
+    let aster_config =
+        config::AsterConfig::load(&project.config_file()).context("failed to parse aster.toml")?;
+
+    let mut driver = pipeline::BuildDriver::new(project.clone());
+    let outcome = driver.build(aster_config)?;
+    report_outcome(&project, &outcome);
+    Ok(())
+}
+
+fn resolve_project(project_dir: Option<std::path::PathBuf>) -> Result<project::ProjectRoot> {
+    match project_dir {
         Some(dir) => {
             let dir = if dir.is_absolute() {
                 dir
@@ -48,20 +68,17 @@ fn build(project_dir: Option<std::path::PathBuf>) -> Result<()> {
                     .context("failed to get current directory")?
                     .join(dir)
             };
-            project::ProjectRoot::new(dir)?
+            project::ProjectRoot::new(dir)
         }
         None => {
             let cwd = std::env::current_dir().context("failed to get current directory")?;
             project::ProjectRoot::find(&cwd)
-                .context("no aster.toml found in current or parent directories")?
+                .context("no aster.toml found in current or parent directories")
         }
-    };
+    }
+}
 
-    let aster_config =
-        config::AsterConfig::load(&project.config_file()).context("failed to parse aster.toml")?;
-
-    let mut driver = pipeline::BuildDriver::new(project.clone());
-    let outcome = driver.build(aster_config)?;
+pub(crate) fn report_outcome(project: &project::ProjectRoot, outcome: &pipeline::BuildOutcome) {
     for warning in &outcome.warnings {
         diag::emit_warning(warning);
     }
@@ -70,5 +87,4 @@ fn build(project_dir: Option<std::path::PathBuf>) -> Result<()> {
         diag::emit_page(&relative.to_string_lossy());
     }
     diag::emit_summary(outcome.outputs.len(), outcome.elapsed);
-    Ok(())
 }

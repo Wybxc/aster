@@ -1,4 +1,5 @@
 use std::io::Write;
+use std::path::Path;
 use std::time::Duration;
 
 use termcolor::{ColorChoice, ColorSpec, NoColor, StandardStream, WriteColor};
@@ -66,4 +67,28 @@ pub fn emit_page(path: &str) {
 
 pub fn emit_warning(message: &str) {
     styled_warning(message);
+}
+
+pub fn emit_error(message: &str) {
+    let mut writer = writer();
+    let _ = writer.set_color(
+        ColorSpec::new()
+            .set_fg(Some(termcolor::Color::Red))
+            .set_bold(true),
+    );
+    let _ = write!(writer, "error");
+    let _ = writer.reset();
+    let _ = writeln!(writer, ": {message}");
+}
+
+pub fn emit_watching(project: &Path) {
+    let mut writer = writer();
+    let _ = writer.set_color(
+        ColorSpec::new()
+            .set_fg(Some(termcolor::Color::Cyan))
+            .set_bold(true),
+    );
+    let _ = write!(writer, "watch");
+    let _ = writer.reset();
+    let _ = writeln!(writer, "  {}", project.display());
 }

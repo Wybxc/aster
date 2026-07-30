@@ -1,4 +1,6 @@
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use anyhow::{Context, Result};
 use comemo::{Track, Tracked};
@@ -32,6 +34,7 @@ pub struct TypstSession {
 pub(crate) struct ProjectFiles {
     root: PathBuf,
     store: FileStore<SystemFiles>,
+    tracked_paths: Mutex<BTreeSet<PathBuf>>,
 }
 
 pub struct EvaluatedContent {
@@ -69,6 +72,10 @@ impl TypstSession {
 
     pub(crate) fn project_files(&self) -> Tracked<'_, ProjectFiles> {
         self.files.track()
+    }
+
+    pub(crate) fn dependencies(&mut self) -> Vec<PathBuf> {
+        self.files.dependencies()
     }
 
     pub fn library(&self, inputs: Dict) -> LazyHash<Library> {
@@ -153,11 +160,34 @@ impl ProjectFiles {
         let packages = SystemPackages::new(downloader);
         let fs_root = FsRoot::new(root.clone());
         let store = FileStore::new(SystemFiles::new(fs_root, packages));
-        Self { root, store }
+        Self {
+            root,
+            store,
+            tracked_paths: Mutex::new(BTreeSet::new()),
+        }
     }
 
     fn reset(&mut self) {
         self.store.reset();
+        self.tracked_paths
+            .get_mut()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clear();
+    }
+
+    fn dependencies(&mut self) -> Vec<PathBuf> {
+        let mut paths = self
+            .tracked_paths
+            .get_mut()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>();
+        let (loader, dependencies) = self.store.dependencies();
+        paths.extend(dependencies.filter_map(|id| loader.resolve(id).ok()));
+        paths.sort();
+        paths.dedup();
+        paths
     }
 
     fn root(&self) -> &Path {
@@ -175,16 +205,25 @@ impl ProjectFiles {
     fn resolve(&self, id: FileId) -> Result<PathBuf, FileError> {
         self.store.loader().resolve(id)
     }
+
+    fn track_path(&self, path: &Path) {
+        self.tracked_paths
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .insert(path.to_owned());
+    }
 }
 
 #[comemo::track]
 impl ProjectFiles {
     pub(crate) fn canonicalize(&self, path: &Path) -> Result<PathBuf, String> {
+        self.track_path(path);
         std::fs::canonicalize(path)
             .map_err(|error| format!("failed to resolve {}: {error}", path.display()))
     }
 
     pub(crate) fn read(&self, path: &Path) -> Result<Bytes, String> {
+        self.track_path(path);
         let virtual_path = VirtualPath::virtualize(&self.root, path).map_err(|error| {
             format!(
                 "{} is outside {}: {error}",
@@ -270,6 +309,23 @@ mod tests {
     use super::*;
 
     #[test]
+    fn dependencies_include_missing_tracked_paths_and_reset_between_builds() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::write(root.join("aster.toml"), "").unwrap();
+        let missing = root.join("missing-theme.tmTheme");
+
+        let project = ProjectRoot::new(root.to_owned()).unwrap();
+        let mut session = TypstSession::new(project);
+        assert!(session.project_files().canonicalize(&missing).is_err());
+        assert!(session.dependencies().contains(&missing));
+
+        session.reset();
+        assert!(session.dependencies().is_empty());
+    }
+
+    #[test]
     fn page_compilation_is_reused_and_invalidated_by_dependency_changes() {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path();
@@ -291,6 +347,9 @@ mod tests {
         session.reset();
         session.compile_page(&entry, &library).unwrap();
         assert!(comemo::testing::last_was_hit());
+        let dependencies = session.dependencies();
+        assert!(dependencies.contains(&std::fs::canonicalize(&entry).unwrap()));
+        assert!(dependencies.contains(&std::fs::canonicalize(&dependency).unwrap()));
 
         std::fs::write(&dependency, format!("#let marker = \"second-{marker}\"")).unwrap();
         session.reset();
