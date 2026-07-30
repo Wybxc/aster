@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use anyhow::{Context, Result};
 use base64::Engine;
 use typst_html::HtmlDocument;
@@ -31,7 +33,7 @@ impl ElementProcessor for ImageProcessor {
             };
 
             if let Some((content, ext)) = try_extract(&src)? {
-                let path = assets.add("", "img", ext, content);
+                let path = assets.add(Path::new(""), "img", ext, content);
                 elem.update_attr("src", |v| *v = path.to_string_lossy().into());
             }
             Ok(WalkControl::Continue)

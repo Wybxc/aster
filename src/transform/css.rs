@@ -50,7 +50,7 @@ impl ElementProcessor for CssProcessor {
                 .extension()
                 .unwrap_or_default()
                 .to_string_lossy();
-            let hashed_path = assets.add("", &stem, &ext, css_bytes);
+            let hashed_path = assets.add(Path::new(""), &stem, &ext, css_bytes);
 
             // Compute relative path from the page to the CSS file.
             let page_dir = ctx.page_path.parent().expect("page has a parent");

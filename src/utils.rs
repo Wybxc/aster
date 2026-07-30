@@ -159,12 +159,12 @@ impl AssetCollector {
     }
 
     /// Register content; computes the hash and returns the relative path
-    /// `{dir}{stem}.{hash}.{ext}`.  `dir` may be empty or end with `/`.
-    /// If the same content was already registered, the **earlier** path is
-    /// returned (dedup).
-    pub fn add(&mut self, dir: &str, stem: &str, ext: &str, content: Vec<u8>) -> PathBuf {
+    /// `{dir}/{stem}.{hash}.{ext}`.  `dir` is relative to the output
+    /// directory (use `Path::new("")` for root).  If the same content was
+    /// already registered, the **earlier** path is returned (dedup).
+    pub fn add(&mut self, dir: &Path, stem: &str, ext: &str, content: Vec<u8>) -> PathBuf {
         let hash = content_hash(&content);
-        let path = PathBuf::from(format!("{dir}{stem}.{hash}.{ext}"));
+        let path = dir.join(format!("{stem}.{hash}.{ext}"));
         self.entries
             .entry(hash)
             .or_insert((path, content))
