@@ -2,7 +2,8 @@ use std::fmt::Write;
 use std::path::Path;
 use std::sync::LazyLock;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
+use comemo::Tracked;
 use syntect::easy::ScopeRegionIterator;
 use syntect::highlighting::{Highlighter, Theme, ThemeSet};
 use syntect::parsing::{ParseState, Scope, ScopeStack, SyntaxSet};
@@ -10,6 +11,7 @@ use typst::ecow::{EcoString, EcoVec, eco_format, eco_vec};
 use typst::syntax::{LinkedNode, Span, SyntaxNode, parse_code, parse_math};
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 
+use crate::compile::ProjectFiles;
 use crate::config::HighlightConfig;
 use crate::project::ProjectRoot;
 
@@ -44,11 +46,7 @@ impl ElementProcessor for HighlightProcessor {
                 return Ok(WalkControl::SkipChildren);
             }
 
-            let tokens = if TYPST_LANGS.contains(&lang.as_str()) {
-                do_typst_highlight(&raw, &lang)
-            } else {
-                do_syntect_highlight(&raw, &lang)
-            };
+            let tokens = highlight_tokens(&raw, &lang);
 
             let mut new_children: EcoVec<HtmlNode> = EcoVec::new();
             for (class, txt) in &tokens {
@@ -106,6 +104,15 @@ fn make_class(name: &str) -> EcoString {
         "default".into()
     } else {
         eco_format!("hl-{name}")
+    }
+}
+
+#[comemo::memoize]
+fn highlight_tokens(code: &str, lang: &str) -> Vec<(EcoString, EcoString)> {
+    if TYPST_LANGS.contains(&lang) {
+        do_typst_highlight(code, lang)
+    } else {
+        do_syntect_highlight(code, lang)
     }
 }
 
@@ -213,17 +220,20 @@ fn walk_typst_node<'a>(
 // ---------------------------------------------------------------------------
 
 /// Load a syntect theme by built-in name or file path (relative to `project_root`).
-fn load_theme(name_or_path: &str, project_root: &Path) -> Result<Theme> {
+fn load_theme(
+    name_or_path: &str,
+    project_root: &Path,
+    project_files: Tracked<ProjectFiles>,
+) -> std::result::Result<Theme, String> {
     if let Some(theme) = THEMES.themes.get(name_or_path) {
         return Ok(theme.clone());
     }
-    // Treat as file path — parse a single .tmTheme file.
-    let path = project_root.join(name_or_path);
-    let file = std::fs::File::open(&path)
-        .with_context(|| format!("failed to open theme file {}", path.display()))?;
-    let mut reader = std::io::BufReader::new(file);
+
+    let path = project_files.canonicalize(&project_root.join(name_or_path))?;
+    let bytes = project_files.read(&path)?;
+    let mut reader = std::io::Cursor::new(bytes);
     let theme = ThemeSet::load_from_reader(&mut reader)
-        .with_context(|| format!("failed to load theme from {}", path.display()))?;
+        .map_err(|error| format!("failed to load theme from {}: {error}", path.display()))?;
     Ok(theme)
 }
 
@@ -234,9 +244,26 @@ fn load_theme(name_or_path: &str, project_root: &Path) -> Result<Theme> {
 pub fn compute_highlight_css(
     config: &HighlightConfig,
     project: &ProjectRoot,
+    project_files: Tracked<ProjectFiles>,
 ) -> Result<Option<String>> {
-    let light = load_theme(&config.themes.light, project.root())?;
-    let dark = load_theme(&config.themes.dark, project.root())?;
+    compute_highlight_css_impl(
+        &config.themes.light,
+        &config.themes.dark,
+        project.root(),
+        project_files,
+    )
+    .map_err(anyhow::Error::msg)
+}
+
+#[comemo::memoize]
+fn compute_highlight_css_impl(
+    light_theme: &str,
+    dark_theme: &str,
+    project_root: &Path,
+    project_files: Tracked<ProjectFiles>,
+) -> std::result::Result<Option<String>, String> {
+    let light = load_theme(light_theme, project_root, project_files)?;
+    let dark = load_theme(dark_theme, project_root, project_files)?;
     let light_h = Highlighter::new(&light);
     let dark_h = Highlighter::new(&dark);
 
@@ -329,10 +356,91 @@ pub fn compute_highlight_css(
 mod tests {
     use super::*;
 
+    fn write_theme(path: &Path, color: &str) {
+        let theme = format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+  <key>name</key><string>Aster Test</string>
+  <key>settings</key>
+  <array>
+    <dict>
+      <key>settings</key>
+      <dict><key>foreground</key><string>{color}</string></dict>
+    </dict>
+    <dict>
+      <key>scope</key><string>keyword.control</string>
+      <key>settings</key>
+      <dict><key>foreground</key><string>{color}</string></dict>
+    </dict>
+  </array>
+</dict>
+</plist>
+"#
+        );
+        std::fs::write(path, theme).unwrap();
+    }
+
     /// Helper: return the concatenated text of all non-whitespace tokens
     /// so we can check source-code ordering.
     fn token_texts(tokens: &[(EcoString, EcoString)]) -> Vec<String> {
         tokens.iter().map(|(_, t)| t.as_str().to_string()).collect()
+    }
+
+    #[test]
+    fn code_highlighting_is_memoized_by_source_and_language() {
+        let temp = tempfile::tempdir().unwrap();
+        let marker = temp.path().display().to_string();
+        let code = format!("let marker = {marker:?}");
+
+        let first = highlight_tokens(&code, "typc");
+        assert!(!comemo::testing::last_was_hit());
+
+        let repeated = highlight_tokens(&code, "typc");
+        assert!(comemo::testing::last_was_hit());
+        assert_eq!(repeated, first);
+
+        highlight_tokens(&format!("{code}\nlet changed = true"), "typc");
+        assert!(!comemo::testing::last_was_hit());
+    }
+
+    #[test]
+    fn highlight_css_tracks_custom_theme_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::write(root.join("aster.toml"), "").unwrap();
+        let theme = root.join("theme.tmTheme");
+        write_theme(&theme, "#112233");
+
+        let project = ProjectRoot::new(root.to_owned()).unwrap();
+        let mut session = crate::compile::TypstSession::new(project.clone());
+        let config = HighlightConfig {
+            themes: crate::config::Themes {
+                light: "theme.tmTheme".into(),
+                dark: "theme.tmTheme".into(),
+            },
+        };
+
+        let first = compute_highlight_css(&config, &project, session.project_files())
+            .unwrap()
+            .unwrap();
+        assert!(!comemo::testing::last_was_hit());
+
+        session.reset();
+        let repeated = compute_highlight_css(&config, &project, session.project_files())
+            .unwrap()
+            .unwrap();
+        assert!(comemo::testing::last_was_hit());
+        assert_eq!(repeated, first);
+
+        write_theme(&theme, "#445566");
+        session.reset();
+        let changed = compute_highlight_css(&config, &project, session.project_files())
+            .unwrap()
+            .unwrap();
+        assert!(!comemo::testing::last_was_hit());
+        assert_ne!(changed, first);
     }
 
     #[test]

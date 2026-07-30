@@ -132,6 +132,7 @@ fn protocol_value(collections: BTreeMap<EcoString, Vec<(EcoString, PathBuf, Cont
     })
 }
 
+#[comemo::memoize]
 fn frontmatter(content: &Content) -> Option<Dict> {
     content
         .traverse(&mut |element| {
@@ -152,6 +153,7 @@ fn frontmatter(content: &Content) -> Option<Dict> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use typst::text::TextElem;
 
     #[test]
     fn empty_protocol_has_one_owner() {
@@ -195,5 +197,21 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn frontmatter_analysis_is_memoized_by_content() {
+        let temp = tempfile::tempdir().unwrap();
+        let marker = temp.path().display().to_string();
+        let content = TextElem::packed(marker.clone());
+
+        assert!(frontmatter(&content).is_none());
+        assert!(!comemo::testing::last_was_hit());
+
+        assert!(frontmatter(&content).is_none());
+        assert!(comemo::testing::last_was_hit());
+
+        assert!(frontmatter(&TextElem::packed(format!("{marker}-changed"))).is_none());
+        assert!(!comemo::testing::last_was_hit());
     }
 }

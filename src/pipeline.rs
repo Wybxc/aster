@@ -51,15 +51,18 @@ fn build_once(session: &TypstSession, config: AsterConfig) -> Result<BuildOutcom
     let mut warnings = Vec::new();
     let mut publication = OutputPublication::new(&project);
 
-    let highlight_css =
-        match transform::highlight::compute_highlight_css(&config.highlight, &project) {
-            Ok(Some(css)) => Some(publication.add_asset("hl", "css", css.into_bytes())?),
-            Ok(None) => None,
-            Err(error) => {
-                warnings.push(format!("failed to resolve highlight CSS: {error:#}"));
-                None
-            }
-        };
+    let highlight_css = match transform::highlight::compute_highlight_css(
+        &config.highlight,
+        &project,
+        session.project_files(),
+    ) {
+        Ok(Some(css)) => Some(publication.add_asset("hl", "css", css.into_bytes())?),
+        Ok(None) => None,
+        Err(error) => {
+            warnings.push(format!("failed to resolve highlight CSS: {error:#}"));
+            None
+        }
+    };
 
     let content_library = session.library(config.dict.clone());
     let loaded =

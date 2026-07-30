@@ -40,7 +40,7 @@ pub enum RouteError {
     DuplicateParameter(EcoString),
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Clone, Debug, thiserror::Error)]
 pub enum RouteMetadataError {
     #[error("route metadata must be an array of dictionaries")]
     InvalidShape,
@@ -237,6 +237,7 @@ fn join_names(names: &[EcoString]) -> String {
         .join(", ")
 }
 
+#[comemo::memoize]
 pub fn extract(content: &Content) -> Result<Vec<ParamSet>, RouteMetadataError> {
     let mut declarations = Vec::new();
     let _ = content.traverse(&mut |element| {
@@ -398,6 +399,7 @@ fn is_component_prefix(left: &[String], right: &[String]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use typst::text::TextElem;
 
     fn fixture(files: &[&str]) -> (tempfile::TempDir, ProjectRoot) {
         let temp = tempfile::tempdir().unwrap();
@@ -422,6 +424,23 @@ mod tests {
         let route = parse("blog/prefix[slug].typ").unwrap();
         assert!(route.is_dynamic());
         assert_eq!(route.parameters, BTreeSet::from(["slug".into()]));
+    }
+
+    #[test]
+    fn route_metadata_analysis_is_memoized_by_content() {
+        let temp = tempfile::tempdir().unwrap();
+        let marker = temp.path().display().to_string();
+        let content = TextElem::packed(marker.clone());
+
+        assert!(extract(&content).unwrap().is_empty());
+        assert!(!comemo::testing::last_was_hit());
+
+        assert!(extract(&content).unwrap().is_empty());
+        assert!(comemo::testing::last_was_hit());
+
+        let changed = TextElem::packed(format!("{marker}-changed"));
+        assert!(extract(&changed).unwrap().is_empty());
+        assert!(!comemo::testing::last_was_hit());
     }
 
     #[test]
