@@ -14,7 +14,7 @@ use crate::config::HighlightConfig;
 use crate::project::ProjectRoot;
 
 use super::{ElementProcessor, ProcessingContext, WalkControl};
-use crate::utils::HtmlElementExt;
+use crate::utils::{AssetCollector, HtmlElementExt};
 
 static SS: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
 static THEMES: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
@@ -25,7 +25,12 @@ const TYPST_LANGS: &[&str] = &["typ", "typst", "typc", "typm"];
 pub(super) struct HighlightProcessor;
 
 impl ElementProcessor for HighlightProcessor {
-    fn process(&self, doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> Result<()> {
+    fn process(
+        &self,
+        doc: &mut HtmlDocument,
+        _assets: &mut AssetCollector,
+        ctx: &ProcessingContext<'_>,
+    ) -> Result<()> {
         // Syntax-highlight all <code data-lang="..."> blocks.
         // Theme-independent: we only derive CSS class names from scopes.
         doc.root_mut().walk_mut(&mut |elem| {

@@ -119,6 +119,7 @@ pub fn build(
     let render_start = std::time::Instant::now();
     let mut outputs: Vec<PathBuf> = Vec::new();
     let mut errors: Vec<anyhow::Error> = Vec::new();
+    let mut all_assets = crate::utils::AssetCollector::new();
 
     for (output, job) in &render_queue {
         let mut page = || -> Result<()> {
@@ -131,7 +132,7 @@ pub fn build(
                 page_path: output.clone(),
                 hl_css_path: hl_css_path.clone(),
             };
-            transform::process_document(&mut doc, &pctx)?;
+            transform::process_document(&mut doc, &mut all_assets, &pctx)?;
 
             let raw = typst_html::html(&doc, &HtmlOptions::default())
                 .map_err(|_| anyhow::anyhow!("HTML encoding failed"))?;
@@ -147,6 +148,11 @@ pub fn build(
         if let Err(e) = page() {
             errors.push(e);
         }
+    }
+
+    // Flush all generated assets (duplicate content → single file).
+    if let Err(e) = all_assets.flush(&project.output_dir()) {
+        diag::emit_warning(&format!("failed to write assets: {e:#}"));
     }
 
     diag::emit_summary(outputs.len(), &render_start);

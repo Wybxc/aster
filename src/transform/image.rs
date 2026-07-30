@@ -1,12 +1,9 @@
-use std::path::Path;
-
 use anyhow::{Context, Result};
 use base64::Engine;
-use typst::ecow::{EcoString, eco_format};
 use typst_html::HtmlDocument;
 
 use super::{ElementProcessor, ProcessingContext, WalkControl};
-use crate::utils::HtmlElementExt;
+use crate::utils::{AssetCollector, HtmlElementExt};
 
 /// Minimum decoded size (bytes) below which a data URI stays inline.
 const IMAGE_EXTRACT_THRESHOLD: usize = 1024;
@@ -14,7 +11,12 @@ const IMAGE_EXTRACT_THRESHOLD: usize = 1024;
 pub(super) struct ImageProcessor;
 
 impl ElementProcessor for ImageProcessor {
-    fn process(&self, doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> Result<()> {
+    fn process(
+        &self,
+        doc: &mut HtmlDocument,
+        assets: &mut AssetCollector,
+        _ctx: &ProcessingContext<'_>,
+    ) -> Result<()> {
         doc.root_mut().walk_mut(&mut |elem| {
             if !elem.is_tag(typst_html::tag::img) {
                 return Ok(WalkControl::Continue);
@@ -28,16 +30,18 @@ impl ElementProcessor for ImageProcessor {
                 None => return Ok(WalkControl::Continue),
             };
 
-            if let Some(new_src) = try_extract(&src, &ctx.output_dir())? {
-                elem.update_attr("src", |v| *v = new_src.clone());
+            if let Some((content, ext)) = try_extract(&src)? {
+                let hashed = assets.add("img", ext, content);
+                elem.update_attr("src", |v| *v = hashed.clone().into());
             }
             Ok(WalkControl::Continue)
         })
     }
 }
 
-/// Try to extract a data URI image to a separate file.
-fn try_extract(src: &str, dist_dir: &Path) -> Result<Option<EcoString>> {
+/// Try to extract a data URI image.
+/// Returns `(decoded_bytes, file_extension)` on success.
+fn try_extract(src: &str) -> Result<Option<(Vec<u8>, &'static str)>> {
     let Some(data) = src.strip_prefix("data:") else {
         return Ok(None);
     };
@@ -60,14 +64,8 @@ fn try_extract(src: &str, dist_dir: &Path) -> Result<Option<EcoString>> {
         return Ok(None);
     }
 
-    let hash = crate::utils::content_hash(&decoded);
     let ext = media_type_to_ext(mediatype);
-    let filename = eco_format!("{hash}.{ext}");
-    let output = dist_dir.join(filename.as_str());
-
-    crate::utils::write_file(&output, &decoded)?;
-
-    Ok(Some(filename))
+    Ok(Some((decoded, ext)))
 }
 
 /// Map a MIME type string to a file extension.

@@ -8,13 +8,19 @@ use anyhow::Result;
 use typst_html::HtmlDocument;
 
 use crate::project::ProjectRoot;
+use crate::utils::AssetCollector;
 
 pub use crate::utils::WalkControl;
 
 /// A processor that transforms the document as a whole — CSS bundling,
 /// image extraction, syntax highlighting, etc.
 pub trait ElementProcessor {
-    fn process(&self, doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> Result<()>;
+    fn process(
+        &self,
+        doc: &mut HtmlDocument,
+        assets: &mut AssetCollector,
+        ctx: &ProcessingContext<'_>,
+    ) -> Result<()>;
 }
 
 /// Per-page context for the document processing pipeline.
@@ -45,14 +51,19 @@ impl ProcessingContext<'_> {
     }
 }
 
-/// Run every built-in processor in order.
-pub fn process_document(doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> Result<()> {
+/// Run every built-in processor in order, collecting generated assets
+/// into `assets`.
+pub fn process_document(
+    doc: &mut HtmlDocument,
+    assets: &mut AssetCollector,
+    ctx: &ProcessingContext<'_>,
+) -> Result<()> {
     for p in &[
         &css::CssProcessor as &dyn ElementProcessor,
         &image::ImageProcessor,
         &highlight::HighlightProcessor,
     ] {
-        p.process(doc, ctx)?;
+        p.process(doc, assets, ctx)?;
     }
     Ok(())
 }

@@ -7,12 +7,17 @@ use lightningcss::targets::Browsers;
 use typst_html::HtmlDocument;
 
 use super::{ElementProcessor, ProcessingContext, WalkControl};
-use crate::utils::HtmlElementExt;
+use crate::utils::{AssetCollector, HtmlElementExt};
 
 pub(super) struct CssProcessor;
 
 impl ElementProcessor for CssProcessor {
-    fn process(&self, doc: &mut HtmlDocument, ctx: &ProcessingContext<'_>) -> Result<()> {
+    fn process(
+        &self,
+        doc: &mut HtmlDocument,
+        assets: &mut AssetCollector,
+        ctx: &ProcessingContext<'_>,
+    ) -> Result<()> {
         doc.root_mut().walk_mut(&mut |elem| {
             if !elem.is_tag(typst_html::tag::link) {
                 return Ok(WalkControl::Continue);
@@ -35,7 +40,6 @@ impl ElementProcessor for CssProcessor {
                 .with_context(|| format!("failed to resolve {}", source.display()))?;
             let css = bundle_file(&source)?;
 
-            let hash = crate::utils::content_hash(css.as_bytes());
             let h = href.as_str();
             let stem = Path::new(h)
                 .file_stem()
@@ -45,14 +49,11 @@ impl ElementProcessor for CssProcessor {
                 .extension()
                 .unwrap_or_default()
                 .to_string_lossy();
-            let hashed_name = format!("{stem}.{hash}.{ext}");
-
-            // Write the bundled CSS to dist_dir.
-            let css_output = ctx.output_dir().join(&hashed_name);
-            crate::utils::write_file(&css_output, css.as_bytes())?;
+            let hashed_name = assets.add(&stem, &ext, css.into_bytes());
 
             // Compute relative path from the page to the CSS file.
             let page_dir = ctx.page_path.parent().expect("page has a parent");
+            let css_output = ctx.output_dir().join(&hashed_name);
             let relative =
                 pathdiff::diff_paths(&css_output, page_dir).expect("both paths under output_dir");
 
