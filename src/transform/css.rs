@@ -5,46 +5,35 @@ use comemo::Tracked;
 use lightningcss::bundler::{Bundler, FileProvider, ResolveResult, SourceProvider};
 use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions};
 use lightningcss::targets::Browsers;
-use typst_html::HtmlDocument;
+use typst_html::HtmlElement;
 
-use super::{ElementProcessor, WalkControl};
 use crate::compile::ProjectFiles;
 use crate::output::PagePublication;
 use crate::utils::HtmlElementExt;
 
-pub(super) struct CssProcessor<'a> {
-    project_files: Tracked<'a, ProjectFiles>,
-}
-
-impl<'a> CssProcessor<'a> {
-    pub(super) fn new(project_files: Tracked<'a, ProjectFiles>) -> Self {
-        Self { project_files }
+pub(super) fn process_element(
+    element: &mut HtmlElement,
+    page: &mut PagePublication<'_>,
+    project_files: Tracked<ProjectFiles>,
+) -> Result<()> {
+    if !element.is_tag(typst_html::tag::link) {
+        return Ok(());
     }
-}
-
-impl ElementProcessor for CssProcessor<'_> {
-    fn process(&self, doc: &mut HtmlDocument, page: &mut PagePublication<'_>) -> Result<()> {
-        doc.root_mut().walk_mut(&mut |elem| {
-            if !elem.is_tag(typst_html::tag::link) {
-                return Ok(WalkControl::Continue);
-            }
-            if !elem.has_attr("rel", |value| value.as_str() == "css") {
-                return Ok(WalkControl::Continue);
-            }
-
-            let Some(href) = elem.get_attr("href") else {
-                return Ok(WalkControl::Continue);
-            };
-            let source = page.resolve_source(href.as_str())?;
-            let css = bundle_file(self.project_files, &source, &page.source_root()?)
-                .map_err(anyhow::Error::msg)?;
-            let url = page.add_asset("css", "css", css.into_bytes())?;
-
-            elem.update_attr("href", |value| *value = url.as_str().into());
-            elem.update_attr("rel", |value| *value = "stylesheet".into());
-            Ok(WalkControl::Continue)
-        })
+    if !element.has_attr("rel", |value| value.as_str() == "css") {
+        return Ok(());
     }
+
+    let Some(href) = element.get_attr("href") else {
+        return Ok(());
+    };
+    let source = page.resolve_source(href.as_str())?;
+    let css =
+        bundle_file(project_files, &source, &page.source_root()?).map_err(anyhow::Error::msg)?;
+    let url = page.add_asset("css", "css", css.into_bytes())?;
+
+    element.update_attr("href", |value| *value = url.as_str().into());
+    element.update_attr("rel", |value| *value = "stylesheet".into());
+    Ok(())
 }
 
 /// Bundle a CSS entry point while confining and tracking every transitive import.

@@ -1,32 +1,28 @@
 use anyhow::{Context, Result};
 use data_url::{DataUrl, mime::Mime};
-use typst_html::HtmlDocument;
+use typst_html::HtmlElement;
 
-use super::{ElementProcessor, WalkControl};
 use crate::output::PagePublication;
 use crate::utils::HtmlElementExt;
 
 /// Minimum decoded size (bytes) below which a data URI stays inline.
 const IMAGE_EXTRACT_THRESHOLD: usize = 1024;
 
-pub(super) struct ImageProcessor;
-
-impl ElementProcessor for ImageProcessor {
-    fn process(&self, doc: &mut HtmlDocument, page: &mut PagePublication<'_>) -> Result<()> {
-        doc.root_mut().walk_mut(&mut |elem| {
-            if !elem.is_tag(typst_html::tag::img) {
-                return Ok(WalkControl::Continue);
-            }
-            let Some(src) = elem.get_attr("src") else {
-                return Ok(WalkControl::Continue);
-            };
-            if let Some((content, extension)) = try_extract(&src)? {
-                let url = page.add_asset("img", extension, content)?;
-                elem.update_attr("src", |value| *value = url.as_str().into());
-            }
-            Ok(WalkControl::Continue)
-        })
+pub(super) fn process_element(
+    element: &mut HtmlElement,
+    page: &mut PagePublication<'_>,
+) -> Result<()> {
+    if !element.is_tag(typst_html::tag::img) {
+        return Ok(());
     }
+    let Some(src) = element.get_attr("src") else {
+        return Ok(());
+    };
+    if let Some((content, extension)) = try_extract(&src)? {
+        let url = page.add_asset("img", extension, content)?;
+        element.update_attr("src", |value| *value = url.as_str().into());
+    }
+    Ok(())
 }
 
 fn try_extract(src: &str) -> Result<Option<(Vec<u8>, &'static str)>> {

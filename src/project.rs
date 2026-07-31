@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use walkdir::WalkDir;
 
 /// A discovered Aster project with one normalized layout policy.
@@ -51,15 +51,26 @@ impl ProjectRoot {
         self.root.join("aster.toml")
     }
 
-    pub fn source_files(&self) -> Result<Vec<PathBuf>> {
-        walk_files(&self.src_dir(), true)
+    /// Return every structural and tracked build input that watch mode should
+    /// observe, excluding the generated output tree.
+    pub fn watch_paths(&self, dependencies: &[PathBuf]) -> Vec<PathBuf> {
+        let output = self.output_dir();
+        let canonical_output = std::fs::canonicalize(self.root())
+            .ok()
+            .map(|root| root.join("dist"));
+        let mut paths = self.structural_watch_paths();
+        paths.extend(
+            dependencies
+                .iter()
+                .filter(|path| !inside_output(path, &output, canonical_output.as_deref()))
+                .cloned(),
+        );
+        paths.sort();
+        paths.dedup();
+        paths
     }
 
-    pub fn content_files(&self) -> Result<Vec<PathBuf>> {
-        walk_files(&self.content_dir(), false)
-    }
-
-    pub fn structural_watch_paths(&self) -> Vec<PathBuf> {
+    fn structural_watch_paths(&self) -> Vec<PathBuf> {
         let directories = [self.src_dir(), self.content_dir()];
         let mut paths = vec![self.config_file()];
         paths.extend(directories.iter().cloned());
@@ -83,6 +94,11 @@ impl ProjectRoot {
     }
 }
 
+fn inside_output(path: &Path, output: &Path, canonical_output: Option<&Path>) -> bool {
+    path.starts_with(output)
+        || canonical_output.is_some_and(|canonical| path.starts_with(canonical))
+}
+
 fn normalize(path: &Path) -> PathBuf {
     if path.is_absolute() {
         path.to_path_buf()
@@ -91,49 +107,6 @@ fn normalize(path: &Path) -> PathBuf {
             .map(|current| current.join(path))
             .unwrap_or_else(|_| path.to_path_buf())
     }
-}
-
-fn walk_files(directory: &Path, required: bool) -> Result<Vec<PathBuf>> {
-    match std::fs::symlink_metadata(directory) {
-        Ok(metadata) if metadata.file_type().is_symlink() => {
-            bail!("{} must not be a symlink", directory.display())
-        }
-        Ok(_) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound && !required => {
-            return Ok(Vec::new());
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            bail!("{} directory not found", directory.display())
-        }
-        Err(error) => {
-            return Err(error)
-                .with_context(|| format!("failed to inspect {}", directory.display()));
-        }
-    }
-    if !directory.is_dir() {
-        bail!("{} is not a directory", directory.display());
-    }
-
-    let entries = WalkDir::new(directory)
-        .into_iter()
-        .map(|entry| entry.with_context(|| format!("failed to traverse {}", directory.display())))
-        .collect::<Result<Vec<_>>>()?;
-    for entry in &entries {
-        if entry.file_type().is_symlink() {
-            bail!(
-                "symlink {} is not allowed in {}",
-                entry.path().display(),
-                directory.display()
-            );
-        }
-    }
-    let mut files = entries
-        .into_iter()
-        .filter(|entry| entry.file_type().is_file())
-        .map(|entry| entry.into_path())
-        .collect::<Vec<_>>();
-    files.sort();
-    Ok(files)
 }
 
 #[cfg(test)]
@@ -148,12 +121,35 @@ mod tests {
         std::fs::write(root.join("aster.toml"), "").unwrap();
         let project = ProjectRoot::new(root.to_owned()).unwrap();
 
-        let paths = project.structural_watch_paths();
+        let paths = project.watch_paths(&[]);
 
         assert!(paths.contains(&project.config_file()));
         assert!(paths.contains(&project.src_dir()));
         assert!(paths.contains(&project.src_dir().join("blog")));
         assert!(paths.contains(&project.src_dir().join("blog/nested")));
         assert!(paths.contains(&project.content_dir()));
+    }
+
+    #[test]
+    fn watch_paths_merge_dependencies_and_exclude_output() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        std::fs::create_dir_all(root.join("src/blog")).unwrap();
+        std::fs::create_dir_all(root.join("dist")).unwrap();
+        std::fs::write(root.join("aster.toml"), "").unwrap();
+        let project = ProjectRoot::new(root.to_owned()).unwrap();
+        let theme = root.join("theme.tmTheme");
+        let generated = project.output_dir().join("index.html");
+
+        let paths = project.watch_paths(&[theme.clone(), generated.clone()]);
+
+        assert!(paths.contains(&theme));
+        assert!(paths.contains(&project.src_dir().join("blog")));
+        assert!(!paths.contains(&generated));
+        assert!(
+            !paths
+                .iter()
+                .any(|path| path.starts_with(project.output_dir()))
+        );
     }
 }

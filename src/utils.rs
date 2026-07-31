@@ -1,7 +1,6 @@
-//! Utility helpers — DOM traversal, HTML element extension methods, path
-//! utilities, colour formatting, etc.
+//! Utility helpers — HTML element attributes, text extraction, content hashes,
+//! and colour formatting.
 
-use anyhow::Result;
 use typst::ecow::EcoString;
 use typst_html::{HtmlElement, HtmlNode};
 
@@ -15,15 +14,7 @@ pub fn content_hash(data: &[u8]) -> String {
     format!("{:016x}", seahash::hash(data))
 }
 
-/// Signal returned by the callback passed to [`walk_mut`] to control
-/// whether children of the current element should be visited.
-pub enum WalkControl {
-    Continue,
-    SkipChildren,
-}
-/// Extension-trait helpers for common [`HtmlElement`] operations.
-/// Extension methods on [`HtmlElement`] that DRY up the frequently
-/// repeated `elem.attrs.0.iter()` patterns.
+/// Extension methods on [`HtmlElement`] for common attribute and text access.
 pub trait HtmlElementExt {
     /// Check if the element's tag matches `tag`.
     fn is_tag(&self, tag: typst_html::HtmlTag) -> bool;
@@ -38,21 +29,10 @@ pub trait HtmlElementExt {
     /// Mutate every attribute whose name is `name` with `f`.
     fn update_attr(&mut self, name: &str, f: impl Fn(&mut EcoString));
 
-    /// Return the first mutable child element whose tag matches `tag`.
-    fn find_child_mut(&mut self, tag: typst_html::HtmlTag) -> Option<&mut HtmlElement>;
-
     /// Collect the text of all descendant `HtmlNode::Text` nodes,
     /// inserting `\n` for `<br>` elements so the result reflects
     /// multi-line content in source order.
     fn collect_text(&self) -> String;
-
-    /// Recursively visit every descendant `HtmlElement` depth‑first.
-    /// Return `WalkControl::SkipChildren` from the callback to skip
-    /// an element's children.  Capture external state in the closure.
-    fn walk_mut(
-        &mut self,
-        f: &mut impl FnMut(&mut HtmlElement) -> Result<WalkControl>,
-    ) -> Result<()>;
 }
 
 impl HtmlElementExt for HtmlElement {
@@ -82,32 +62,6 @@ impl HtmlElementExt for HtmlElement {
                 f(v);
             }
         }
-    }
-
-    fn find_child_mut(&mut self, tag: typst_html::HtmlTag) -> Option<&mut HtmlElement> {
-        for child in self.children.make_mut().iter_mut() {
-            if let HtmlNode::Element(e) = child
-                && e.tag == tag
-            {
-                return Some(e);
-            }
-        }
-        None
-    }
-
-    fn walk_mut(
-        &mut self,
-        f: &mut impl FnMut(&mut HtmlElement) -> Result<WalkControl>,
-    ) -> Result<()> {
-        if matches!(f(self)?, WalkControl::SkipChildren) {
-            return Ok(());
-        }
-        for child in self.children.make_mut().iter_mut() {
-            if let HtmlNode::Element(e) = child {
-                e.walk_mut(f)?;
-            }
-        }
-        Ok(())
     }
 
     fn collect_text(&self) -> String {

@@ -11,6 +11,8 @@ mod transform;
 mod utils;
 mod watch;
 
+use std::process::ExitCode;
+
 use anyhow::{Context, Result};
 use clap::Parser;
 
@@ -45,25 +47,31 @@ enum Commands {
     },
 }
 
-fn main() -> Result<()> {
-    let cli = Cli::parse();
-    match cli.command {
-        Commands::Init { path } => init::run(path)?,
-        Commands::Build { project_dir } => build(project_dir)?,
-        Commands::Watch { project_dir } => watch::run(resolve_project(project_dir)?)?,
+fn main() -> ExitCode {
+    match run(Cli::parse()) {
+        Ok(exit) => exit,
+        Err(error) => {
+            diag::emit_error(&format!("{error:#}"));
+            ExitCode::FAILURE
+        }
     }
-    Ok(())
 }
 
-fn build(project_dir: Option<std::path::PathBuf>) -> Result<()> {
+fn run(cli: Cli) -> Result<ExitCode> {
+    match cli.command {
+        Commands::Init { path } => init::run(path)?.report(),
+        Commands::Build { project_dir } => build(project_dir)?.report(),
+        Commands::Watch { project_dir } => watch::run(resolve_project(project_dir)?)?,
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn build(project_dir: Option<std::path::PathBuf>) -> Result<pipeline::BuildOutcome> {
     let project = resolve_project(project_dir)?;
     let aster_config =
         config::AsterConfig::load(&project.config_file()).context("failed to parse aster.toml")?;
 
-    let mut driver = pipeline::BuildDriver::new(project.clone());
-    let outcome = driver.build(aster_config)?;
-    report_outcome(&outcome);
-    Ok(())
+    pipeline::BuildDriver::new(project).build(aster_config)
 }
 
 fn resolve_project(project_dir: Option<std::path::PathBuf>) -> Result<project::ProjectRoot> {
@@ -84,11 +92,4 @@ fn resolve_project(project_dir: Option<std::path::PathBuf>) -> Result<project::P
                 .context("no aster.toml found in current or parent directories")
         }
     }
-}
-
-pub(crate) fn report_outcome(outcome: &pipeline::BuildOutcome) {
-    for warning in &outcome.warnings {
-        diag::emit_warning(warning);
-    }
-    diag::emit_summary(outcome.outputs.len(), outcome.elapsed);
 }

@@ -1,33 +1,76 @@
-pub mod css;
-pub mod highlight;
-pub mod image;
+mod css;
+mod highlight;
+mod image;
 
-use anyhow::Result;
+use anyhow::{Result, ensure};
 use comemo::Tracked;
-use typst_html::HtmlDocument;
+use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 
 use crate::compile::ProjectFiles;
+use crate::config::HighlightConfig;
 use crate::output::{AssetPath, PagePublication};
+use crate::project::ProjectRoot;
 
-pub use crate::utils::WalkControl;
-
-/// A document transform adapter. Output policy remains in [`PagePublication`].
-pub trait ElementProcessor {
-    fn process(&self, doc: &mut HtmlDocument, page: &mut PagePublication<'_>) -> Result<()>;
+pub fn compute_highlight_css(
+    config: &HighlightConfig,
+    project: &ProjectRoot,
+    project_files: Tracked<ProjectFiles>,
+) -> Result<Option<String>> {
+    highlight::compute_highlight_css(config, project, project_files)
 }
 
-/// Run every built-in transform adapter in order.
+/// Transform one compiled document and register every generated page asset.
+///
+/// Traversal order, element policy, and highlight stylesheet injection remain
+/// internal so callers provide only the document and publication context.
 pub fn process_document(
     doc: &mut HtmlDocument,
     page: &mut PagePublication<'_>,
     project_files: Tracked<ProjectFiles>,
     highlight_css: Option<&AssetPath>,
 ) -> Result<()> {
-    css::CssProcessor::new(project_files).process(doc, page)?;
-    image::ImageProcessor.process(doc, page)?;
-    highlight::HighlightProcessor.process(doc, page)?;
-    if let Some(asset) = highlight_css {
-        highlight::inject_stylesheet(doc, page, asset)?;
+    let highlight_url = highlight_css
+        .map(|asset| page.reference(asset))
+        .transpose()?;
+    let mut stylesheet_injected = highlight_url.is_none();
+
+    walk_document(doc.root_mut(), &mut |element| {
+        css::process_element(element, page, project_files)?;
+        image::process_element(element, page)?;
+        let control = highlight::process_element(element);
+
+        if element.tag == typst_html::tag::head
+            && let Some(url) = &highlight_url
+        {
+            highlight::inject_stylesheet(element, url);
+            stylesheet_injected = true;
+        }
+        Ok(control)
+    })?;
+
+    ensure!(
+        stylesheet_injected,
+        "highlight CSS configured but found no <head> element"
+    );
+    Ok(())
+}
+
+pub(super) enum WalkControl {
+    Continue,
+    SkipChildren,
+}
+
+fn walk_document(
+    element: &mut HtmlElement,
+    transform: &mut impl FnMut(&mut HtmlElement) -> Result<WalkControl>,
+) -> Result<()> {
+    if matches!(transform(element)?, WalkControl::SkipChildren) {
+        return Ok(());
+    }
+    for child in element.children.make_mut().iter_mut() {
+        if let HtmlNode::Element(element) = child {
+            walk_document(element, transform)?;
+        }
     }
     Ok(())
 }

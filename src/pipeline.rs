@@ -1,4 +1,6 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
@@ -10,16 +12,31 @@ use crate::config::AsterConfig;
 use crate::output::{AssetPath, OutputPath, OutputPublication};
 use crate::{content, route, transform};
 
-/// The complete build outcome. No build stage decides terminal formatting or
-/// exit status; the CLI renders this value after the pipeline finishes.
+/// The complete build outcome. Published outputs and pages whose compilation
+/// changed are recorded separately; terminal formatting and process exit status
+/// stay outside the build pipeline.
 pub struct BuildOutcome {
     pub outputs: Vec<PathBuf>,
+    pub built: Vec<PathBuf>,
     pub warnings: Vec<String>,
     pub elapsed: Duration,
 }
 
+impl BuildOutcome {
+    pub fn report(&self) {
+        for output in &self.built {
+            crate::diag::emit_built_page(output);
+        }
+        for warning in &self.warnings {
+            crate::diag::emit_warning(warning);
+        }
+        crate::diag::emit_summary(self.outputs.len(), self.elapsed);
+    }
+}
+
 pub struct BuildDriver {
     session: TypstSession,
+    revisions: BTreeMap<OutputPath, Arc<()>>,
     started: bool,
 }
 
@@ -27,6 +44,7 @@ impl BuildDriver {
     pub fn new(project: crate::project::ProjectRoot) -> Self {
         Self {
             session: TypstSession::new(project),
+            revisions: BTreeMap::new(),
             started: false,
         }
     }
@@ -37,7 +55,7 @@ impl BuildDriver {
             self.session.reset();
         }
 
-        let outcome = build_once(&self.session, config);
+        let outcome = build_once(&self.session, config, &mut self.revisions);
         if rebuilding {
             comemo::evict(10);
         }
@@ -49,13 +67,19 @@ impl BuildDriver {
     }
 }
 
-fn build_once(session: &TypstSession, config: AsterConfig) -> Result<BuildOutcome> {
+fn build_once(
+    session: &TypstSession,
+    config: AsterConfig,
+    previous_revisions: &mut BTreeMap<OutputPath, Arc<()>>,
+) -> Result<BuildOutcome> {
     let started = Instant::now();
     let project = session.project().clone();
     let mut warnings = Vec::new();
+    let mut revisions = BTreeMap::new();
+    let mut rebuilt = Vec::new();
     let mut publication = OutputPublication::new(&project);
 
-    let highlight_css = match transform::highlight::compute_highlight_css(
+    let highlight_css = match transform::compute_highlight_css(
         &config.highlight,
         &project,
         session.project_files(),
@@ -68,22 +92,11 @@ fn build_once(session: &TypstSession, config: AsterConfig) -> Result<BuildOutcom
         }
     };
 
-    let protocol = content::load(&project).context("failed to load content collections")?;
+    let protocol = content::load(session).context("failed to load content collections")?;
     let base_inputs = content::install(config.dict, protocol)?;
     let base_library = session.library(base_inputs.clone());
-    let mut probe_warnings = Vec::new();
-    let plan = route::RoutePlan::build(&project, |template| {
-        let evaluated = session.evaluate(template, &base_library)?;
-        probe_warnings.extend(evaluated.warnings);
-        let routes = route::extract(&evaluated.content)
-            .with_context(|| format!("invalid route metadata in {}", template.display()))?;
-        for params in &routes {
-            content::with_route_params(&base_inputs, params)?;
-        }
-        Ok(routes)
-    })?;
+    let plan = route::RoutePlan::build(session, &base_inputs, &base_library)?;
     let (jobs, route_warnings) = plan.into_parts();
-    warnings.extend(probe_warnings);
     warnings.extend(route_warnings);
 
     for job in jobs {
@@ -99,17 +112,31 @@ fn build_once(session: &TypstSession, config: AsterConfig) -> Result<BuildOutcom
             &job.output,
             &library,
             highlight_css.as_ref(),
-            &mut warnings,
+            &mut RenderState {
+                warnings: &mut warnings,
+                revisions: &mut revisions,
+                previous_revisions,
+                rebuilt: &mut rebuilt,
+            },
         )
         .with_context(|| format!("failed to build {}", job.output.as_path().display()))?;
     }
 
     let published = publication.publish()?;
+    *previous_revisions = revisions;
     Ok(BuildOutcome {
         outputs: published.pages,
+        built: rebuilt,
         warnings,
         elapsed: started.elapsed(),
     })
+}
+
+struct RenderState<'a> {
+    warnings: &'a mut Vec<String>,
+    revisions: &'a mut BTreeMap<OutputPath, Arc<()>>,
+    previous_revisions: &'a BTreeMap<OutputPath, Arc<()>>,
+    rebuilt: &'a mut Vec<PathBuf>,
 }
 
 fn render_page(
@@ -119,10 +146,18 @@ fn render_page(
     output: &OutputPath,
     library: &LazyHash<Library>,
     highlight_css: Option<&AssetPath>,
-    warnings: &mut Vec<String>,
+    state: &mut RenderState<'_>,
 ) -> Result<()> {
-    let compiled = session.compile_page(template, output.as_path(), library)?;
-    warnings.extend(compiled.warnings);
+    let compiled = session.compile_page(template, library)?;
+    state.warnings.extend(compiled.warnings);
+    let changed = state
+        .previous_revisions
+        .get(output)
+        .is_none_or(|previous| !Arc::ptr_eq(previous, &compiled.revision));
+    state.revisions.insert(output.clone(), compiled.revision);
+    if changed {
+        state.rebuilt.push(output.as_path().to_owned());
+    }
 
     let mut document = compiled.document;
     let mut page = publication.page(template, output)?;
@@ -180,19 +215,51 @@ mod tests {
             .unwrap();
         let first = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
 
-        driver
+        let repeated = driver
             .build(AsterConfig::load(&project.config_file()).unwrap())
             .unwrap();
+        assert!(repeated.built.is_empty());
         let repeated = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
         assert_eq!(repeated, first);
 
         std::fs::write(&entry, "#html.elem(\"p\")[second]").unwrap();
-        driver
+        let changed_outcome = driver
             .build(AsterConfig::load(&project.config_file()).unwrap())
             .unwrap();
+        assert_eq!(changed_outcome.built.len(), 1);
         let changed = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
         assert_ne!(changed, first);
         assert!(changed.contains("second"));
+    }
+
+    #[test]
+    fn build_outcome_reports_only_recompiled_pages() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::write(root.join("aster.toml"), "").unwrap();
+        std::fs::write(root.join("src/index.typ"), "#html.elem(\"p\")[Index]").unwrap();
+        let about = root.join("src/about.typ");
+        std::fs::write(&about, "#html.elem(\"p\")[About]").unwrap();
+
+        let project = ProjectRoot::new(root.to_owned()).unwrap();
+        let mut driver = BuildDriver::new(project.clone());
+        let first = driver
+            .build(AsterConfig::load(&project.config_file()).unwrap())
+            .unwrap();
+        assert_eq!(first.built.len(), 2);
+
+        let repeated = driver
+            .build(AsterConfig::load(&project.config_file()).unwrap())
+            .unwrap();
+        assert!(repeated.built.is_empty(), "{:?}", repeated.built);
+
+        std::fs::write(&about, "#html.elem(\"p\")[Changed]").unwrap();
+        let changed = driver
+            .build(AsterConfig::load(&project.config_file()).unwrap())
+            .unwrap();
+        assert_eq!(changed.built, vec![PathBuf::from("about.html")]);
+        assert_eq!(changed.outputs.len(), 2);
     }
 
     #[test]

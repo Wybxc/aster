@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
 use comemo::{Track, Tracked};
@@ -16,6 +16,7 @@ use typst_kit::downloader::SystemDownloader;
 use typst_kit::files::{FileStore, FsRoot, SystemFiles};
 use typst_kit::fonts::FontStore;
 use typst_kit::packages::SystemPackages;
+use walkdir::WalkDir;
 
 use crate::diag;
 use crate::project::ProjectRoot;
@@ -45,6 +46,13 @@ pub struct EvaluatedContent {
 pub struct CompiledPage {
     pub document: typst_html::HtmlDocument,
     pub warnings: Vec<String>,
+    pub(crate) revision: Arc<()>,
+}
+
+#[derive(Clone)]
+struct MemoizedPage {
+    document: typst_html::HtmlDocument,
+    revision: Arc<()>,
 }
 
 impl TypstSession {
@@ -72,6 +80,16 @@ impl TypstSession {
 
     pub(crate) fn project_files(&self) -> Tracked<'_, ProjectFiles> {
         self.files.track()
+    }
+
+    pub(crate) fn source_files(&self) -> Result<Vec<PathBuf>> {
+        list_typst_files(self.project_files(), &self.project.src_dir(), true)
+            .map_err(anyhow::Error::msg)
+    }
+
+    pub(crate) fn content_files(&self) -> Result<Vec<PathBuf>> {
+        list_typst_files(self.project_files(), &self.project.content_dir(), false)
+            .map_err(anyhow::Error::msg)
     }
 
     pub(crate) fn dependencies(&mut self) -> Vec<PathBuf> {
@@ -114,15 +132,10 @@ impl TypstSession {
         })
     }
 
-    pub fn compile_page(
-        &self,
-        entry: &Path,
-        output: &Path,
-        library: &LazyHash<Library>,
-    ) -> Result<CompiledPage> {
+    pub fn compile_page(&self, entry: &Path, library: &LazyHash<Library>) -> Result<CompiledPage> {
         let world = self.world(entry, library)?;
-        let warned = compile_html((&world as &dyn World).track(), output);
-        let document = warned
+        let warned = compile_html((&world as &dyn World).track());
+        let page = warned
             .output
             .map_err(|diagnostics| diagnostic_error(&world, "compilation failed", &diagnostics))?;
         let warnings = warned
@@ -130,7 +143,11 @@ impl TypstSession {
             .iter()
             .map(|warning| diag::format_warning(&world, warning))
             .collect();
-        Ok(CompiledPage { document, warnings })
+        Ok(CompiledPage {
+            document: page.document,
+            warnings,
+            revision: page.revision,
+        })
     }
 
     fn world<'a>(
@@ -221,6 +238,51 @@ impl ProjectFiles {
 
 #[comemo::track]
 impl ProjectFiles {
+    pub(crate) fn list(&self, directory: &Path, required: bool) -> Result<Vec<PathBuf>, String> {
+        self.track_path(directory);
+        match std::fs::symlink_metadata(directory) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(format!("{} must not be a symlink", directory.display()));
+            }
+            Ok(metadata) if !metadata.is_dir() => {
+                return Err(format!("{} is not a directory", directory.display()));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound && !required => {
+                return Ok(Vec::new());
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Err(format!("{} directory not found", directory.display()));
+            }
+            Err(error) => {
+                return Err(format!(
+                    "failed to inspect {}: {error}",
+                    directory.display()
+                ));
+            }
+        }
+
+        let mut files = Vec::new();
+        for entry in WalkDir::new(directory) {
+            let entry = entry
+                .map_err(|error| format!("failed to traverse {}: {error}", directory.display()))?;
+            if entry.file_type().is_symlink() {
+                return Err(format!(
+                    "symlink {} is not allowed in {}",
+                    entry.path().display(),
+                    directory.display()
+                ));
+            }
+            if entry.file_type().is_dir() {
+                self.track_path(entry.path());
+            } else if entry.file_type().is_file() {
+                files.push(entry.into_path());
+            }
+        }
+        files.sort();
+        Ok(files)
+    }
+
     pub(crate) fn canonicalize(&self, path: &Path) -> Result<PathBuf, String> {
         self.track_path(path);
         std::fs::canonicalize(path)
@@ -244,14 +306,28 @@ impl ProjectFiles {
 }
 
 #[comemo::memoize]
-fn compile_html(
-    world: Tracked<dyn World + '_>,
-    _output: &Path,
-) -> Warned<SourceResult<typst_html::HtmlDocument>> {
-    // Keep this inside the memoized body so cache hits remain quiet.
-    #[cfg(not(test))]
-    diag::emit_built_page(&_output.to_string_lossy());
-    typst::compile::<typst_html::HtmlDocument>(&*world)
+fn list_typst_files(
+    project_files: Tracked<ProjectFiles>,
+    directory: &Path,
+    required: bool,
+) -> Result<Vec<PathBuf>, String> {
+    Ok(project_files
+        .list(directory, required)?
+        .into_iter()
+        .filter(|path| path.extension().is_some_and(|extension| extension == "typ"))
+        .collect())
+}
+
+#[comemo::memoize]
+fn compile_html(world: Tracked<dyn World + '_>) -> Warned<SourceResult<MemoizedPage>> {
+    let warned = typst::compile::<typst_html::HtmlDocument>(&*world);
+    Warned {
+        output: warned.output.map(|document| MemoizedPage {
+            document,
+            revision: Arc::new(()),
+        }),
+        warnings: warned.warnings,
+    }
 }
 
 fn diagnostic_error(
@@ -338,6 +414,33 @@ mod tests {
     }
 
     #[test]
+    fn tracked_lists_are_reused_and_invalidated_by_directory_changes() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        std::fs::create_dir_all(root.join("src/blog")).unwrap();
+        std::fs::write(root.join("aster.toml"), "").unwrap();
+        std::fs::write(root.join("src/index.typ"), "").unwrap();
+
+        let project = ProjectRoot::new(root.to_owned()).unwrap();
+        let mut session = TypstSession::new(project);
+        let first = session.source_files().unwrap();
+        assert!(!comemo::testing::last_was_hit());
+        assert_eq!(first.len(), 1);
+
+        session.reset();
+        let repeated = session.source_files().unwrap();
+        assert!(comemo::testing::last_was_hit());
+        assert_eq!(repeated, first);
+        assert!(session.dependencies().contains(&root.join("src/blog")));
+
+        std::fs::write(root.join("src/blog/post.typ"), "").unwrap();
+        session.reset();
+        let changed = session.source_files().unwrap();
+        assert!(!comemo::testing::last_was_hit());
+        assert_eq!(changed.len(), 2);
+    }
+
+    #[test]
     fn page_compilation_is_reused_and_invalidated_by_dependency_changes() {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path();
@@ -353,15 +456,11 @@ mod tests {
         let mut session = TypstSession::new(project);
         let library = session.library(Dict::new());
 
-        session
-            .compile_page(&entry, Path::new("index.html"), &library)
-            .unwrap();
+        session.compile_page(&entry, &library).unwrap();
         assert!(!comemo::testing::last_was_hit());
 
         session.reset();
-        session
-            .compile_page(&entry, Path::new("index.html"), &library)
-            .unwrap();
+        session.compile_page(&entry, &library).unwrap();
         assert!(comemo::testing::last_was_hit());
         let dependencies = session.dependencies();
         assert!(dependencies.contains(&std::fs::canonicalize(&entry).unwrap()));
@@ -369,9 +468,7 @@ mod tests {
 
         std::fs::write(&dependency, format!("#let marker = \"second-{marker}\"")).unwrap();
         session.reset();
-        session
-            .compile_page(&entry, Path::new("index.html"), &library)
-            .unwrap();
+        session.compile_page(&entry, &library).unwrap();
         assert!(!comemo::testing::last_was_hit());
     }
 
@@ -407,28 +504,20 @@ mod tests {
 
         let project = ProjectRoot::new(root.to_owned()).unwrap();
         let mut session = TypstSession::new(project.clone());
-        let inputs = content::install(Dict::new(), content::load(&project).unwrap()).unwrap();
+        let inputs = content::install(Dict::new(), content::load(&session).unwrap()).unwrap();
         let library = session.library(inputs);
-        session
-            .compile_page(&dependent, &root.join("dependent.html"), &library)
-            .unwrap();
-        session
-            .compile_page(&independent, &root.join("independent.html"), &library)
-            .unwrap();
+        session.compile_page(&dependent, &library).unwrap();
+        session.compile_page(&independent, &library).unwrap();
 
         std::fs::write(&content_entry, format!("= Second {marker}")).unwrap();
         session.reset();
-        let inputs = content::install(Dict::new(), content::load(&project).unwrap()).unwrap();
+        let inputs = content::install(Dict::new(), content::load(&session).unwrap()).unwrap();
         let library = session.library(inputs);
 
-        session
-            .compile_page(&independent, &root.join("independent.html"), &library)
-            .unwrap();
+        session.compile_page(&independent, &library).unwrap();
         assert!(comemo::testing::last_was_hit());
 
-        let compiled = session
-            .compile_page(&dependent, &root.join("dependent.html"), &library)
-            .unwrap();
+        let compiled = session.compile_page(&dependent, &library).unwrap();
         assert!(!comemo::testing::last_was_hit());
         let html =
             typst_html::html(&compiled.document, &typst_html::HtmlOptions::default()).unwrap();

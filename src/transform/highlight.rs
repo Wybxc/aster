@@ -9,14 +9,13 @@ use syntect::highlighting::{Highlighter, Theme, ThemeSet};
 use syntect::parsing::{ParseState, Scope, ScopeStack, SyntaxSet};
 use typst::ecow::{EcoString, EcoVec, eco_format, eco_vec};
 use typst::syntax::{LinkedNode, Span, SyntaxNode, parse_code, parse_math};
-use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
+use typst_html::{HtmlElement, HtmlNode};
 
 use crate::compile::ProjectFiles;
 use crate::config::HighlightConfig;
 use crate::project::ProjectRoot;
 
-use super::{ElementProcessor, WalkControl};
-use crate::output::{AssetPath, PagePublication};
+use super::WalkControl;
 use crate::utils::HtmlElementExt;
 
 static SS: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
@@ -25,65 +24,41 @@ static THEMES: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
 /// Languages that Typst can parse with its own AST.
 const TYPST_LANGS: &[&str] = &["typ", "typst", "typc", "typm"];
 
-pub(super) struct HighlightProcessor;
-
-impl ElementProcessor for HighlightProcessor {
-    fn process(&self, doc: &mut HtmlDocument, _page: &mut PagePublication<'_>) -> Result<()> {
-        // Syntax-highlight all <code data-lang="..."> blocks.
-        // Theme-independent: we only derive CSS class names from scopes.
-        doc.root_mut().walk_mut(&mut |elem| {
-            if !elem.is_tag(typst_html::tag::code) {
-                return Ok(WalkControl::Continue);
-            }
-
-            let lang = match elem.get_attr("data-lang") {
-                Some(l) => l,
-                None => return Ok(WalkControl::Continue),
-            };
-
-            let raw = elem.collect_text();
-            if raw.is_empty() {
-                return Ok(WalkControl::SkipChildren);
-            }
-
-            let tokens = highlight_tokens(&raw, &lang);
-
-            let mut new_children: EcoVec<HtmlNode> = EcoVec::new();
-            for (class, txt) in &tokens {
-                let span = if class == "default" {
-                    // Plain tokens: no class, inherit parent styling.
-                    HtmlElement::new(typst_html::tag::span)
-                        .with_children(eco_vec![HtmlNode::Text(txt.clone(), Span::detached())])
-                } else {
-                    HtmlElement::new(typst_html::tag::span)
-                        .with_attr(typst_html::attr::class, class.as_str())
-                        .with_children(eco_vec![HtmlNode::Text(txt.clone(), Span::detached())])
-                };
-                new_children.push(HtmlNode::Element(span));
-            }
-            elem.children = new_children;
-            Ok(WalkControl::SkipChildren)
-        })?;
-
-        Ok(())
+pub(super) fn process_element(element: &mut HtmlElement) -> WalkControl {
+    if !element.is_tag(typst_html::tag::code) {
+        return WalkControl::Continue;
     }
+
+    let Some(lang) = element.get_attr("data-lang") else {
+        return WalkControl::Continue;
+    };
+    let raw = element.collect_text();
+    if raw.is_empty() {
+        return WalkControl::SkipChildren;
+    }
+
+    let tokens = highlight_tokens(&raw, &lang);
+    let mut children = EcoVec::new();
+    for (class, text) in &tokens {
+        let span = if class == "default" {
+            HtmlElement::new(typst_html::tag::span)
+                .with_children(eco_vec![HtmlNode::Text(text.clone(), Span::detached())])
+        } else {
+            HtmlElement::new(typst_html::tag::span)
+                .with_attr(typst_html::attr::class, class.as_str())
+                .with_children(eco_vec![HtmlNode::Text(text.clone(), Span::detached())])
+        };
+        children.push(HtmlNode::Element(span));
+    }
+    element.children = children;
+    WalkControl::SkipChildren
 }
 
-pub fn inject_stylesheet(
-    doc: &mut HtmlDocument,
-    page: &mut PagePublication<'_>,
-    asset: &AssetPath,
-) -> Result<()> {
-    let root = doc.root_mut();
-    let Some(head) = root.find_child_mut(typst_html::tag::head) else {
-        anyhow::bail!("highlight CSS configured but found no <head> element");
-    };
-    let url = page.reference(asset)?;
+pub(super) fn inject_stylesheet(head: &mut HtmlElement, url: &str) {
     let link = HtmlElement::new(typst_html::tag::link)
         .with_attr(typst_html::attr::rel, "stylesheet")
-        .with_attr(typst_html::attr::href, url.as_str());
+        .with_attr(typst_html::attr::href, url);
     head.children.push(HtmlNode::Element(link));
-    Ok(())
 }
 
 /// Derive a semantic CSS variable suffix from a slice of scopes.

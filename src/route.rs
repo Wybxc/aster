@@ -2,12 +2,15 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail, ensure};
+use typst::Library;
 use typst::ecow::EcoString;
-use typst::foundations::{Content, Value};
+use typst::foundations::{Content, Dict, Value};
 use typst::introspection::MetadataElem;
+use typst::utils::LazyHash;
 
+use crate::compile::TypstSession;
+use crate::content;
 use crate::output::OutputPath;
-use crate::project::ProjectRoot;
 
 /// Parameter assignments for one generated page.
 pub type ParamSet = BTreeMap<EcoString, EcoString>;
@@ -289,16 +292,14 @@ pub struct PlannedRoute {
 }
 
 impl RoutePlan {
-    /// Discover and parse every template exactly once. Dynamic route metadata is
-    /// obtained through the Typst probe adapter supplied by the build session.
+    /// Discover, parse, and probe every template exactly once.
     pub fn build(
-        project: &ProjectRoot,
-        mut probe: impl FnMut(&Path) -> Result<Vec<ParamSet>>,
+        session: &TypstSession,
+        base_inputs: &Dict,
+        base_library: &LazyHash<Library>,
     ) -> Result<Self> {
-        let templates = project
-            .source_files()?
-            .into_iter()
-            .filter(|path| path.extension().is_some_and(|extension| extension == "typ"));
+        let project = session.project();
+        let templates = session.source_files()?;
         let mut jobs = Vec::new();
         let mut warnings = Vec::new();
 
@@ -309,8 +310,12 @@ impl RoutePlan {
             let route = parse_template(relative)
                 .with_context(|| format!("invalid route template {}", relative.display()))?;
             if route.is_dynamic() {
-                let routes = probe(&template)
+                let evaluated = session
+                    .evaluate(&template, base_library)
                     .with_context(|| format!("failed to probe {}", relative.display()))?;
+                warnings.extend(evaluated.warnings);
+                let routes = extract(&evaluated.content)
+                    .with_context(|| format!("invalid route metadata in {}", relative.display()))?;
                 if routes.is_empty() {
                     warnings.push(format!(
                         "{} has a dynamic route pattern but no <route> metadata",
@@ -318,6 +323,7 @@ impl RoutePlan {
                     ));
                 }
                 for params in routes {
+                    content::with_route_params(base_inputs, &params)?;
                     jobs.push(PlannedRoute {
                         template: template.clone(),
                         output: route.generate(&params)?,
@@ -399,6 +405,7 @@ fn is_component_prefix(left: &[String], right: &[String]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::project::ProjectRoot;
     use typst::text::TextElem;
 
     fn fixture(files: &[&str]) -> (tempfile::TempDir, ProjectRoot) {
@@ -413,6 +420,21 @@ mod tests {
         }
         let project = ProjectRoot::new(root.to_owned()).unwrap();
         (temp, project)
+    }
+
+    fn build_plan(project: &crate::project::ProjectRoot) -> Result<RoutePlan> {
+        let session = TypstSession::new(project.clone());
+        let inputs = content::install(Dict::new(), content::empty()).unwrap();
+        let library = session.library(inputs.clone());
+        RoutePlan::build(&session, &inputs, &library)
+    }
+
+    fn write_routes(project: &crate::project::ProjectRoot, template: &str, routes: &str) {
+        std::fs::write(
+            project.src_dir().join(template),
+            format!("#metadata({routes}) <route>"),
+        )
+        .unwrap();
     }
 
     fn parse(path: &str) -> Result<RouteTemplate, RouteError> {
@@ -501,15 +523,10 @@ mod tests {
     #[test]
     fn route_plan_is_sorted_and_probes_dynamic_templates_once() {
         let (_temp, project) = fixture(&["z.typ", "blog/[slug].typ", "a.typ"]);
-        let mut probes = 0;
-        let plan = RoutePlan::build(&project, |_| {
-            probes += 1;
-            Ok(vec![ParamSet::from([("slug".into(), "post".into())])])
-        })
-        .unwrap();
+        write_routes(&project, "blog/[slug].typ", "((slug: \"post\"),)");
+        let plan = build_plan(&project).unwrap();
         let (jobs, warnings) = plan.into_parts();
 
-        assert_eq!(probes, 1);
         assert!(warnings.is_empty());
         assert_eq!(
             jobs.iter()
@@ -526,10 +543,8 @@ mod tests {
     #[test]
     fn route_plan_rejects_static_dynamic_collision() {
         let (_temp, project) = fixture(&["post.typ", "[slug].typ"]);
-        let result = RoutePlan::build(&project, |_| {
-            Ok(vec![ParamSet::from([("slug".into(), "post".into())])])
-        });
-        assert!(result.is_err());
+        write_routes(&project, "[slug].typ", "((slug: \"post\"),)");
+        assert!(build_plan(&project).is_err());
     }
 
     #[test]
@@ -555,30 +570,29 @@ mod tests {
     #[test]
     fn route_plan_rejects_portable_and_ancestor_collisions() {
         let (_temp, project) = fixture(&["[slug].typ"]);
-        let case_collision = RoutePlan::build(&project, |_| {
-            Ok(vec![
-                ParamSet::from([("slug".into(), "Case".into())]),
-                ParamSet::from([("slug".into(), "case".into())]),
-            ])
-        });
-        assert!(case_collision.is_err());
+        write_routes(
+            &project,
+            "[slug].typ",
+            "((slug: \"Case\"), (slug: \"case\"))",
+        );
+        assert!(build_plan(&project).is_err());
 
         let (_temp, project) = fixture(&["foo.typ", "foo.html/bar.typ"]);
-        assert!(RoutePlan::build(&project, |_| Ok(Vec::new())).is_err());
+        assert!(build_plan(&project).is_err());
     }
 
     #[test]
     fn route_plan_rejects_nonportable_static_paths() {
         for template in ["CON.typ", "bad:name.typ", "trailing./page.typ"] {
             let (_temp, project) = fixture(&[template]);
-            assert!(RoutePlan::build(&project, |_| Ok(Vec::new())).is_err());
+            assert!(build_plan(&project).is_err());
         }
     }
 
     #[test]
     fn route_plan_reports_missing_dynamic_metadata() {
         let (_temp, project) = fixture(&["[slug].typ"]);
-        let plan = RoutePlan::build(&project, |_| Ok(Vec::new())).unwrap();
+        let plan = build_plan(&project).unwrap();
         let (jobs, warnings) = plan.into_parts();
         assert!(jobs.is_empty());
         assert_eq!(warnings.len(), 1);

@@ -12,21 +12,18 @@ use typst::syntax::{RootedPath, SyntaxNode, VirtualPath, VirtualRoot, parse_code
 use typst::{Library, LibraryExt};
 use typst_eval::CapturesVisitor;
 
-use crate::project::ProjectRoot;
+use crate::compile::TypstSession;
 
 pub const PROTOCOL_VERSION: i64 = 3;
 pub const INPUT_NAME: &str = "_aster";
 
 /// Build the `_aster` lazy entry manifest, including the empty state.
-pub fn load(project: &ProjectRoot) -> Result<Value> {
+pub fn load(session: &TypstSession) -> Result<Value> {
+    let project = session.project();
     let content_dir = project.content_dir();
     let mut collections: BTreeMap<EcoString, Vec<(EcoString, RootedPath)>> = BTreeMap::new();
 
-    for path in project
-        .content_files()?
-        .into_iter()
-        .filter(|path| path.extension().is_some_and(|extension| extension == "typ"))
-    {
+    for path in session.content_files()? {
         let content_relative = path
             .strip_prefix(&content_dir)
             .context("content path error")?;
@@ -247,9 +244,9 @@ mod tests {
         std::fs::create_dir_all(root.join("content/blog/nested")).unwrap();
         std::fs::write(root.join("aster.toml"), "").unwrap();
         std::fs::write(root.join("content/blog/nested/post.typ"), "= Post").unwrap();
-        let project = ProjectRoot::new(root.to_owned()).unwrap();
+        let session = TypstSession::new(crate::project::ProjectRoot::new(root.to_owned()).unwrap());
 
-        let Value::Dict(protocol) = load(&project).unwrap() else {
+        let Value::Dict(protocol) = load(&session).unwrap() else {
             panic!("protocol must be a dictionary");
         };
         let Value::Dict(collections) = protocol.get("collections").unwrap() else {

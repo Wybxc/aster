@@ -53,8 +53,7 @@ fn styled_warning(message: &str) {
     let _ = writeln!(writer, ": {message}");
 }
 
-#[cfg(not(test))]
-pub fn emit_built_page(path: &str) {
+pub fn emit_built_page(path: &Path) {
     let mut writer = writer();
     let _ = writer.set_color(
         ColorSpec::new()
@@ -63,7 +62,7 @@ pub fn emit_built_page(path: &str) {
     );
     let _ = write!(writer, "build");
     let _ = writer.reset();
-    let _ = writeln!(writer, "  {path}");
+    let _ = writeln!(writer, "  {}", path.display());
 }
 
 pub fn emit_warning(message: &str) {
