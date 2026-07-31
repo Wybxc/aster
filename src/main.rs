@@ -2,6 +2,7 @@ mod compile;
 mod config;
 mod content;
 mod diag;
+mod init;
 mod output;
 mod pipeline;
 mod project;
@@ -22,6 +23,12 @@ struct Cli {
 
 #[derive(clap::Subcommand)]
 enum Commands {
+    /// Create a new Aster project
+    Init {
+        /// Directory to initialize. Defaults to the current directory.
+        #[arg(default_value = ".")]
+        path: std::path::PathBuf,
+    },
     /// Build the project
     Build {
         /// Project root directory (containing aster.toml).
@@ -41,6 +48,7 @@ enum Commands {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
+        Commands::Init { path } => init::run(path)?,
         Commands::Build { project_dir } => build(project_dir)?,
         Commands::Watch { project_dir } => watch::run(resolve_project(project_dir)?)?,
     }

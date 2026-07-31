@@ -1,0 +1,24 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+  line-height: 1.6;
+}
+
+body {
+  margin: 0 auto;
+  max-width: 48rem;
+  padding: 1.5rem;
+}
+
+header,
+footer {
+  padding-block: 1rem;
+}
+
+main {
+  min-height: 70vh;
+}
+
+a {
+  color: inherit;
+}

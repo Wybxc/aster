@@ -159,7 +159,7 @@ mod tests {
         std::fs::create_dir_all(root.join("lib/aster")).unwrap();
         std::fs::write(
             root.join("lib/aster/content.typ"),
-            include_str!("../lib/aster/content.typ"),
+            include_str!("../templates/default/lib/aster/content.typ"),
         )
         .unwrap();
     }

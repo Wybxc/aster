@@ -105,3 +105,15 @@ pub fn emit_rebuilding() {
     let _ = writer.reset();
     let _ = writeln!(writer, "  change detected");
 }
+
+pub fn emit_initialized(project: &Path) {
+    let mut writer = writer();
+    let _ = writer.set_color(
+        ColorSpec::new()
+            .set_fg(Some(termcolor::Color::Green))
+            .set_bold(true),
+    );
+    let _ = write!(writer, "init");
+    let _ = writer.reset();
+    let _ = writeln!(writer, "  {}", project.display());
+}

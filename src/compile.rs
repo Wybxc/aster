@@ -386,7 +386,7 @@ mod tests {
         std::fs::write(root.join("aster.toml"), "").unwrap();
         std::fs::write(
             root.join("lib/aster/content.typ"),
-            include_str!("../lib/aster/content.typ"),
+            include_str!("../templates/default/lib/aster/content.typ"),
         )
         .unwrap();
         let content_entry = root.join("content/blog/post.typ");
