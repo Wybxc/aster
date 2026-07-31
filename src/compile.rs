@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use anyhow::{Context, Result};
 use comemo::{Track, Tracked};
@@ -46,13 +46,6 @@ pub struct EvaluatedContent {
 pub struct CompiledPage {
     pub document: typst_html::HtmlDocument,
     pub warnings: Vec<String>,
-    pub(crate) revision: Arc<()>,
-}
-
-#[derive(Clone)]
-struct MemoizedPage {
-    document: typst_html::HtmlDocument,
-    revision: Arc<()>,
 }
 
 impl TypstSession {
@@ -135,7 +128,7 @@ impl TypstSession {
     pub fn compile_page(&self, entry: &Path, library: &LazyHash<Library>) -> Result<CompiledPage> {
         let world = self.world(entry, library)?;
         let warned = compile_html((&world as &dyn World).track());
-        let page = warned
+        let document = warned
             .output
             .map_err(|diagnostics| diagnostic_error(&world, "compilation failed", &diagnostics))?;
         let warnings = warned
@@ -143,11 +136,7 @@ impl TypstSession {
             .iter()
             .map(|warning| diag::format_warning(&world, warning))
             .collect();
-        Ok(CompiledPage {
-            document: page.document,
-            warnings,
-            revision: page.revision,
-        })
+        Ok(CompiledPage { document, warnings })
     }
 
     fn world<'a>(
@@ -319,15 +308,10 @@ fn list_typst_files(
 }
 
 #[comemo::memoize]
-fn compile_html(world: Tracked<dyn World + '_>) -> Warned<SourceResult<MemoizedPage>> {
-    let warned = typst::compile::<typst_html::HtmlDocument>(&*world);
-    Warned {
-        output: warned.output.map(|document| MemoizedPage {
-            document,
-            revision: Arc::new(()),
-        }),
-        warnings: warned.warnings,
-    }
+fn compile_html(world: Tracked<dyn World + '_>) -> Warned<SourceResult<typst_html::HtmlDocument>> {
+    #[cfg(not(test))]
+    diag::emit_built_page(Path::new(world.main().vpath().get_without_slash()));
+    typst::compile::<typst_html::HtmlDocument>(&*world)
 }
 
 fn diagnostic_error(

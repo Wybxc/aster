@@ -34,7 +34,7 @@ A **Typst build session** is bound to one Aster project. It owns shared fonts, p
 
 The session is reused across builds. The first build compiles directly. Before each later build, the build driver marks loaded files stale; subsequent reads update Typst sources in place so comemo can validate and reuse unchanged compilation and transformation results. After the build attempt, the driver ages the global comemo cache. Page compilation is memoized through a tracked Typst world.
 
-Callers do not construct or track Typst worlds. Source and content listings are memoized through the session's tracked project-file surface, so directory membership changes invalidate discovery. CSS bundling uses the same surface: path resolution and every entry or transitive import read become comemo constraints. The memoized compiler and transforms do not emit terminal output.
+Callers do not construct or track Typst worlds. Source and content listings are memoized through the session's tracked project-file surface, so directory membership changes invalidate discovery. CSS bundling uses the same surface: path resolution and every entry or transitive import read become comemo constraints. Page compilation emits its source template only from inside the memoized body, so cache hits remain quiet.
 
 ## Document transform
 
@@ -56,6 +56,6 @@ Rendering and document transformation accumulate a publication in memory. Once e
 
 ## Build outcome
 
-A **build outcome** records published pages, pages recompiled in this build, collected warnings, and elapsed time. Build modules decide whether an operation succeeds and preserve diagnostic context. Successful init and build commands return outcomes; the terminal adapter renders them and the CLI maps command results to process exit status in one place.
+A **build outcome** records published pages, collected warnings, and elapsed time. Build modules decide whether an operation succeeds and preserve diagnostic context. Successful init and build commands return outcomes; the terminal adapter renders them and the CLI maps command results to process exit status in one place.
 
 Aster warnings are non-fatal by explicit policy. Page compilation, route planning, transformation, and output publication failures are fatal. Failures before publication leave the prior `dist/` untouched; an output write failure may leave a partial output tree.
