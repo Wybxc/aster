@@ -11,10 +11,12 @@ use typst::ecow::{EcoString, EcoVec, eco_format, eco_vec};
 use typst::syntax::{LinkedNode, Span, SyntaxNode, VirtualPath, parse_code, parse_math};
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 
+use crate::build::BuildWarning;
+use crate::build::output::{AssetPath, OutputPublication, PagePublication};
 use crate::foundation::config::HighlightConfig;
 use crate::foundation::files::{FileAccessError, ProjectFiles};
 
-use super::WalkControl;
+use super::{Processor, WalkControl};
 use crate::build::transform::dom::HtmlElementExt;
 
 /// A cheaply cloneable theme-loading error at the memoization seam.
@@ -40,7 +42,54 @@ const TYPST_LANGS: &[&str] = &["typ", "typst", "typc", "typm"];
 
 type HighlightToken = (Option<EcoString>, EcoString);
 
-pub(super) fn process_element(element: &mut HtmlElement) -> WalkControl {
+pub(crate) struct HighlightProcessor {
+    stylesheet: Option<AssetPath>,
+}
+
+impl HighlightProcessor {
+    pub fn new(
+        config: &HighlightConfig,
+        project_files: Tracked<ProjectFiles>,
+        publication: &mut OutputPublication,
+    ) -> Result<(Self, Vec<BuildWarning>)> {
+        let mut warnings = Vec::new();
+        let stylesheet = match compute_highlight_css(config, project_files) {
+            Ok(Some(css)) => Some(publication.add_highlight_stylesheet(css.into_bytes())?),
+            Ok(None) => None,
+            Err(error) => {
+                warnings.push(BuildWarning::new(format!(
+                    "failed to resolve highlight CSS: {error:#}"
+                )));
+                None
+            }
+        };
+        Ok((Self { stylesheet }, warnings))
+    }
+}
+
+impl Processor for HighlightProcessor {
+    fn begin_document(
+        &mut self,
+        document: &mut HtmlDocument,
+        page: &mut PagePublication<'_>,
+    ) -> Result<()> {
+        if let Some(stylesheet) = &self.stylesheet {
+            let url = page.reference(stylesheet)?;
+            attach_stylesheet(document, url);
+        }
+        Ok(())
+    }
+
+    fn process_element(
+        &mut self,
+        element: &mut HtmlElement,
+        _page: &mut PagePublication<'_>,
+    ) -> Result<WalkControl> {
+        Ok(process_element(element))
+    }
+}
+
+fn process_element(element: &mut HtmlElement) -> WalkControl {
     if !element.is_tag(typst_html::tag::code) {
         return WalkControl::Continue;
     }
@@ -67,7 +116,7 @@ pub(super) fn process_element(element: &mut HtmlElement) -> WalkControl {
     WalkControl::SkipChildren
 }
 
-pub(super) fn attach_stylesheet(document: &mut HtmlDocument, url: EcoString) {
+fn attach_stylesheet(document: &mut HtmlDocument, url: EcoString) {
     let root = document.root_mut();
     debug_assert_eq!(root.tag, typst_html::tag::html);
 
@@ -256,7 +305,7 @@ fn load_theme(
 ///
 /// Returns `None` when no scopes need highlighting. Asset identity and naming
 /// are owned by the output publication module.
-pub fn compute_highlight_css(
+fn compute_highlight_css(
     config: &HighlightConfig,
     project_files: Tracked<ProjectFiles>,
 ) -> Result<Option<String>> {

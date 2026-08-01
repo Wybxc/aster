@@ -7,7 +7,7 @@ use typst::ecow::EcoString;
 use typst::syntax::{RootedPath, VirtualPath, VirtualRoot};
 use typst::utils::LazyHash;
 
-use crate::build::output::{AssetPath, OutputPublication};
+use crate::build::output::OutputPublication;
 use crate::build::transform;
 use crate::build::world::TypstSession;
 use crate::engine::content::{self, ContentEntry};
@@ -18,6 +18,7 @@ use crate::foundation::config::AsterConfig;
 mod route_plan;
 
 use self::route_plan::RoutePlan;
+use super::BuildWarning;
 
 /// The complete build outcome. No build stage decides terminal formatting or
 /// exit status; the CLI renders this value after the pipeline finishes.
@@ -25,7 +26,7 @@ pub struct BuildOutcome {
     /// Published page paths, in deterministic route order.
     pub outputs: Vec<PathBuf>,
     /// Non-fatal diagnostics collected during the build.
-    pub warnings: Vec<String>,
+    pub warnings: Vec<BuildWarning>,
     /// Total build and publication time.
     pub elapsed: Duration,
 }
@@ -49,7 +50,56 @@ impl BuildSession {
             .context("failed to parse aster.toml")?;
         self.session.reset();
 
-        let outcome = build_once(&self.session, config);
+        let session = &self.session;
+        let outcome = (|| {
+            let started = Instant::now();
+            let project = session.project().clone();
+            let mut warnings = Vec::new();
+            let mut publication = OutputPublication::new(&project);
+
+            let mut css = transform::CssProcessor::new(session.project_files());
+            let mut image = transform::ImageProcessor::new();
+            let (mut highlight, highlight_warnings) = transform::HighlightProcessor::new(
+                &config.highlight,
+                session.project_files(),
+                &mut publication,
+            )?;
+            warnings.extend(highlight_warnings);
+            let mut processors: [&mut dyn transform::Processor; 3] =
+                [&mut css, &mut image, &mut highlight];
+
+            let protocol = load_content(session).context("failed to load content collections")?;
+            let base_inputs = content::install(config.dict, protocol)?;
+            let base_library = session.library(base_inputs.clone());
+            let plan = RoutePlan::build(session, &base_inputs, &base_library)?;
+            let (jobs, route_warnings) = plan.into_parts();
+            warnings.extend(route_warnings);
+
+            for job in jobs {
+                let library = if job.params.is_empty() {
+                    base_library.clone()
+                } else {
+                    session.library(content::with_route_params(&base_inputs, &job.params)?)
+                };
+                render_page(
+                    session,
+                    &mut publication,
+                    &job.template,
+                    &job.output,
+                    &library,
+                    &mut processors,
+                    &mut warnings,
+                )
+                .with_context(|| format!("failed to build {}", job.output))?;
+            }
+
+            let published = publication.publish()?;
+            Ok(BuildOutcome {
+                outputs: published.pages,
+                warnings,
+                elapsed: started.elapsed(),
+            })
+        })();
         comemo::evict(10);
         outcome
     }
@@ -70,75 +120,21 @@ pub fn build(project: Project) -> Result<BuildOutcome> {
     BuildSession::new(project).build()
 }
 
-fn build_once(session: &TypstSession, config: AsterConfig) -> Result<BuildOutcome> {
-    let started = Instant::now();
-    let project = session.project().clone();
-    let mut warnings = Vec::new();
-    let mut publication = OutputPublication::new(&project);
-
-    let highlight_css =
-        match transform::compute_highlight_css(&config.highlight, session.project_files()) {
-            Ok(Some(css)) => Some(publication.add_highlight_stylesheet(css.into_bytes())?),
-            Ok(None) => None,
-            Err(error) => {
-                warnings.push(format!("failed to resolve highlight CSS: {error:#}"));
-                None
-            }
-        };
-
-    let protocol = load_content(session).context("failed to load content collections")?;
-    let base_inputs = content::install(config.dict, protocol)?;
-    let base_library = session.library(base_inputs.clone());
-    let plan = RoutePlan::build(session, &base_inputs, &base_library)?;
-    let (jobs, route_warnings) = plan.into_parts();
-    warnings.extend(route_warnings);
-
-    for job in jobs {
-        let library = if job.params.is_empty() {
-            base_library.clone()
-        } else {
-            session.library(content::with_route_params(&base_inputs, &job.params)?)
-        };
-        render_page(
-            session,
-            &mut publication,
-            &job.template,
-            &job.output,
-            &library,
-            highlight_css.as_ref(),
-            &mut warnings,
-        )
-        .with_context(|| format!("failed to build {}", job.output))?;
-    }
-
-    let published = publication.publish()?;
-    Ok(BuildOutcome {
-        outputs: published.pages,
-        warnings,
-        elapsed: started.elapsed(),
-    })
-}
-
 fn render_page(
     session: &TypstSession,
     publication: &mut OutputPublication,
     template: &VirtualPath,
     output: &RoutePath,
     library: &LazyHash<Library>,
-    highlight_css: Option<&AssetPath>,
-    warnings: &mut Vec<String>,
+    processors: &mut [&mut dyn transform::Processor],
+    warnings: &mut Vec<BuildWarning>,
 ) -> Result<()> {
     let compiled = session.compile_page(template, library)?;
     warnings.extend(compiled.warnings);
 
     let mut document = compiled.document;
     let mut page = publication.page(template, output);
-    transform::process_document(
-        &mut document,
-        &mut page,
-        session.project_files(),
-        highlight_css,
-    )?;
+    transform::process_document(&mut document, &mut page, processors)?;
     let html = typst_html::html(&document, &typst_html::HtmlOptions::default())
         .map_err(|error| anyhow::anyhow!("HTML encoding failed: {error:?}"))?;
     page.add_html(html)

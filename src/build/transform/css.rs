@@ -11,7 +11,7 @@ use typst::syntax::VirtualPath;
 use typst_html::HtmlElement;
 
 use crate::build::output::PagePublication;
-use crate::build::transform::dom::HtmlElementExt;
+use crate::build::transform::{Processor, WalkControl, dom::HtmlElementExt};
 use crate::foundation::files::{FileAccessError, ProjectFiles};
 
 /// A cheaply cloneable CSS transformation error at the memoization seam.
@@ -60,26 +60,40 @@ fn decompose(error: &lightningcss::error::Error<impl std::fmt::Display>) -> (Eco
     (error.kind.to_string().into(), location.into())
 }
 
-pub(super) fn process_element(
-    element: &mut HtmlElement,
-    page: &mut PagePublication<'_>,
-    project_files: Tracked<ProjectFiles>,
-) -> Result<()> {
-    if !element.is_tag(typst_html::tag::link) || !element.has_attr("rel", |value| value == "css") {
-        return Ok(());
+pub(crate) struct CssProcessor<'a> {
+    project_files: Tracked<'a, ProjectFiles>,
+}
+
+impl<'a> CssProcessor<'a> {
+    pub fn new(project_files: Tracked<'a, ProjectFiles>) -> Self {
+        Self { project_files }
     }
+}
 
-    let href = element
-        .get_attr("href")
-        .ok_or_else(|| anyhow::anyhow!("link element of type \"css\" is missing href attribute"))?;
-    let source = page.resolve_source(Path::new(href.as_str()))?;
-    let css = bundle_file(project_files, &source, page.project_root())
-        .map_err(|error| anyhow::anyhow!("{error:#}"))?;
-    let url = page.add_bundled_stylesheet(&source, css.into_bytes())?;
+impl Processor for CssProcessor<'_> {
+    fn process_element(
+        &mut self,
+        element: &mut HtmlElement,
+        page: &mut PagePublication<'_>,
+    ) -> Result<WalkControl> {
+        if !element.is_tag(typst_html::tag::link)
+            || !element.has_attr("rel", |value| value == "css")
+        {
+            return Ok(WalkControl::Continue);
+        }
 
-    element.update_attr("href", move |value| *value = url);
-    element.update_attr("rel", |value| *value = "stylesheet".into());
-    Ok(())
+        let href = element.get_attr("href").ok_or_else(|| {
+            anyhow::anyhow!("link element of type \"css\" is missing href attribute")
+        })?;
+        let source = page.resolve_source(Path::new(href.as_str()))?;
+        let css = bundle_file(self.project_files, &source, page.project_root())
+            .map_err(|error| anyhow::anyhow!("{error:#}"))?;
+        let url = page.add_bundled_stylesheet(&source, css.into_bytes())?;
+
+        element.update_attr("href", move |value| *value = url);
+        element.update_attr("rel", |value| *value = "stylesheet".into());
+        Ok(WalkControl::Continue)
+    }
 }
 
 /// Bundle a CSS entry point while confining and tracking every transitive import.

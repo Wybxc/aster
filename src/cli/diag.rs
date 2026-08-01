@@ -85,7 +85,7 @@ pub fn emit_initialized(project: &Path) {
 
 pub fn report_build(outcome: &BuildOutcome) {
     for warning in &outcome.warnings {
-        emit_warning(warning);
+        emit_warning(warning.as_str());
     }
     emit_summary(outcome.outputs.len(), outcome.elapsed);
 }

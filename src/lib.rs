@@ -7,5 +7,5 @@ pub mod build;
 pub mod engine;
 pub mod foundation;
 
-pub use build::{BuildOutcome, BuildSession, build};
+pub use build::{BuildOutcome, BuildSession, BuildWarning, build};
 pub use foundation::Project;

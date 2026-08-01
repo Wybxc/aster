@@ -6,6 +6,7 @@ use typst::foundations::Dict;
 use typst::syntax::VirtualPath;
 use typst::utils::LazyHash;
 
+use crate::build::BuildWarning;
 use crate::build::world::TypstSession;
 use crate::engine::content;
 use crate::engine::route::{self, ParamSet, RoutePath};
@@ -13,7 +14,7 @@ use crate::engine::route::{self, ParamSet, RoutePath};
 /// A deterministic, collision-free page plan.
 pub(super) struct RoutePlan {
     jobs: Vec<PlannedRoute>,
-    warnings: Vec<String>,
+    warnings: Vec<BuildWarning>,
 }
 
 pub(super) struct PlannedRoute {
@@ -47,10 +48,10 @@ impl RoutePlan {
                 let routes = route::extract(&evaluated.content)
                     .with_context(|| format!("invalid route metadata in {}", relative.display()))?;
                 if routes.is_empty() {
-                    warnings.push(format!(
+                    warnings.push(BuildWarning::new(format!(
                         "{} has a dynamic route pattern but no <route> metadata",
                         relative.display()
-                    ));
+                    )));
                 }
                 for params in routes {
                     content::with_route_params(base_inputs, &params)?;
@@ -94,7 +95,7 @@ impl RoutePlan {
         Ok(Self { jobs, warnings })
     }
 
-    pub fn into_parts(self) -> (Vec<PlannedRoute>, Vec<String>) {
+    pub fn into_parts(self) -> (Vec<PlannedRoute>, Vec<BuildWarning>) {
         (self.jobs, self.warnings)
     }
 }

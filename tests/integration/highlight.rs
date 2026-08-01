@@ -106,6 +106,43 @@ fn creates_head_before_body_for_highlight_stylesheet() {
     assert!(html[head..body].contains("href=\"_assets/highlight."));
 }
 
+#[test]
+fn invalid_theme_warns_once_for_the_whole_build() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::write(
+        root.join("aster.toml"),
+        concat!(
+            "[highlight.themes]\n",
+            "light = \"missing.tmTheme\"\n",
+            "dark = \"missing.tmTheme\"\n",
+        ),
+    )
+    .unwrap();
+    for page in ["index", "about"] {
+        std::fs::write(
+            root.join("src").join(format!("{page}.typ")),
+            "#html.html(html.body[Page])",
+        )
+        .unwrap();
+    }
+
+    let project = project(root);
+    let outcome = BuildSession::new(project.clone()).build().unwrap();
+
+    assert_eq!(
+        outcome
+            .warnings
+            .iter()
+            .filter(|warning| { warning.as_str().contains("failed to resolve highlight CSS") })
+            .count(),
+        1
+    );
+    assert!(project.output_dir().join("index.html").is_file());
+    assert!(project.output_dir().join("about.html").is_file());
+}
+
 #[cfg(unix)]
 #[test]
 fn allows_symlinked_theme_outside_project_root() {

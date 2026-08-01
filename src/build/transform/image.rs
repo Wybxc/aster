@@ -3,26 +3,37 @@ use data_url::{DataUrl, mime::Mime};
 use typst_html::HtmlElement;
 
 use crate::build::output::{ImageFormat, PagePublication};
-use crate::build::transform::dom::HtmlElementExt;
+use crate::build::transform::{Processor, WalkControl, dom::HtmlElementExt};
 
 /// Minimum decoded size (bytes) below which a data URI stays inline.
 const IMAGE_EXTRACT_THRESHOLD: usize = 1024;
 
-pub(super) fn process_element(
-    element: &mut HtmlElement,
-    page: &mut PagePublication<'_>,
-) -> Result<()> {
-    if !element.is_tag(typst_html::tag::img) {
-        return Ok(());
+pub(crate) struct ImageProcessor;
+
+impl ImageProcessor {
+    pub fn new() -> Self {
+        Self
     }
-    let Some(src) = element.get_attr("src") else {
-        return Ok(());
-    };
-    if let Some((content, format)) = try_extract(&src)? {
-        let url = page.add_image(format, content)?;
-        element.update_attr("src", |value| *value = url);
+}
+
+impl Processor for ImageProcessor {
+    fn process_element(
+        &mut self,
+        element: &mut HtmlElement,
+        page: &mut PagePublication<'_>,
+    ) -> Result<WalkControl> {
+        if !element.is_tag(typst_html::tag::img) {
+            return Ok(WalkControl::Continue);
+        }
+        let Some(src) = element.get_attr("src") else {
+            return Ok(WalkControl::Continue);
+        };
+        if let Some((content, format)) = try_extract(&src)? {
+            let url = page.add_image(format, content)?;
+            element.update_attr("src", |value| *value = url);
+        }
+        Ok(WalkControl::Continue)
     }
-    Ok(())
 }
 
 fn try_extract(src: &str) -> Result<Option<(Vec<u8>, ImageFormat)>> {

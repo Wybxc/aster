@@ -4,36 +4,58 @@ mod highlight;
 mod image;
 
 use anyhow::Result;
-use comemo::Tracked;
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 
-use crate::build::output::{AssetPath, PagePublication};
-use crate::foundation::files::ProjectFiles;
-pub use highlight::compute_highlight_css;
+use crate::build::output::PagePublication;
 
-/// Transform one compiled document and register every generated page asset.
-///
-/// Traversal order, element policy, and highlight stylesheet injection remain
-/// internal so callers provide only the document and publication context.
+pub(crate) use css::CssProcessor;
+pub(crate) use highlight::HighlightProcessor;
+pub(crate) use image::ImageProcessor;
+
+/// One participant in the shared document traversal.
+pub(crate) trait Processor {
+    /// Apply transformations that run once before element traversal.
+    fn begin_document(
+        &mut self,
+        _document: &mut HtmlDocument,
+        _page: &mut PagePublication<'_>,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    /// Process one element and optionally suppress traversal into its children.
+    fn process_element(
+        &mut self,
+        element: &mut HtmlElement,
+        page: &mut PagePublication<'_>,
+    ) -> Result<WalkControl>;
+}
+
+/// Run prepared processors over one document in caller-defined order.
 pub(crate) fn process_document(
     doc: &mut HtmlDocument,
     page: &mut PagePublication<'_>,
-    project_files: Tracked<ProjectFiles>,
-    highlight_css: Option<&AssetPath>,
+    processors: &mut [&mut dyn Processor],
 ) -> Result<()> {
-    if let Some(asset) = highlight_css {
-        let url = page.reference(asset)?;
-        highlight::attach_stylesheet(doc, url);
+    for processor in processors.iter_mut() {
+        processor.begin_document(doc, page)?;
     }
 
     walk_document(doc.root_mut(), &mut |element| {
-        css::process_element(element, page, project_files)?;
-        image::process_element(element, page)?;
-        Ok(highlight::process_element(element))
+        let mut control = WalkControl::Continue;
+        for processor in processors.iter_mut() {
+            if matches!(
+                processor.process_element(element, page)?,
+                WalkControl::SkipChildren
+            ) {
+                control = WalkControl::SkipChildren;
+            }
+        }
+        Ok(control)
     })
 }
 
-pub(super) enum WalkControl {
+pub(crate) enum WalkControl {
     Continue,
     SkipChildren,
 }

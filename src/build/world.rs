@@ -14,6 +14,7 @@ use typst::{Feature, Library, LibraryExt, World};
 use typst_kit::diagnostics::{self, DiagnosticFormat, DiagnosticWorld};
 use typst_kit::fonts::FontStore;
 
+use crate::build::BuildWarning;
 use crate::foundation::Project;
 use crate::foundation::files::{FileAccessError, ProjectFiles, list_typst_files};
 
@@ -30,12 +31,12 @@ pub struct TypstSession {
 
 pub struct EvaluatedContent {
     pub content: Content,
-    pub warnings: Vec<String>,
+    pub warnings: Vec<BuildWarning>,
 }
 
 pub struct CompiledPage {
     pub document: typst_html::HtmlDocument,
-    pub warnings: Vec<String>,
+    pub warnings: Vec<BuildWarning>,
 }
 
 impl TypstSession {
@@ -194,12 +195,9 @@ fn format_diagnostics(
     String::from_utf8_lossy(&buffer).trim_end().to_owned()
 }
 
-fn format_warning(world: &impl DiagnosticWorld, warning: &SourceDiagnostic) -> String {
+fn format_warning(world: &impl DiagnosticWorld, warning: &SourceDiagnostic) -> BuildWarning {
     let formatted = format_diagnostics(world, std::slice::from_ref(warning));
-    formatted
-        .strip_prefix("warning: ")
-        .unwrap_or(&formatted)
-        .to_owned()
+    BuildWarning::new(formatted.strip_prefix("warning: ").unwrap_or(&formatted))
 }
 
 struct CompileWorld<'a> {

@@ -3,9 +3,38 @@
 //! This layer combines the foundation and engine layers behind [`BuildSession`]
 //! and the one-shot [`build`] function.
 
+use std::fmt;
+
 mod output;
 mod pipeline;
 mod transform;
 mod world;
 
 pub use pipeline::{BuildOutcome, BuildSession, build};
+
+/// A non-fatal diagnostic produced while building a project.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct BuildWarning(String);
+
+impl BuildWarning {
+    pub(crate) fn new(message: impl Into<String>) -> Self {
+        Self(message.into())
+    }
+
+    /// Return the warning message without presentation-specific formatting.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for BuildWarning {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+impl AsRef<str> for BuildWarning {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
