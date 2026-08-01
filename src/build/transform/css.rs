@@ -9,9 +9,9 @@ use lightningcss::targets::Browsers;
 use typst::ecow::EcoString;
 use typst_html::HtmlElement;
 
-use crate::compile::{FileAccessError, ProjectFiles};
-use crate::output::PagePublication;
-use crate::utils::HtmlElementExt;
+use crate::build::output::PagePublication;
+use crate::build::transform::dom::HtmlElementExt;
+use crate::foundation::files::{FileAccessError, ProjectFiles};
 
 /// A cheaply cloneable CSS transformation error at the memoization seam.
 ///
@@ -168,8 +168,8 @@ impl SourceProvider for ConfinedFileProvider<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::compile::TypstSession;
-    use crate::project::ProjectRoot;
+    use crate::build::world::TypstSession;
+    use crate::foundation::project::ProjectRoot;
 
     fn session(root: &Path) -> TypstSession {
         std::fs::write(root.join("aster.toml"), "").unwrap();

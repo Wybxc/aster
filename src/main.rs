@@ -1,20 +1,16 @@
-mod compile;
-mod config;
-mod content;
-mod diag;
-mod init;
-mod output;
-mod pipeline;
-mod project;
-mod route;
-mod transform;
-mod utils;
-mod watch;
+mod build;
+mod cli;
+mod engine;
+mod foundation;
 
 use std::process::ExitCode;
 
 use anyhow::{Context, Result};
 use clap::Parser;
+
+use crate::build::pipeline;
+use crate::cli::{diag, init, watch};
+use crate::foundation::{config, project};
 
 #[derive(Parser)]
 #[command(name = "aster", version, about = "Aster build system")]

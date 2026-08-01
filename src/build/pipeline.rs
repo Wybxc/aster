@@ -5,10 +5,11 @@ use anyhow::{Context, Result};
 use typst::Library;
 use typst::utils::LazyHash;
 
-use crate::compile::TypstSession;
-use crate::config::AsterConfig;
-use crate::output::{AssetPath, OutputPath, OutputPublication};
-use crate::{content, route, transform};
+use crate::build::output::{AssetPath, OutputPath, OutputPublication};
+use crate::build::transform;
+use crate::build::world::TypstSession;
+use crate::engine::{content, route};
+use crate::foundation::config::AsterConfig;
 
 /// The complete build outcome. No build stage decides terminal formatting or
 /// exit status; the CLI renders this value after the pipeline finishes.
@@ -21,9 +22,9 @@ pub struct BuildOutcome {
 impl BuildOutcome {
     pub fn report(&self) {
         for warning in &self.warnings {
-            crate::diag::emit_warning(warning);
+            crate::cli::diag::emit_warning(warning);
         }
-        crate::diag::emit_summary(self.outputs.len(), self.elapsed);
+        crate::cli::diag::emit_summary(self.outputs.len(), self.elapsed);
     }
 }
 
@@ -33,7 +34,7 @@ pub struct BuildDriver {
 }
 
 impl BuildDriver {
-    pub fn new(project: crate::project::ProjectRoot) -> Self {
+    pub fn new(project: crate::foundation::project::ProjectRoot) -> Self {
         Self {
             session: TypstSession::new(project),
             started: false,
@@ -138,7 +139,7 @@ fn render_page(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::project::ProjectRoot;
+    use crate::foundation::project::ProjectRoot;
 
     fn generated_css(project: &ProjectRoot) -> (PathBuf, String) {
         let path = std::fs::read_dir(project.output_dir().join("_assets"))
@@ -157,7 +158,7 @@ mod tests {
         std::fs::create_dir_all(root.join("lib/aster")).unwrap();
         std::fs::write(
             root.join("lib/aster/content.typ"),
-            include_str!("../templates/default/lib/aster/content.typ"),
+            include_str!("../../templates/default/lib/aster/content.typ"),
         )
         .unwrap();
     }

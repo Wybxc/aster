@@ -2,8 +2,8 @@ use anyhow::{Context, Result};
 use data_url::{DataUrl, mime::Mime};
 use typst_html::HtmlElement;
 
-use crate::output::PagePublication;
-use crate::utils::HtmlElementExt;
+use crate::build::output::PagePublication;
+use crate::build::transform::dom::HtmlElementExt;
 
 /// Minimum decoded size (bytes) below which a data URI stays inline.
 const IMAGE_EXTRACT_THRESHOLD: usize = 1024;

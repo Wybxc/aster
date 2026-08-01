@@ -1,4 +1,5 @@
 mod css;
+pub(super) mod dom;
 mod highlight;
 mod image;
 
@@ -6,10 +7,10 @@ use anyhow::{Result, ensure};
 use comemo::Tracked;
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 
-use crate::compile::ProjectFiles;
-use crate::config::HighlightConfig;
-use crate::output::{AssetPath, PagePublication};
-use crate::project::ProjectRoot;
+use crate::build::output::{AssetPath, PagePublication};
+use crate::foundation::config::HighlightConfig;
+use crate::foundation::files::ProjectFiles;
+use crate::foundation::project::ProjectRoot;
 
 pub fn compute_highlight_css(
     config: &HighlightConfig,

@@ -1,9 +1,10 @@
 use anyhow::{Context, Result};
 use typst_kit::watcher::Watcher;
 
-use crate::pipeline::BuildDriver;
-use crate::project::ProjectRoot;
-use crate::{config::AsterConfig, diag};
+use crate::build::pipeline::BuildDriver;
+use crate::cli::diag;
+use crate::foundation::config::AsterConfig;
+use crate::foundation::project::ProjectRoot;
 
 pub fn run(project: ProjectRoot) -> Result<()> {
     let mut watcher = Watcher::new(None)

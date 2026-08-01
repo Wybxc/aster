@@ -8,9 +8,9 @@ use typst::foundations::{Content, Dict, Value};
 use typst::introspection::MetadataElem;
 use typst::utils::LazyHash;
 
-use crate::compile::TypstSession;
-use crate::content;
-use crate::output::OutputPath;
+use crate::build::output::OutputPath;
+use crate::build::world::TypstSession;
+use crate::engine::content;
 
 /// Parameter assignments for one generated page.
 pub type ParamSet = BTreeMap<EcoString, EcoString>;
@@ -405,7 +405,7 @@ fn is_component_prefix(left: &[String], right: &[String]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::project::ProjectRoot;
+    use crate::foundation::project::ProjectRoot;
     use typst::text::TextElem;
 
     fn fixture(files: &[&str]) -> (tempfile::TempDir, ProjectRoot) {
@@ -422,14 +422,18 @@ mod tests {
         (temp, project)
     }
 
-    fn build_plan(project: &crate::project::ProjectRoot) -> Result<RoutePlan> {
+    fn build_plan(project: &crate::foundation::project::ProjectRoot) -> Result<RoutePlan> {
         let session = TypstSession::new(project.clone());
         let inputs = content::install(Dict::new(), content::empty()).unwrap();
         let library = session.library(inputs.clone());
         RoutePlan::build(&session, &inputs, &library)
     }
 
-    fn write_routes(project: &crate::project::ProjectRoot, template: &str, routes: &str) {
+    fn write_routes(
+        project: &crate::foundation::project::ProjectRoot,
+        template: &str,
+        routes: &str,
+    ) {
         std::fs::write(
             project.src_dir().join(template),
             format!("#metadata({routes}) <route>"),

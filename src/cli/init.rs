@@ -14,7 +14,7 @@ pub struct InitOutcome {
 
 impl InitOutcome {
     pub fn report(&self) {
-        crate::diag::emit_initialized(&self.project);
+        crate::cli::diag::emit_initialized(&self.project);
     }
 }
 
@@ -94,9 +94,9 @@ fn set_project_name(destination: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::AsterConfig;
-    use crate::pipeline::BuildDriver;
-    use crate::project::ProjectRoot;
+    use crate::build::pipeline::BuildDriver;
+    use crate::foundation::config::AsterConfig;
+    use crate::foundation::project::ProjectRoot;
 
     #[test]
     fn initializes_a_buildable_project_with_a_real_library_directory() {

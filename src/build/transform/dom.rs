@@ -1,5 +1,4 @@
-//! Utility helpers — HTML element attributes, text extraction, content hashes,
-//! and colour formatting.
+//! DOM helpers — HTML element attribute access and colour formatting.
 
 use typst::ecow::EcoString;
 use typst_html::{HtmlElement, HtmlNode};
@@ -7,11 +6,6 @@ use typst_html::{HtmlElement, HtmlNode};
 /// Format a syntect [`Color`](syntect::highlighting::Color) as `#rrggbb`.
 pub fn color_to_hex(c: syntect::highlighting::Color) -> String {
     format!("#{:02x}{:02x}{:02x}", c.r, c.g, c.b)
-}
-
-/// Compute a compact 64-bit content fingerprint for generated asset URLs.
-pub fn content_hash(data: &[u8]) -> String {
-    format!("{:016x}", seahash::hash(data))
 }
 
 /// Extension methods on [`HtmlElement`] for common attribute and text access.

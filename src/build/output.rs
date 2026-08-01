@@ -3,8 +3,12 @@ use std::path::{Component, Path, PathBuf};
 
 use anyhow::{Context, Result, bail, ensure};
 
-use crate::project::ProjectRoot;
-use crate::utils::content_hash;
+use crate::foundation::project::ProjectRoot;
+
+/// Compute a compact 64-bit content fingerprint for generated asset URLs.
+fn content_hash(data: &[u8]) -> String {
+    format!("{:016x}", seahash::hash(data))
+}
 
 /// A validated path inside an Aster build output directory.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]

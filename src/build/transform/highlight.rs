@@ -11,12 +11,12 @@ use typst::ecow::{EcoString, EcoVec, eco_format, eco_vec};
 use typst::syntax::{LinkedNode, Span, SyntaxNode, parse_code, parse_math};
 use typst_html::{HtmlElement, HtmlNode};
 
-use crate::compile::{FileAccessError, ProjectFiles};
-use crate::config::HighlightConfig;
-use crate::project::ProjectRoot;
+use crate::foundation::config::HighlightConfig;
+use crate::foundation::files::{FileAccessError, ProjectFiles};
+use crate::foundation::project::ProjectRoot;
 
 use super::WalkControl;
-use crate::utils::HtmlElementExt;
+use crate::build::transform::dom::HtmlElementExt;
 
 /// A cheaply cloneable theme-loading error at the memoization seam.
 #[derive(Debug, Clone, thiserror::Error)]
@@ -257,7 +257,7 @@ fn compute_highlight_css_impl(
     let light_h = Highlighter::new(&light);
     let dark_h = Highlighter::new(&dark);
 
-    let default_dark = crate::utils::color_to_hex(
+    let default_dark = crate::build::transform::dom::color_to_hex(
         dark.settings
             .foreground
             .unwrap_or(syntect::highlighting::Color::BLACK),
@@ -284,9 +284,9 @@ fn compute_highlight_css_impl(
                 let dark_st = dark_h.style_for_stack(std::slice::from_ref(&scope));
                 vars.push((
                     name,
-                    crate::utils::color_to_hex(light_st.foreground),
+                    crate::build::transform::dom::color_to_hex(light_st.foreground),
                     light_st.font_style.bits(),
-                    crate::utils::color_to_hex(dark_st.foreground),
+                    crate::build::transform::dom::color_to_hex(dark_st.foreground),
                     dark_st.font_style.bits(),
                 ));
             }
@@ -404,9 +404,9 @@ mod tests {
         write_theme(&theme, "#112233");
 
         let project = ProjectRoot::new(root.to_owned()).unwrap();
-        let mut session = crate::compile::TypstSession::new(project.clone());
+        let mut session = crate::build::world::TypstSession::new(project.clone());
         let config = HighlightConfig {
-            themes: crate::config::Themes {
+            themes: crate::foundation::config::Themes {
                 light: "theme.tmTheme".into(),
                 dark: "theme.tmTheme".into(),
             },

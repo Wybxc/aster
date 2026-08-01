@@ -12,7 +12,7 @@ use typst::syntax::{RootedPath, SyntaxNode, VirtualPath, VirtualRoot, parse_code
 use typst::{Library, LibraryExt};
 use typst_eval::CapturesVisitor;
 
-use crate::compile::TypstSession;
+use crate::build::world::TypstSession;
 
 pub const PROTOCOL_VERSION: i64 = 3;
 pub const INPUT_NAME: &str = "_aster";
@@ -73,7 +73,7 @@ pub fn install(config: Dict, protocol: Value) -> Result<Dict> {
     Ok(inputs)
 }
 
-pub fn with_route_params(base: &Dict, params: &crate::route::ParamSet) -> Result<Dict> {
+pub fn with_route_params(base: &Dict, params: &crate::engine::route::ParamSet) -> Result<Dict> {
     let mut inputs = base.clone();
     for (name, value) in params {
         if name.as_str() == INPUT_NAME {
@@ -221,7 +221,7 @@ mod tests {
         assert!(
             with_route_params(
                 &base,
-                &crate::route::ParamSet::from([(INPUT_NAME.into(), "bad".into())]),
+                &crate::engine::route::ParamSet::from([(INPUT_NAME.into(), "bad".into())]),
             )
             .is_err()
         );
@@ -231,7 +231,7 @@ mod tests {
         assert!(
             with_route_params(
                 &configured,
-                &crate::route::ParamSet::from([("site".into(), "other".into())]),
+                &crate::engine::route::ParamSet::from([("site".into(), "other".into())]),
             )
             .is_err()
         );
@@ -244,7 +244,9 @@ mod tests {
         std::fs::create_dir_all(root.join("content/blog/nested")).unwrap();
         std::fs::write(root.join("aster.toml"), "").unwrap();
         std::fs::write(root.join("content/blog/nested/post.typ"), "= Post").unwrap();
-        let session = TypstSession::new(crate::project::ProjectRoot::new(root.to_owned()).unwrap());
+        let session = TypstSession::new(
+            crate::foundation::project::ProjectRoot::new(root.to_owned()).unwrap(),
+        );
 
         let Value::Dict(protocol) = load(&session).unwrap() else {
             panic!("protocol must be a dictionary");
