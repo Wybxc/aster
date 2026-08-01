@@ -64,6 +64,8 @@ fn custom_theme_changes_replace_the_highlight_stylesheet() {
         first_css.contains("#112233"),
         "unexpected highlight CSS: {first_css}"
     );
+    let html = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
+    assert_eq!(html.matches("<head>").count(), 1);
 
     build(&mut driver);
     assert_eq!(
@@ -78,6 +80,30 @@ fn custom_theme_changes_replace_the_highlight_stylesheet() {
     assert_ne!(changed_css, first_css);
     assert!(changed_css.contains("#445566"));
     assert!(!first_path.exists());
+}
+
+#[test]
+fn creates_head_before_body_for_highlight_stylesheet() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::write(root.join("aster.toml"), "").unwrap();
+    std::fs::write(
+        root.join("src/index.typ"),
+        concat!("#html.html({\n", "  html.body[Page]\n", "})\n"),
+    )
+    .unwrap();
+
+    let project = project(root);
+    let mut session = BuildSession::new(project.clone());
+    build(&mut session);
+
+    let html = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
+    let head = html.find("<head>").expect("generated head");
+    let body = html.find("<body>").expect("existing body");
+    assert!(head < body);
+    assert!(html[head..body].contains("rel=\"stylesheet\""));
+    assert!(html[head..body].contains("href=\"_assets/hl."));
 }
 
 #[cfg(unix)]

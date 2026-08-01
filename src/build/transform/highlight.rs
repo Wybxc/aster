@@ -9,7 +9,7 @@ use syntect::highlighting::{Highlighter, Theme, ThemeSet};
 use syntect::parsing::{ParseState, Scope, ScopeStack, SyntaxSet};
 use typst::ecow::{EcoString, EcoVec, eco_format, eco_vec};
 use typst::syntax::{LinkedNode, Span, SyntaxNode, parse_code, parse_math};
-use typst_html::{HtmlElement, HtmlNode};
+use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 
 use crate::foundation::Project;
 use crate::foundation::config::HighlightConfig;
@@ -37,6 +37,8 @@ static THEMES: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
 /// Languages that Typst can parse with its own AST.
 const TYPST_LANGS: &[&str] = &["typ", "typst", "typc", "typm"];
 
+type HighlightToken = (Option<EcoString>, EcoString);
+
 pub(super) fn process_element(element: &mut HtmlElement) -> WalkControl {
     if !element.is_tag(typst_html::tag::code) {
         return WalkControl::Continue;
@@ -52,51 +54,67 @@ pub(super) fn process_element(element: &mut HtmlElement) -> WalkControl {
 
     let tokens = highlight_tokens(&raw, &lang);
     let mut children = EcoVec::new();
-    for (class, text) in &tokens {
-        let span = if class == "default" {
-            HtmlElement::new(typst_html::tag::span)
-                .with_children(eco_vec![HtmlNode::Text(text.clone(), Span::detached())])
-        } else {
-            HtmlElement::new(typst_html::tag::span)
-                .with_attr(typst_html::attr::class, class.as_str())
-                .with_children(eco_vec![HtmlNode::Text(text.clone(), Span::detached())])
-        };
+    for (class, text) in tokens {
+        let mut span = HtmlElement::new(typst_html::tag::span)
+            .with_children(eco_vec![HtmlNode::Text(text, Span::detached())]);
+        if let Some(class) = class {
+            span = span.with_attr(typst_html::attr::class, class);
+        }
         children.push(HtmlNode::Element(span));
     }
     element.children = children;
     WalkControl::SkipChildren
 }
 
-pub(super) fn inject_stylesheet(head: &mut HtmlElement, url: &str) {
+pub(super) fn attach_stylesheet(document: &mut HtmlDocument, url: EcoString) {
+    let root = document.root_mut();
+    debug_assert_eq!(root.tag, typst_html::tag::html);
+
+    let head_index = root
+        .children
+        .iter()
+        .position(|node| matches!(node, HtmlNode::Element(element) if element.is_tag(typst_html::tag::head)))
+        .unwrap_or_else(|| {
+            let body_index = root
+                .children
+                .iter()
+                .position(|node| matches!(node, HtmlNode::Element(element) if element.is_tag(typst_html::tag::body)))
+                .unwrap_or(0);
+            root.children
+                .insert(body_index, HtmlElement::new(typst_html::tag::head).into());
+            body_index
+        });
+
     let link = HtmlElement::new(typst_html::tag::link)
         .with_attr(typst_html::attr::rel, "stylesheet")
         .with_attr(typst_html::attr::href, url);
+    let HtmlNode::Element(head) = &mut root.children.make_mut()[head_index] else {
+        unreachable!("head index must identify an element");
+    };
     head.children.push(HtmlNode::Element(link));
 }
 
 /// Derive a semantic CSS variable suffix from a slice of scopes.
-fn scope_css_name(scopes: &[Scope]) -> EcoString {
+fn scope_css_name(scopes: &[Scope]) -> Option<EcoString> {
     for scope in scopes.iter().rev() {
-        let s = eco_format!("{scope}");
-        let parts: Vec<&str> = s.split('.').collect();
-        if parts.len() >= 2 && parts[0] != "source" && parts[0] != "meta" {
-            return eco_format!("{}-{}", parts[0], parts[1]);
+        let scope = eco_format!("{scope}");
+        let mut parts = scope.split('.');
+        let (Some(kind), Some(name)) = (parts.next(), parts.next()) else {
+            continue;
+        };
+        if kind != "source" && kind != "meta" {
+            return Some(eco_format!("{kind}-{name}"));
         }
     }
-    "default".into()
+    None
 }
 
-/// Build the class string from a scope name.
-fn make_class(name: &str) -> EcoString {
-    if name == "default" {
-        "default".into()
-    } else {
-        eco_format!("hl-{name}")
-    }
+fn scope_class(scopes: &[Scope]) -> Option<EcoString> {
+    scope_css_name(scopes).map(|name| eco_format!("hl-{name}"))
 }
 
 #[comemo::memoize]
-fn highlight_tokens(code: &str, lang: &str) -> Vec<(EcoString, EcoString)> {
+fn highlight_tokens(code: &str, lang: &str) -> Vec<HighlightToken> {
     if TYPST_LANGS.contains(&lang) {
         do_typst_highlight(code, lang)
     } else {
@@ -109,7 +127,7 @@ fn highlight_tokens(code: &str, lang: &str) -> Vec<(EcoString, EcoString)> {
 /// This is **theme-independent** — it only derives CSS class names from
 /// the scope stack produced by the syntax parser.  All colour / font
 /// decisions live in the generated CSS.
-fn do_syntect_highlight(code: &str, lang: &str) -> Vec<(EcoString, EcoString)> {
+fn do_syntect_highlight(code: &str, lang: &str) -> Vec<HighlightToken> {
     let syntax = SS
         .find_syntax_by_token(lang)
         .or_else(|| SS.find_syntax_by_extension(lang))
@@ -130,11 +148,10 @@ fn do_syntect_highlight(code: &str, lang: &str) -> Vec<(EcoString, EcoString)> {
                 continue;
             }
 
-            let name = scope_css_name(scope_stack.as_slice());
-            out.push((make_class(&name), EcoString::from(text)));
+            out.push((scope_class(scope_stack.as_slice()), EcoString::from(text)));
         }
 
-        out.push(("default".into(), "\n".into()));
+        out.push((None, "\n".into()));
     }
 
     out
@@ -143,14 +160,14 @@ fn do_syntect_highlight(code: &str, lang: &str) -> Vec<(EcoString, EcoString)> {
 /// Highlight code using Typst's native AST (languages: typ, typst, typc, typm).
 ///
 /// Theme-independent — scope-based class names only, no colour resolution.
-fn do_typst_highlight(code: &str, lang: &str) -> Vec<(EcoString, EcoString)> {
+fn do_typst_highlight(code: &str, lang: &str) -> Vec<HighlightToken> {
     let root: SyntaxNode = match lang {
         "typc" => parse_code(code),
         "typm" => parse_math(code),
         _ => typst::syntax::parse(code),
     };
 
-    let mut native_tokens: Vec<(EcoString, u8, EcoString)> = Vec::new();
+    let mut native_tokens = Vec::new();
     let mut scopes: Vec<Scope> = Vec::new();
 
     walk_typst_node(
@@ -160,14 +177,14 @@ fn do_typst_highlight(code: &str, lang: &str) -> Vec<(EcoString, EcoString)> {
         &mut native_tokens,
     );
 
-    let mut out: Vec<(EcoString, EcoString)> = Vec::new();
-    for (name, _bits, text) in &native_tokens {
+    let mut out = Vec::new();
+    for (class, text) in native_tokens {
         for (i, segment) in text.split('\n').enumerate() {
             if i > 0 {
-                out.push((make_class("default"), "\n".into()));
+                out.push((None, "\n".into()));
             }
             if !segment.is_empty() {
-                out.push((make_class(name), EcoString::from(segment)));
+                out.push((class.clone(), EcoString::from(segment)));
             }
         }
     }
@@ -179,13 +196,12 @@ fn walk_typst_node<'a>(
     code: &str,
     node: &LinkedNode<'a>,
     scopes: &mut Vec<Scope>,
-    tokens: &mut Vec<(EcoString, u8, EcoString)>,
+    tokens: &mut Vec<HighlightToken>,
 ) {
     if node.children().len() == 0 {
         let text = &code[node.range()];
         if !text.is_empty() {
-            let name = scope_css_name(scopes.as_slice());
-            tokens.push((name, 0, EcoString::from(text)));
+            tokens.push((scope_class(scopes.as_slice()), EcoString::from(text)));
         }
         return;
     }
@@ -272,10 +288,9 @@ fn compute_highlight_css_impl(
                     continue;
                 };
 
-                let name = scope_css_name(std::slice::from_ref(&scope));
-                if name == "default" {
+                let Some(name) = scope_css_name(std::slice::from_ref(&scope)) else {
                     continue;
-                }
+                };
                 // Deduplicate by scope name.
                 if vars.iter().any(|(n, _, _, _, _)| *n == name) {
                     continue;
@@ -348,8 +363,22 @@ mod tests {
 
     /// Helper: return the concatenated text of all non-whitespace tokens
     /// so we can check source-code ordering.
-    fn token_texts(tokens: &[(EcoString, EcoString)]) -> Vec<String> {
+    fn token_texts(tokens: &[HighlightToken]) -> Vec<String> {
         tokens.iter().map(|(_, t)| t.as_str().to_string()).collect()
+    }
+
+    #[test]
+    fn scopes_without_semantic_style_have_no_class() {
+        assert_eq!(scope_css_name(&[]), None);
+
+        let source = Scope::new("source.rust").unwrap();
+        assert_eq!(scope_css_name(std::slice::from_ref(&source)), None);
+
+        let keyword = Scope::new("keyword.control").unwrap();
+        assert_eq!(
+            scope_css_name(std::slice::from_ref(&keyword)).as_deref(),
+            Some("keyword-control")
+        );
     }
 
     #[test]
