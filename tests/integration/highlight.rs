@@ -2,7 +2,7 @@ use std::path::Path;
 
 use aster::BuildSession;
 
-use crate::common::{build, generated_asset, project};
+use crate::common::{build, generated_asset_containing, project};
 
 fn write_theme(path: &Path, color: &str) {
     let theme = format!(
@@ -59,7 +59,7 @@ fn custom_theme_changes_replace_the_highlight_stylesheet() {
     let project = project(root);
     let mut driver = BuildSession::new(project.clone());
     build(&mut driver);
-    let (first_path, first_css) = generated_asset(&project, "hl.");
+    let (first_path, first_css) = generated_asset_containing(&project, "#112233");
     assert!(
         first_css.contains("#112233"),
         "unexpected highlight CSS: {first_css}"
@@ -69,13 +69,13 @@ fn custom_theme_changes_replace_the_highlight_stylesheet() {
 
     build(&mut driver);
     assert_eq!(
-        generated_asset(&project, "hl."),
+        generated_asset_containing(&project, "#112233"),
         (first_path.clone(), first_css.clone())
     );
 
     write_theme(&theme, "#445566");
     build(&mut driver);
-    let (changed_path, changed_css) = generated_asset(&project, "hl.");
+    let (changed_path, changed_css) = generated_asset_containing(&project, "#445566");
     assert_ne!(changed_path, first_path);
     assert_ne!(changed_css, first_css);
     assert!(changed_css.contains("#445566"));
@@ -103,7 +103,7 @@ fn creates_head_before_body_for_highlight_stylesheet() {
     let body = html.find("<body>").expect("existing body");
     assert!(head < body);
     assert!(html[head..body].contains("rel=\"stylesheet\""));
-    assert!(html[head..body].contains("href=\"_assets/hl."));
+    assert!(html[head..body].contains("href=\"_assets/highlight."));
 }
 
 #[cfg(unix)]
@@ -142,5 +142,9 @@ fn allows_symlinked_theme_outside_project_root() {
     let mut session = BuildSession::new(project.clone());
     build(&mut session);
 
-    assert!(generated_asset(&project, "hl.").1.contains("#123456"));
+    assert!(
+        generated_asset_containing(&project, "#123456")
+            .1
+            .contains("#123456")
+    );
 }

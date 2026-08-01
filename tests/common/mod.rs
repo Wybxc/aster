@@ -38,15 +38,13 @@ pub fn write_css_page(root: &Path) {
     .unwrap();
 }
 
-pub fn generated_asset(project: &Project, prefix: &str) -> (PathBuf, String) {
-    let path = std::fs::read_dir(project.output_dir().join("_assets"))
+pub fn generated_asset_containing(project: &Project, marker: &str) -> (PathBuf, String) {
+    std::fs::read_dir(project.output_dir().join("_assets"))
         .unwrap()
         .map(|entry| entry.unwrap().path())
-        .find(|path| {
-            path.file_name()
-                .is_some_and(|name| name.to_string_lossy().starts_with(prefix))
+        .find_map(|path| {
+            let content = std::fs::read_to_string(&path).ok()?;
+            content.contains(marker).then_some((path, content))
         })
-        .unwrap();
-    let content = std::fs::read_to_string(&path).unwrap();
-    (path, content)
+        .unwrap()
 }

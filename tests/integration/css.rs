@@ -1,6 +1,6 @@
 use aster::BuildSession;
 
-use crate::common::{build, generated_asset, project, write_css_page};
+use crate::common::{build, generated_asset_containing, project, write_css_page};
 
 #[test]
 fn bundles_and_tracks_entry_and_transitive_imports() {
@@ -16,7 +16,12 @@ fn bundles_and_tracks_entry_and_transitive_imports() {
     let project = project(root);
     let mut driver = BuildSession::new(project.clone());
     build(&mut driver);
-    let (first_path, first_css) = generated_asset(&project, "css.");
+    let (first_path, first_css) = generated_asset_containing(&project, ".page");
+    assert!(
+        first_path
+            .file_name()
+            .is_some_and(|name| name.to_string_lossy().starts_with("style."))
+    );
     assert!(first_css.contains(".theme"));
     assert!(first_css.contains(".page"));
     let dependencies = driver.dependencies();
@@ -25,20 +30,20 @@ fn bundles_and_tracks_entry_and_transitive_imports() {
 
     build(&mut driver);
     assert_eq!(
-        generated_asset(&project, "css."),
+        generated_asset_containing(&project, ".page"),
         (first_path.clone(), first_css.clone())
     );
 
     std::fs::write(root.join("src/unrelated.css"), ".unused { color: black; }").unwrap();
     build(&mut driver);
     assert_eq!(
-        generated_asset(&project, "css."),
+        generated_asset_containing(&project, ".page"),
         (first_path.clone(), first_css.clone())
     );
 
     std::fs::write(&dependency, ".theme { color: green; }").unwrap();
     build(&mut driver);
-    let (changed_path, changed_css) = generated_asset(&project, "css.");
+    let (changed_path, changed_css) = generated_asset_containing(&project, ".page");
     assert_ne!(changed_path, first_path);
     assert_ne!(changed_css, first_css);
     assert!(!first_path.exists());
@@ -66,7 +71,11 @@ fn rechecks_missing_imports() {
 
     std::fs::write(&missing, ".created { color: green; }").unwrap();
     build(&mut driver);
-    assert!(generated_asset(&project, "css.").1.contains(".created"));
+    assert!(
+        generated_asset_containing(&project, ".created")
+            .1
+            .contains(".created")
+    );
 }
 
 #[test]
@@ -82,7 +91,11 @@ fn allows_transitive_import_outside_source_directory() {
     let mut session = BuildSession::new(project.clone());
     build(&mut session);
 
-    assert!(generated_asset(&project, "css.").1.contains(".secret"));
+    assert!(
+        generated_asset_containing(&project, ".secret")
+            .1
+            .contains(".secret")
+    );
     assert!(session.dependencies().contains(&root.join("secret.css")));
 }
 
@@ -127,6 +140,10 @@ fn allows_symlinked_css_outside_project_root() {
     let mut session = BuildSession::new(project.clone());
     build(&mut session);
 
-    assert!(generated_asset(&project, "css.").1.contains(".shared"));
+    assert!(
+        generated_asset_containing(&project, ".shared")
+            .1
+            .contains(".shared")
+    );
     assert!(session.dependencies().contains(&linked));
 }

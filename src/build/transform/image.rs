@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use data_url::{DataUrl, mime::Mime};
 use typst_html::HtmlElement;
 
-use crate::build::output::PagePublication;
+use crate::build::output::{ImageFormat, PagePublication};
 use crate::build::transform::dom::HtmlElementExt;
 
 /// Minimum decoded size (bytes) below which a data URI stays inline.
@@ -18,14 +18,14 @@ pub(super) fn process_element(
     let Some(src) = element.get_attr("src") else {
         return Ok(());
     };
-    if let Some((content, extension)) = try_extract(&src)? {
-        let url = page.add_asset("img", extension, content)?;
+    if let Some((content, format)) = try_extract(&src)? {
+        let url = page.add_image(format, content)?;
         element.update_attr("src", |value| *value = url);
     }
     Ok(())
 }
 
-fn try_extract(src: &str) -> Result<Option<(Vec<u8>, &'static str)>> {
+fn try_extract(src: &str) -> Result<Option<(Vec<u8>, ImageFormat)>> {
     let Ok(data_url) = DataUrl::process(src) else {
         return Ok(None);
     };
@@ -35,24 +35,24 @@ fn try_extract(src: &str) -> Result<Option<(Vec<u8>, &'static str)>> {
     if decoded.len() < IMAGE_EXTRACT_THRESHOLD {
         return Ok(None);
     }
-    Ok(Some((decoded, media_type_to_ext(data_url.mime_type()))))
+    Ok(Some((decoded, media_type_to_format(data_url.mime_type()))))
 }
 
-fn media_type_to_ext(mediatype: &Mime) -> &'static str {
+fn media_type_to_format(mediatype: &Mime) -> ImageFormat {
     if mediatype.matches("image", "png") {
-        "png"
+        ImageFormat::Png
     } else if mediatype.matches("image", "jpeg") || mediatype.matches("image", "jpg") {
-        "jpg"
+        ImageFormat::Jpeg
     } else if mediatype.matches("image", "gif") {
-        "gif"
+        ImageFormat::Gif
     } else if mediatype.matches("image", "svg+xml") {
-        "svg"
+        ImageFormat::Svg
     } else if mediatype.matches("image", "webp") {
-        "webp"
+        ImageFormat::Webp
     } else if mediatype.matches("image", "avif") {
-        "avif"
+        ImageFormat::Avif
     } else {
-        "bin"
+        ImageFormat::Binary
     }
 }
 
@@ -67,10 +67,10 @@ mod tests {
             "AAAA".repeat(342)
         );
 
-        let (content, extension) = try_extract(&source).unwrap().unwrap();
+        let (content, format) = try_extract(&source).unwrap().unwrap();
 
         assert_eq!(content.len(), 1026);
-        assert_eq!(extension, "png");
+        assert_eq!(format, ImageFormat::Png);
     }
 
     #[test]
@@ -80,10 +80,10 @@ mod tests {
             "%78".repeat(IMAGE_EXTRACT_THRESHOLD)
         );
 
-        let (content, extension) = try_extract(&source).unwrap().unwrap();
+        let (content, format) = try_extract(&source).unwrap().unwrap();
 
         assert_eq!(content, vec![b'x'; IMAGE_EXTRACT_THRESHOLD]);
-        assert_eq!(extension, "svg");
+        assert_eq!(format, ImageFormat::Svg);
     }
 
     #[test]

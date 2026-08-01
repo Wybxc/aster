@@ -85,7 +85,7 @@ fn build_once(session: &TypstSession, config: AsterConfig) -> Result<BuildOutcom
 
     let highlight_css =
         match transform::compute_highlight_css(&config.highlight, session.project_files()) {
-            Ok(Some(css)) => Some(publication.add_asset("hl", "css", css.into_bytes())?),
+            Ok(Some(css)) => Some(publication.add_highlight_stylesheet(css.into_bytes())?),
             Ok(None) => None,
             Err(error) => {
                 warnings.push(format!("failed to resolve highlight CSS: {error:#}"));

@@ -5,7 +5,7 @@ use anyhow::{Context, Result, ensure};
 use typst::ecow::EcoString;
 use typst::syntax::VirtualPath;
 
-use crate::engine::route::RoutePath;
+use crate::engine::route::{self, RoutePath};
 use crate::foundation::Project;
 
 /// Compute a compact 64-bit content fingerprint for generated asset URLs.
@@ -16,6 +16,32 @@ fn content_hash(data: &[u8]) -> String {
 /// The stable output location of a generated asset.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct AssetPath(RoutePath);
+
+/// The file format used for an extracted image asset.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ImageFormat {
+    Png,
+    Jpeg,
+    Gif,
+    Svg,
+    Webp,
+    Avif,
+    Binary,
+}
+
+impl ImageFormat {
+    fn extension(self) -> &'static str {
+        match self {
+            Self::Png => "png",
+            Self::Jpeg => "jpg",
+            Self::Gif => "gif",
+            Self::Svg => "svg",
+            Self::Webp => "webp",
+            Self::Avif => "avif",
+            Self::Binary => "bin",
+        }
+    }
+}
 
 /// The publication-layer result returned to the build pipeline.
 ///
@@ -64,21 +90,19 @@ impl OutputPublication {
         }
     }
 
-    /// Register generated content under a deterministic, order-independent name.
-    pub fn add_asset(
-        &mut self,
-        kind: &str,
-        extension: &str,
-        content: Vec<u8>,
-    ) -> Result<AssetPath> {
-        ensure!(
-            valid_name_part(kind) && valid_name_part(extension),
-            "asset kind and extension must be ASCII letters, digits, or hyphens"
-        );
+    /// Register the generated highlight stylesheet.
+    pub fn add_highlight_stylesheet(&mut self, content: Vec<u8>) -> Result<AssetPath> {
+        self.add_asset("highlight", "css", content)
+    }
 
+    fn add_asset(&mut self, name: &str, extension: &str, content: Vec<u8>) -> Result<AssetPath> {
         let hash = content_hash(&content);
-        let path =
-            RoutePath::new(PathBuf::from("_assets").join(format!("{kind}.{hash}.{extension}")))?;
+        let filename = format!("{name}.{hash}.{extension}");
+        ensure!(
+            route::valid_segment(&filename),
+            "generated asset filename `{filename}` is not portable"
+        );
+        let path = RoutePath::new(PathBuf::from("_assets").join(filename))?;
         self.insert(path.clone(), OutputFile::Asset(content))?;
         Ok(AssetPath(path))
     }
@@ -164,14 +188,24 @@ impl PagePublication<'_> {
         &self.publication.project_root
     }
 
-    /// Register an asset and return its browser-facing URL from this page.
-    pub fn add_asset(
+    /// Register a bundled stylesheet under the entry file's name.
+    pub fn add_bundled_stylesheet(
         &mut self,
-        kind: &str,
-        extension: &str,
+        entry: &VirtualPath,
         content: Vec<u8>,
     ) -> Result<EcoString> {
-        let asset = self.publication.add_asset(kind, extension, content)?;
+        let name = entry
+            .file_stem()
+            .context("stylesheet entry has no file name")?;
+        let asset = self.publication.add_asset(name, "css", content)?;
+        self.reference(&asset)
+    }
+
+    /// Register an extracted image and return its browser-facing URL from this page.
+    pub fn add_image(&mut self, format: ImageFormat, content: Vec<u8>) -> Result<EcoString> {
+        let asset = self
+            .publication
+            .add_asset("img", format.extension(), content)?;
         self.reference(&asset)
     }
 
@@ -188,13 +222,6 @@ impl PagePublication<'_> {
         self.publication
             .insert(self.output.clone(), OutputFile::Page(html.into_bytes()))
     }
-}
-
-fn valid_name_part(part: &str) -> bool {
-    !part.is_empty()
-        && part
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
 }
 
 fn virtualize_route(path: &RoutePath) -> Result<VirtualPath> {
@@ -259,7 +286,7 @@ mod tests {
         let (_temp, project) = fixture();
         let mut publication = OutputPublication::new(&project);
         let asset = publication
-            .add_asset("css", "css", b"body{}".to_vec())
+            .add_highlight_stylesheet(b"body{}".to_vec())
             .unwrap();
         let output = RoutePath::new("blog/post.html").unwrap();
         let template = VirtualPath::new("/src/blog/[slug].typ").unwrap();
@@ -268,7 +295,7 @@ mod tests {
         assert!(
             page.reference(&asset)
                 .unwrap()
-                .starts_with("../_assets/css.")
+                .starts_with("../_assets/highlight.")
         );
     }
 
@@ -299,10 +326,10 @@ mod tests {
 
         let mut publication = OutputPublication::new(&project);
         let first = publication
-            .add_asset("css", "css", b"body{}".to_vec())
+            .add_highlight_stylesheet(b"body{}".to_vec())
             .unwrap();
         let second = publication
-            .add_asset("css", "css", b"body{}".to_vec())
+            .add_highlight_stylesheet(b"body{}".to_vec())
             .unwrap();
         assert_eq!(first, second);
 
@@ -325,7 +352,7 @@ mod tests {
         let mut repeated = OutputPublication::new(&project);
         assert_eq!(
             repeated
-                .add_asset("css", "css", b"body{}".to_vec())
+                .add_highlight_stylesheet(b"body{}".to_vec())
                 .unwrap(),
             first
         );
