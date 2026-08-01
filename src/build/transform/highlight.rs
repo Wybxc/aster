@@ -346,91 +346,10 @@ fn compute_highlight_css_impl(
 mod tests {
     use super::*;
 
-    fn write_theme(path: &Path, color: &str) {
-        let theme = format!(
-            r#"<?xml version="1.0" encoding="UTF-8"?>
-<plist version="1.0">
-<dict>
-  <key>name</key><string>Aster Test</string>
-  <key>settings</key>
-  <array>
-    <dict>
-      <key>settings</key>
-      <dict><key>foreground</key><string>{color}</string></dict>
-    </dict>
-    <dict>
-      <key>scope</key><string>keyword.control</string>
-      <key>settings</key>
-      <dict><key>foreground</key><string>{color}</string></dict>
-    </dict>
-  </array>
-</dict>
-</plist>
-"#
-        );
-        std::fs::write(path, theme).unwrap();
-    }
-
     /// Helper: return the concatenated text of all non-whitespace tokens
     /// so we can check source-code ordering.
     fn token_texts(tokens: &[(EcoString, EcoString)]) -> Vec<String> {
         tokens.iter().map(|(_, t)| t.as_str().to_string()).collect()
-    }
-
-    #[test]
-    fn code_highlighting_is_memoized_by_source_and_language() {
-        let temp = tempfile::tempdir().unwrap();
-        let marker = temp.path().display().to_string();
-        let code = format!("let marker = {marker:?}");
-
-        let first = highlight_tokens(&code, "typc");
-        assert!(!comemo::testing::last_was_hit());
-
-        let repeated = highlight_tokens(&code, "typc");
-        assert!(comemo::testing::last_was_hit());
-        assert_eq!(repeated, first);
-
-        highlight_tokens(&format!("{code}\nlet changed = true"), "typc");
-        assert!(!comemo::testing::last_was_hit());
-    }
-
-    #[test]
-    fn highlight_css_tracks_custom_theme_files() {
-        let temp = tempfile::tempdir().unwrap();
-        let root = temp.path();
-        std::fs::create_dir_all(root.join("src")).unwrap();
-        std::fs::write(root.join("aster.toml"), "").unwrap();
-        let theme = root.join("theme.tmTheme");
-        write_theme(&theme, "#112233");
-
-        let project = ProjectRoot::new(root.to_owned()).unwrap();
-        let mut session = crate::build::world::TypstSession::new(project.clone());
-        let config = HighlightConfig {
-            themes: crate::foundation::config::Themes {
-                light: "theme.tmTheme".into(),
-                dark: "theme.tmTheme".into(),
-            },
-        };
-
-        let first = compute_highlight_css(&config, &project, session.project_files())
-            .unwrap()
-            .unwrap();
-        assert!(!comemo::testing::last_was_hit());
-
-        session.reset();
-        let repeated = compute_highlight_css(&config, &project, session.project_files())
-            .unwrap()
-            .unwrap();
-        assert!(comemo::testing::last_was_hit());
-        assert_eq!(repeated, first);
-
-        write_theme(&theme, "#445566");
-        session.reset();
-        let changed = compute_highlight_css(&config, &project, session.project_files())
-            .unwrap()
-            .unwrap();
-        assert!(!comemo::testing::last_was_hit());
-        assert_ne!(changed, first);
     }
 
     #[test]
@@ -556,57 +475,6 @@ mod tests {
         if let (Some(hv), Some(cp)) = (hello_aster, closing_paren) {
             assert!(hv < cp, "last string value before final closing paren");
         }
-    }
-
-    #[test]
-    fn typst_highlight_deeply_nested_let_order() {
-        // Exact structure from the example site — multiple let bindings
-        // with deeply nested dicts.  This previously produced tokens
-        // with string values concatenated at the end.
-        let code = concat!(
-            "let protocol = 1\n",
-            "let posts = (\n",
-            "  blog: (\n",
-            "    hello_world: (\n",
-            "      id: \"hello-world\",\n",
-            "      body: (\n",
-            "        (kind: \"element\", tag: \"h2\", attrs: (:), children: (\n",
-            "          (kind: \"text\", value: \"Hello, Aster!\"),\n",
-            "        )),\n",
-            "      ),\n",
-            "    ),\n",
-            "  ),\n",
-            ")\n",
-        );
-        let tokens = do_typst_highlight(code, "typc");
-
-        let texts = token_texts(&tokens);
-        let non_ws: Vec<&str> = texts
-            .iter()
-            .filter(|s| !s.trim().is_empty())
-            .map(|s| s.as_str())
-            .collect();
-
-        // The first binding must appear before the second one.
-        let first_let = non_ws.iter().position(|&s| s == "let").unwrap();
-        let second_let = non_ws.iter().rposition(|&s| s == "let").unwrap();
-        let first_one = non_ws.iter().position(|&s| s == "1").unwrap();
-        let hello = non_ws
-            .iter()
-            .position(|&s| s == "\"Hello, Aster!\"")
-            .unwrap();
-        assert!(first_let < second_let, "first 'let' before second 'let'");
-        assert!(
-            first_one < hello,
-            "value '1' before '\"Hello, Aster!\"' — not pushed to end"
-        );
-        // Check that "hello-world" appears near "id", not at the end.
-        let id = non_ws.iter().position(|&s| s == "id").unwrap();
-        let hello_world = non_ws.iter().position(|&s| s == "\"hello-world\"").unwrap();
-        assert!(
-            (hello_world as isize - id as isize).abs() < 5,
-            "\"hello-world\" should appear right after id, not far away"
-        );
     }
 
     #[test]

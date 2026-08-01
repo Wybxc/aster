@@ -12,7 +12,7 @@ use crate::foundation::config::HighlightConfig;
 use crate::foundation::files::ProjectFiles;
 use crate::foundation::project::ProjectRoot;
 
-pub fn compute_highlight_css(
+pub(crate) fn compute_highlight_css(
     config: &HighlightConfig,
     project: &ProjectRoot,
     project_files: Tracked<ProjectFiles>,
@@ -24,7 +24,7 @@ pub fn compute_highlight_css(
 ///
 /// Traversal order, element policy, and highlight stylesheet injection remain
 /// internal so callers provide only the document and publication context.
-pub fn process_document(
+pub(crate) fn process_document(
     doc: &mut HtmlDocument,
     page: &mut PagePublication<'_>,
     project_files: Tracked<ProjectFiles>,

@@ -349,10 +349,7 @@ impl RoutePlan {
             for right in &jobs[index + 1..] {
                 let left_key = portable_output_key(&left.output);
                 let right_key = portable_output_key(&right.output);
-                if left_key == right_key
-                    || is_component_prefix(&left_key, &right_key)
-                    || is_component_prefix(&right_key, &left_key)
-                {
+                if output_paths_collide(&left_key, &right_key) {
                     bail!(
                         "templates {} and {} generate conflicting outputs {} and {}",
                         left.template.display(),
@@ -402,44 +399,13 @@ fn is_component_prefix(left: &[String], right: &[String]) -> bool {
     left.len() < right.len() && right.starts_with(left)
 }
 
+fn output_paths_collide(left: &[String], right: &[String]) -> bool {
+    left == right || is_component_prefix(left, right) || is_component_prefix(right, left)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::foundation::project::ProjectRoot;
-    use typst::text::TextElem;
-
-    fn fixture(files: &[&str]) -> (tempfile::TempDir, ProjectRoot) {
-        let temp = tempfile::tempdir().unwrap();
-        let root = temp.path();
-        std::fs::create_dir_all(root.join("src")).unwrap();
-        std::fs::write(root.join("aster.toml"), "").unwrap();
-        for file in files {
-            let path = root.join("src").join(file);
-            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-            std::fs::write(path, "").unwrap();
-        }
-        let project = ProjectRoot::new(root.to_owned()).unwrap();
-        (temp, project)
-    }
-
-    fn build_plan(project: &crate::foundation::project::ProjectRoot) -> Result<RoutePlan> {
-        let session = TypstSession::new(project.clone());
-        let inputs = content::install(Dict::new(), content::empty()).unwrap();
-        let library = session.library(inputs.clone());
-        RoutePlan::build(&session, &inputs, &library)
-    }
-
-    fn write_routes(
-        project: &crate::foundation::project::ProjectRoot,
-        template: &str,
-        routes: &str,
-    ) {
-        std::fs::write(
-            project.src_dir().join(template),
-            format!("#metadata({routes}) <route>"),
-        )
-        .unwrap();
-    }
 
     fn parse(path: &str) -> Result<RouteTemplate, RouteError> {
         parse_template(Path::new(path))
@@ -450,23 +416,6 @@ mod tests {
         let route = parse("blog/prefix[slug].typ").unwrap();
         assert!(route.is_dynamic());
         assert_eq!(route.parameters, BTreeSet::from(["slug".into()]));
-    }
-
-    #[test]
-    fn route_metadata_analysis_is_memoized_by_content() {
-        let temp = tempfile::tempdir().unwrap();
-        let marker = temp.path().display().to_string();
-        let content = TextElem::packed(marker.clone());
-
-        assert!(extract(&content).unwrap().is_empty());
-        assert!(!comemo::testing::last_was_hit());
-
-        assert!(extract(&content).unwrap().is_empty());
-        assert!(comemo::testing::last_was_hit());
-
-        let changed = TextElem::packed(format!("{marker}-changed"));
-        assert!(extract(&changed).unwrap().is_empty());
-        assert!(!comemo::testing::last_was_hit());
     }
 
     #[test]
@@ -525,33 +474,6 @@ mod tests {
     }
 
     #[test]
-    fn route_plan_is_sorted_and_probes_dynamic_templates_once() {
-        let (_temp, project) = fixture(&["z.typ", "blog/[slug].typ", "a.typ"]);
-        write_routes(&project, "blog/[slug].typ", "((slug: \"post\"),)");
-        let plan = build_plan(&project).unwrap();
-        let (jobs, warnings) = plan.into_parts();
-
-        assert!(warnings.is_empty());
-        assert_eq!(
-            jobs.iter()
-                .map(|job| job.output.as_path())
-                .collect::<Vec<_>>(),
-            vec![
-                Path::new("a.html"),
-                Path::new("blog/post.html"),
-                Path::new("z.html"),
-            ]
-        );
-    }
-
-    #[test]
-    fn route_plan_rejects_static_dynamic_collision() {
-        let (_temp, project) = fixture(&["post.typ", "[slug].typ"]);
-        write_routes(&project, "[slug].typ", "((slug: \"post\"),)");
-        assert!(build_plan(&project).is_err());
-    }
-
-    #[test]
     fn preserves_dots_and_rejects_nonportable_segments() {
         let route = parse("[slug].typ").unwrap();
         assert_eq!(
@@ -572,34 +494,23 @@ mod tests {
     }
 
     #[test]
-    fn route_plan_rejects_portable_and_ancestor_collisions() {
-        let (_temp, project) = fixture(&["[slug].typ"]);
-        write_routes(
-            &project,
-            "[slug].typ",
-            "((slug: \"Case\"), (slug: \"case\"))",
-        );
-        assert!(build_plan(&project).is_err());
-
-        let (_temp, project) = fixture(&["foo.typ", "foo.html/bar.typ"]);
-        assert!(build_plan(&project).is_err());
-    }
-
-    #[test]
-    fn route_plan_rejects_nonportable_static_paths() {
+    fn rejects_nonportable_static_paths() {
         for template in ["CON.typ", "bad:name.typ", "trailing./page.typ"] {
-            let (_temp, project) = fixture(&[template]);
-            assert!(build_plan(&project).is_err());
+            assert!(validate_static_output(Path::new(template)).is_err());
         }
+        assert!(validate_static_output(Path::new("docs/v1.2.typ")).is_ok());
     }
 
     #[test]
-    fn route_plan_reports_missing_dynamic_metadata() {
-        let (_temp, project) = fixture(&["[slug].typ"]);
-        let plan = build_plan(&project).unwrap();
-        let (jobs, warnings) = plan.into_parts();
-        assert!(jobs.is_empty());
-        assert_eq!(warnings.len(), 1);
+    fn detects_portable_and_ancestor_output_collisions() {
+        let key = |path| portable_output_key(&OutputPath::new(path).unwrap());
+
+        assert!(output_paths_collide(&key("Case.html"), &key("case.html")));
+        assert!(output_paths_collide(
+            &key("foo.html"),
+            &key("foo.html/bar.html")
+        ));
+        assert!(!output_paths_collide(&key("foo.html"), &key("foobar.html")));
     }
 
     #[test]

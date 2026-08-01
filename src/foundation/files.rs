@@ -296,3 +296,21 @@ pub(crate) fn list_typst_files(
         .filter(|path| path.extension().is_some_and(|extension| extension == "typ"))
         .collect())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn path_store_records_missing_paths_and_resets() {
+        let temp = tempfile::tempdir().unwrap();
+        let missing = temp.path().join("missing-theme.tmTheme");
+        let paths = PathStore::new();
+
+        assert!(paths.canonicalize(&missing).is_err());
+        assert_eq!(paths.paths(), vec![missing]);
+
+        paths.reset();
+        assert!(paths.paths().is_empty());
+    }
+}
