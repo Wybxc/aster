@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, bail};
 use typst::Library;
 use typst::foundations::Dict;
 use typst::syntax::VirtualPath;
@@ -61,7 +61,6 @@ impl RoutePlan {
                     });
                 }
             } else {
-                validate_static_output(relative)?;
                 jobs.push(PlannedRoute {
                     output: RoutePath::from_template(relative)?,
                     template,
@@ -86,8 +85,8 @@ impl RoutePlan {
                         "templates {} and {} generate conflicting outputs {} and {}",
                         left.template.get_with_slash(),
                         right.template.get_with_slash(),
-                        left.output.as_path().display(),
-                        right.output.as_path().display()
+                        left.output,
+                        right.output
                     );
                 }
             }
@@ -100,30 +99,12 @@ impl RoutePlan {
     }
 }
 
-fn validate_static_output(template: &Path) -> Result<()> {
-    let mut components = template.components().peekable();
-    while let Some(component) = components.next() {
-        let mut value = component.as_os_str().to_string_lossy().into_owned();
-        if components.peek().is_none() {
-            value = Path::new(&value)
-                .file_stem()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .into_owned();
-        }
-        ensure!(
-            route::valid_segment(&value),
-            "non-portable static route segment `{value}`"
-        );
-    }
-    Ok(())
-}
-
 fn portable_output_key(output: &RoutePath) -> Vec<String> {
     output
-        .as_path()
-        .components()
-        .map(|component| component.as_os_str().to_string_lossy().to_lowercase())
+        .as_virtual_path()
+        .get_without_slash()
+        .split('/')
+        .map(str::to_lowercase)
         .collect()
 }
 
@@ -154,8 +135,8 @@ mod tests {
     #[test]
     fn rejects_nonportable_static_paths() {
         for template in ["CON.typ", "bad:name.typ", "trailing./page.typ"] {
-            assert!(validate_static_output(Path::new(template)).is_err());
+            assert!(RoutePath::from_template(Path::new(template)).is_err());
         }
-        assert!(validate_static_output(Path::new("docs/v1.2.typ")).is_ok());
+        assert!(RoutePath::from_template(Path::new("docs/v1.2.typ")).is_ok());
     }
 }

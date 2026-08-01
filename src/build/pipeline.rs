@@ -115,7 +115,7 @@ fn build_once(session: &TypstSession, config: AsterConfig) -> Result<BuildOutcom
             highlight_css.as_ref(),
             &mut warnings,
         )
-        .with_context(|| format!("failed to build {}", job.output.as_path().display()))?;
+        .with_context(|| format!("failed to build {}", job.output))?;
     }
 
     let published = publication.publish()?;

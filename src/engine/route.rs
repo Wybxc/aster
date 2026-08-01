@@ -1,28 +1,35 @@
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Result, bail, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use typst::ecow::EcoString;
 use typst::foundations::{Content, Value};
 use typst::introspection::MetadataElem;
+use typst::syntax::VirtualPath;
 
 /// Parameter assignments for one generated page.
 pub type ParamSet = BTreeMap<EcoString, EcoString>;
 
-/// A validated path generated from an Aster route pattern.
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct RoutePath(PathBuf);
+/// A validated, portable path in Aster's virtual output tree.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct RoutePath(VirtualPath);
 
 impl RoutePath {
-    pub fn new(path: impl Into<PathBuf>) -> Result<Self> {
+    /// Validate a relative output path and place it in the virtual output root.
+    pub fn new(path: impl AsRef<Path>) -> Result<Self> {
         use std::path::Component;
 
-        let path = path.into();
+        let path = path.as_ref();
         ensure!(!path.as_os_str().is_empty(), "route path cannot be empty");
 
         for component in path.components() {
             match component {
-                Component::Normal(_) => {}
+                Component::Normal(value) => {
+                    let value = value.to_str().context("route path is not valid UTF-8")?;
+                    ensure!(valid_segment(value), "non-portable route segment `{value}`");
+                }
                 Component::CurDir => bail!("route path cannot contain `.`"),
                 Component::ParentDir => bail!("route path cannot contain `..`"),
                 Component::RootDir | Component::Prefix(_) => {
@@ -31,6 +38,9 @@ impl RoutePath {
             }
         }
 
+        let path = VirtualPath::virtualize(Path::new(""), path)
+            .context("route path is not a valid virtual path")?;
+        ensure!(!path.is_root(), "route path cannot be empty");
         Ok(Self(path))
     }
 
@@ -40,8 +50,27 @@ impl RoutePath {
         Self::new(output)
     }
 
-    pub fn as_path(&self) -> &Path {
+    /// Return the normalized path within the virtual output root.
+    pub fn as_virtual_path(&self) -> &VirtualPath {
         &self.0
+    }
+}
+
+impl Ord for RoutePath {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.get_with_slash().cmp(other.0.get_with_slash())
+    }
+}
+
+impl PartialOrd for RoutePath {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl fmt::Display for RoutePath {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.0.get_without_slash())
     }
 }
 
@@ -344,8 +373,12 @@ mod tests {
         let route = parse("blog/[slug].typ").unwrap();
         let params = ParamSet::from([("slug".into(), "hello".into())]);
         assert_eq!(
-            route.generate(&params).unwrap().as_path(),
-            Path::new("blog/hello.html")
+            route
+                .generate(&params)
+                .unwrap()
+                .as_virtual_path()
+                .get_with_slash(),
+            "/blog/hello.html"
         );
         assert!(route.generate(&ParamSet::new()).is_err());
         assert!(
@@ -362,8 +395,9 @@ mod tests {
             spread
                 .generate(&ParamSet::from([("path".into(), "a/b".into())]))
                 .unwrap()
-                .as_path(),
-            Path::new("docs/a/b.html")
+                .as_virtual_path()
+                .get_with_slash(),
+            "/docs/a/b.html"
         );
         let plain = parse("docs/[path].typ").unwrap();
         assert!(
@@ -380,8 +414,9 @@ mod tests {
             route
                 .generate(&ParamSet::from([("slug".into(), "v1.2".into())]))
                 .unwrap()
-                .as_path(),
-            Path::new("v1.2.html")
+                .as_virtual_path()
+                .get_with_slash(),
+            "/v1.2.html"
         );
         for invalid in ["CON", "bad?name", "fragment#name", "trail."] {
             assert!(
@@ -401,5 +436,26 @@ mod tests {
             ("other".into(), "value".into()),
         ]);
         assert!(route.generate(&params).is_err());
+    }
+
+    #[test]
+    fn route_path_establishes_portable_virtual_path_invariant() {
+        let path = RoutePath::new("docs/index.html").unwrap();
+        assert_eq!(path.as_virtual_path().get_with_slash(), "/docs/index.html");
+
+        for invalid in [
+            "",
+            ".",
+            "../index.html",
+            "docs/../index.html",
+            "/index.html",
+            "bad:name.html",
+            "CON.html",
+        ] {
+            assert!(
+                RoutePath::new(invalid).is_err(),
+                "{invalid} must be rejected"
+            );
+        }
     }
 }

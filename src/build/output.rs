@@ -5,7 +5,7 @@ use anyhow::{Context, Result, ensure};
 use typst::ecow::EcoString;
 use typst::syntax::VirtualPath;
 
-use crate::engine::route::{self, RoutePath};
+use crate::engine::route::RoutePath;
 use crate::foundation::Project;
 
 /// Compute a compact 64-bit content fingerprint for generated asset URLs.
@@ -98,10 +98,6 @@ impl OutputPublication {
     fn add_asset(&mut self, name: &str, extension: &str, content: Vec<u8>) -> Result<AssetPath> {
         let hash = content_hash(&content);
         let filename = format!("{name}.{hash}.{extension}");
-        ensure!(
-            route::valid_segment(&filename),
-            "generated asset filename `{filename}` is not portable"
-        );
         let path = RoutePath::new(PathBuf::from("_assets").join(filename))?;
         self.insert(path.clone(), OutputFile::Asset(content))?;
         Ok(AssetPath(path))
@@ -129,14 +125,16 @@ impl OutputPublication {
         std::fs::create_dir_all(&self.output_dir)
             .with_context(|| format!("failed to create {}", self.output_dir.display()))?;
         for (relative, file) in &self.files {
-            write_file(&self.output_dir.join(relative.as_path()), file.content())?;
+            let path = realize_output_path(&self.output_dir, relative)?;
+            write_file(&path, file.content())?;
         }
 
         let pages = self
             .files
             .into_iter()
-            .filter_map(|(path, file)| file.is_page().then(|| self.output_dir.join(path.as_path())))
-            .collect();
+            .filter_map(|(path, file)| file.is_page().then_some(path))
+            .map(|path| realize_output_path(&self.output_dir, &path))
+            .collect::<Result<Vec<_>>>()?;
         Ok(PublishedOutput { pages })
     }
 
@@ -145,7 +143,7 @@ impl OutputPublication {
             ensure!(
                 existing == &file,
                 "two generated files selected the same output path {}",
-                path.as_path().display()
+                path
             );
             return Ok(());
         }
@@ -211,10 +209,12 @@ impl PagePublication<'_> {
 
     /// Return a browser-facing URL from this page to an existing generated asset.
     pub fn reference(&self, asset: &AssetPath) -> Result<EcoString> {
-        let asset = virtualize_route(&asset.0)?;
-        let output = virtualize_route(self.output)?;
-        let page_dir = output.parent().context("output page has no parent")?;
-        Ok(asset.relative_from(&page_dir))
+        let page_dir = self
+            .output
+            .as_virtual_path()
+            .parent()
+            .context("output page has no parent")?;
+        Ok(asset.0.as_virtual_path().relative_from(&page_dir))
     }
 
     /// Add the final serialized page to this publication.
@@ -224,9 +224,10 @@ impl PagePublication<'_> {
     }
 }
 
-fn virtualize_route(path: &RoutePath) -> Result<VirtualPath> {
-    VirtualPath::virtualize(Path::new(""), path.as_path())
-        .context("generated output path is not a valid virtual path")
+fn realize_output_path(root: &Path, path: &RoutePath) -> Result<PathBuf> {
+    path.as_virtual_path()
+        .realize(root)
+        .with_context(|| format!("failed to realize generated output path {path}"))
 }
 
 fn write_file(path: &Path, content: &[u8]) -> Result<()> {
