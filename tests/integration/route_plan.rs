@@ -1,12 +1,8 @@
 use std::path::Path;
 
-use anyhow::Result;
-use aster::build::world::TypstSession;
-use aster::engine::{content, route};
-use aster::foundation::project::ProjectRoot;
-use typst::foundations::Dict;
+use aster::{BuildSession, Project};
 
-fn fixture(files: &[&str]) -> (tempfile::TempDir, ProjectRoot) {
+fn fixture(files: &[&str]) -> (tempfile::TempDir, Project) {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
     std::fs::create_dir_all(root.join("src")).unwrap();
@@ -14,23 +10,16 @@ fn fixture(files: &[&str]) -> (tempfile::TempDir, ProjectRoot) {
     for file in files {
         let path = root.join("src").join(file);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(path, "").unwrap();
+        std::fs::write(path, "#html.elem(\"p\")[Page]").unwrap();
     }
-    let project = ProjectRoot::new(root.to_owned()).unwrap();
+    let project = Project::open(root.to_owned()).unwrap();
     (temp, project)
 }
 
-fn build_plan(project: &ProjectRoot) -> Result<route::RoutePlan> {
-    let session = TypstSession::new(project.clone());
-    let inputs = content::install(Dict::new(), content::load(&session)?)?;
-    let library = session.library(inputs.clone());
-    route::RoutePlan::build(&session, &inputs, &library)
-}
-
-fn write_routes(project: &ProjectRoot, template: &str, routes: &str) {
+fn write_routes(project: &Project, template: &str, routes: &str) {
     std::fs::write(
         project.src_dir().join(template),
-        format!("#metadata({routes}) <route>"),
+        format!("#metadata({routes}) <route>\n#html.elem(\"p\")[Page]"),
     )
     .unwrap();
 }
@@ -39,14 +28,16 @@ fn write_routes(project: &ProjectRoot, template: &str, routes: &str) {
 fn route_plan_is_sorted_and_probes_dynamic_templates() {
     let (_temp, project) = fixture(&["z.typ", "blog/[slug].typ", "a.typ"]);
     write_routes(&project, "blog/[slug].typ", "((slug: \"post\"),)");
-    let plan = build_plan(&project).unwrap();
-    let (jobs, warnings) = plan.into_parts();
 
-    assert!(warnings.is_empty());
+    let outcome = BuildSession::new(project.clone()).build().unwrap();
+    let outputs = outcome
+        .outputs
+        .iter()
+        .map(|path| path.strip_prefix(project.output_dir()).unwrap())
+        .collect::<Vec<_>>();
+
     assert_eq!(
-        jobs.iter()
-            .map(|job| job.output.as_path())
-            .collect::<Vec<_>>(),
+        outputs,
         vec![
             Path::new("a.html"),
             Path::new("blog/post.html"),
@@ -59,14 +50,16 @@ fn route_plan_is_sorted_and_probes_dynamic_templates() {
 fn route_plan_rejects_static_dynamic_collision() {
     let (_temp, project) = fixture(&["post.typ", "[slug].typ"]);
     write_routes(&project, "[slug].typ", "((slug: \"post\"),)");
-    assert!(build_plan(&project).is_err());
+
+    assert!(BuildSession::new(project).build().is_err());
 }
 
 #[test]
 fn route_plan_reports_missing_dynamic_metadata() {
     let (_temp, project) = fixture(&["[slug].typ"]);
-    let plan = build_plan(&project).unwrap();
-    let (jobs, warnings) = plan.into_parts();
-    assert!(jobs.is_empty());
-    assert_eq!(warnings.len(), 1);
+
+    let outcome = BuildSession::new(project).build().unwrap();
+
+    assert!(outcome.outputs.is_empty());
+    assert_eq!(outcome.warnings.len(), 1);
 }

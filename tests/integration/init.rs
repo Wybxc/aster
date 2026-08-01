@@ -1,14 +1,27 @@
-use aster::build::pipeline::BuildDriver;
-use aster::cli::init;
-use aster::foundation::config::AsterConfig;
-use aster::foundation::project::ProjectRoot;
+use std::path::Path;
+use std::process::{Command, Output};
+
+use aster::Project;
+
+fn init(destination: &Path) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_aster"))
+        .arg("init")
+        .arg(destination)
+        .output()
+        .unwrap()
+}
 
 #[test]
 fn initializes_a_buildable_project_with_a_real_library_directory() {
     let temp = tempfile::tempdir().unwrap();
     let destination = temp.path().join("my-site");
 
-    init::run(destination.clone()).unwrap();
+    let output = init(&destination);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 
     assert!(destination.join("src/index.typ").is_file());
     assert!(destination.join("lib/aster/content.typ").is_file());
@@ -16,9 +29,8 @@ fn initializes_a_buildable_project_with_a_real_library_directory() {
     let config = std::fs::read_to_string(destination.join("aster.toml")).unwrap();
     assert!(config.contains("name = \"my-site\""));
 
-    let project = ProjectRoot::new(destination).unwrap();
-    let config = AsterConfig::load(&project.config_file()).unwrap();
-    let outcome = BuildDriver::new(project).build(config).unwrap();
+    let project = Project::open(destination).unwrap();
+    let outcome = aster::build(project).unwrap();
     assert_eq!(outcome.outputs.len(), 1);
 }
 
@@ -28,7 +40,12 @@ fn initializes_an_existing_empty_directory() {
     let destination = temp.path().join("empty");
     std::fs::create_dir(&destination).unwrap();
 
-    init::run(destination.clone()).unwrap();
+    let output = init(&destination);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 
     assert!(destination.join("aster.toml").is_file());
 }
@@ -40,9 +57,10 @@ fn refuses_to_overwrite_a_nonempty_directory() {
     std::fs::create_dir(&destination).unwrap();
     std::fs::write(destination.join("keep.txt"), "keep").unwrap();
 
-    let error = init::run(destination.clone()).unwrap_err();
+    let output = init(&destination);
 
-    assert!(error.to_string().contains("is not empty"));
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("is not empty"));
     assert_eq!(
         std::fs::read_to_string(destination.join("keep.txt")).unwrap(),
         "keep"

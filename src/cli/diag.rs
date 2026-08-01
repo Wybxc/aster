@@ -2,30 +2,8 @@ use std::io::Write;
 use std::path::Path;
 use std::time::Duration;
 
-use termcolor::{ColorChoice, ColorSpec, NoColor, StandardStream, WriteColor};
-use typst::diag::SourceDiagnostic;
-use typst_kit::diagnostics::{self, DiagnosticFormat, DiagnosticWorld};
-
-pub fn format_diags(world: &impl DiagnosticWorld, diags: &[SourceDiagnostic]) -> String {
-    let mut buffer = Vec::new();
-    {
-        let mut writer = NoColor::new(&mut buffer);
-        if diagnostics::emit(&mut writer, world, diags.iter(), DiagnosticFormat::Human).is_err() {
-            for diagnostic in diags {
-                let _ = writeln!(writer, "error: {diagnostic:?}");
-            }
-        }
-    }
-    String::from_utf8_lossy(&buffer).trim_end().to_owned()
-}
-
-pub fn format_warning(world: &impl DiagnosticWorld, warning: &SourceDiagnostic) -> String {
-    let formatted = format_diags(world, std::slice::from_ref(warning));
-    formatted
-        .strip_prefix("warning: ")
-        .unwrap_or(&formatted)
-        .to_owned()
-}
+use aster::BuildOutcome;
+use termcolor::{ColorChoice, ColorSpec, StandardStream, WriteColor};
 fn writer() -> StandardStream {
     StandardStream::stderr(ColorChoice::Auto)
 }
@@ -51,19 +29,6 @@ fn styled_warning(message: &str) {
     let _ = write!(writer, "warning");
     let _ = writer.reset();
     let _ = writeln!(writer, ": {message}");
-}
-
-#[cfg(not(test))]
-pub fn emit_built_page(path: &Path) {
-    let mut writer = writer();
-    let _ = writer.set_color(
-        ColorSpec::new()
-            .set_fg(Some(termcolor::Color::Green))
-            .set_bold(true),
-    );
-    let _ = write!(writer, "build");
-    let _ = writer.reset();
-    let _ = writeln!(writer, "  {}", path.display());
 }
 
 pub fn emit_warning(message: &str) {
@@ -116,4 +81,11 @@ pub fn emit_initialized(project: &Path) {
     let _ = write!(writer, "init");
     let _ = writer.reset();
     let _ = writeln!(writer, "  {}", project.display());
+}
+
+pub fn report_build(outcome: &BuildOutcome) {
+    for warning in &outcome.warnings {
+        emit_warning(warning);
+    }
+    emit_summary(outcome.outputs.len(), outcome.elapsed);
 }

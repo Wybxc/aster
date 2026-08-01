@@ -1,5 +1,4 @@
-use aster::build::pipeline::BuildDriver;
-use aster::foundation::config::AsterConfig;
+use aster::BuildSession;
 
 use crate::common::{build, install_content_adapter, project};
 
@@ -12,16 +11,16 @@ fn build_reuses_the_session_and_observes_source_changes() {
     std::fs::write(&entry, "#html.elem(\"p\")[first]").unwrap();
 
     let project = project(root);
-    let mut driver = BuildDriver::new(project.clone());
-    build(&mut driver, &project);
+    let mut driver = BuildSession::new(project.clone());
+    build(&mut driver);
     let first = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
 
-    build(&mut driver, &project);
+    build(&mut driver);
     let repeated = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
     assert_eq!(repeated, first);
 
     std::fs::write(&entry, "#html.elem(\"p\")[second]").unwrap();
-    build(&mut driver, &project);
+    build(&mut driver);
     let changed = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
     assert_ne!(changed, first);
     assert!(changed.contains("second"));
@@ -55,8 +54,8 @@ fn build_loads_content_and_frontmatter_through_entry_module() {
     .unwrap();
 
     let project = project(root);
-    let mut driver = BuildDriver::new(project.clone());
-    build(&mut driver, &project);
+    let mut driver = BuildSession::new(project.clone());
+    build(&mut driver);
     let first = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
     assert!(first.contains("First"));
     assert!(first.contains("First body"));
@@ -66,7 +65,7 @@ fn build_loads_content_and_frontmatter_through_entry_module() {
         "#metadata((title: \"Second\",)) <frontmatter>\n\nSecond body",
     )
     .unwrap();
-    build(&mut driver, &project);
+    build(&mut driver);
     let second = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
     assert!(second.contains("Second"));
     assert!(second.contains("Second body"));
@@ -83,17 +82,17 @@ fn reentrant_build_discovers_added_and_removed_pages() {
     std::fs::write(&index, "#html.elem(\"p\")[Index]").unwrap();
 
     let project = project(root);
-    let mut driver = BuildDriver::new(project.clone());
-    build(&mut driver, &project);
+    let mut driver = BuildSession::new(project.clone());
+    build(&mut driver);
     assert!(project.output_dir().join("index.html").is_file());
 
     std::fs::write(&about, "#html.elem(\"p\")[About]").unwrap();
-    build(&mut driver, &project);
+    build(&mut driver);
     assert!(project.output_dir().join("index.html").is_file());
     assert!(project.output_dir().join("about.html").is_file());
 
     std::fs::remove_file(index).unwrap();
-    build(&mut driver, &project);
+    build(&mut driver);
     assert!(!project.output_dir().join("index.html").exists());
     assert!(project.output_dir().join("about.html").is_file());
 }
@@ -107,18 +106,14 @@ fn reentrant_build_recovers_after_compilation_failure() {
     std::fs::write(&entry, "#html.elem(\"p\")[First]").unwrap();
 
     let project = project(root);
-    let mut driver = BuildDriver::new(project.clone());
-    build(&mut driver, &project);
+    let mut driver = BuildSession::new(project.clone());
+    build(&mut driver);
 
     std::fs::write(&entry, "#let broken =").unwrap();
-    assert!(
-        driver
-            .build(AsterConfig::load(&project.config_file()).unwrap())
-            .is_err()
-    );
+    assert!(driver.build().is_err());
 
     std::fs::write(&entry, "#html.elem(\"p\")[Recovered]").unwrap();
-    build(&mut driver, &project);
+    build(&mut driver);
     let html = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
     assert!(html.contains("Recovered"));
 }

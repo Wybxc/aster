@@ -1,10 +1,12 @@
 use std::process::ExitCode;
 
 use anyhow::{Context, Result};
-use aster::build::pipeline;
-use aster::cli::{diag, init, watch};
-use aster::foundation::{config, project};
+use aster::Project;
 use clap::Parser;
+
+mod cli;
+
+use crate::cli::{diag, init, watch};
 
 #[derive(Parser)]
 #[command(name = "aster", version, about = "Aster build system")]
@@ -49,22 +51,19 @@ fn main() -> ExitCode {
 
 fn run(cli: Cli) -> Result<ExitCode> {
     match cli.command {
-        Commands::Init { path } => init::run(path)?.report(),
-        Commands::Build { project_dir } => build(project_dir)?.report(),
+        Commands::Init { path } => {
+            let outcome = init::run(path)?;
+            diag::emit_initialized(&outcome.project);
+        }
+        Commands::Build { project_dir } => {
+            diag::report_build(&aster::build(resolve_project(project_dir)?)?)
+        }
         Commands::Watch { project_dir } => watch::run(resolve_project(project_dir)?)?,
     }
     Ok(ExitCode::SUCCESS)
 }
 
-fn build(project_dir: Option<std::path::PathBuf>) -> Result<pipeline::BuildOutcome> {
-    let project = resolve_project(project_dir)?;
-    let aster_config =
-        config::AsterConfig::load(&project.config_file()).context("failed to parse aster.toml")?;
-
-    pipeline::BuildDriver::new(project).build(aster_config)
-}
-
-fn resolve_project(project_dir: Option<std::path::PathBuf>) -> Result<project::ProjectRoot> {
+fn resolve_project(project_dir: Option<std::path::PathBuf>) -> Result<Project> {
     match project_dir {
         Some(dir) => {
             let dir = if dir.is_absolute() {
@@ -74,12 +73,11 @@ fn resolve_project(project_dir: Option<std::path::PathBuf>) -> Result<project::P
                     .context("failed to get current directory")?
                     .join(dir)
             };
-            project::ProjectRoot::new(dir)
+            Project::open(dir)
         }
         None => {
             let cwd = std::env::current_dir().context("failed to get current directory")?;
-            project::ProjectRoot::find(&cwd)
-                .context("no aster.toml found in current or parent directories")
+            Project::find(&cwd).context("no aster.toml found in current or parent directories")
         }
     }
 }

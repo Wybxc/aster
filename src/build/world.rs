@@ -1,7 +1,9 @@
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use comemo::{Track, Tracked};
+use termcolor::NoColor;
 use typst::diag::{FileError, SourceDiagnostic, SourceResult, Warned};
 use typst::engine::{Route, Sink, Traced};
 use typst::foundations::{Bytes, Content, Datetime, Dict, Duration};
@@ -9,12 +11,11 @@ use typst::syntax::{FileId, RootedPath, VirtualPath, VirtualRoot};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
 use typst::{Feature, Library, LibraryExt, World};
-use typst_kit::diagnostics::DiagnosticWorld;
+use typst_kit::diagnostics::{self, DiagnosticFormat, DiagnosticWorld};
 use typst_kit::fonts::FontStore;
 
-use crate::cli::diag;
+use crate::foundation::Project;
 use crate::foundation::files::{FileAccessError, ProjectFiles, list_typst_files};
-use crate::foundation::project::ProjectRoot;
 
 /// A project-bound Typst build session.
 ///
@@ -22,7 +23,7 @@ use crate::foundation::project::ProjectRoot;
 /// evaluation, HTML compilation, and source-aware diagnostics live here. Callers
 /// never construct or track a Typst world themselves.
 pub struct TypstSession {
-    project: ProjectRoot,
+    project: Project,
     fonts: FontStore,
     files: ProjectFiles,
 }
@@ -38,7 +39,7 @@ pub struct CompiledPage {
 }
 
 impl TypstSession {
-    pub fn new(project: ProjectRoot) -> Self {
+    pub fn new(project: Project) -> Self {
         let fonts = {
             let mut fonts = FontStore::new();
             fonts.extend(typst_kit::fonts::system());
@@ -52,7 +53,7 @@ impl TypstSession {
         }
     }
 
-    pub fn project(&self) -> &ProjectRoot {
+    pub fn project(&self) -> &Project {
         &self.project
     }
 
@@ -104,7 +105,7 @@ impl TypstSession {
         let warnings = sink
             .warnings()
             .iter()
-            .map(|warning| diag::format_warning(&world, warning))
+            .map(|warning| format_warning(&world, warning))
             .collect();
         Ok(EvaluatedContent {
             content: module.content(),
@@ -121,7 +122,7 @@ impl TypstSession {
         let warnings = warned
             .warnings
             .iter()
-            .map(|warning| diag::format_warning(&world, warning))
+            .map(|warning| format_warning(&world, warning))
             .collect();
         Ok(CompiledPage { document, warnings })
     }
@@ -152,8 +153,6 @@ impl TypstSession {
 
 #[comemo::memoize]
 fn compile_html(world: Tracked<dyn World + '_>) -> Warned<SourceResult<typst_html::HtmlDocument>> {
-    #[cfg(not(test))]
-    diag::emit_built_page(Path::new(world.main().vpath().get_without_slash()));
     typst::compile::<typst_html::HtmlDocument>(&*world)
 }
 
@@ -162,7 +161,38 @@ fn diagnostic_error(
     context: &str,
     diagnostics: &[SourceDiagnostic],
 ) -> anyhow::Error {
-    anyhow::anyhow!("{context}\n{}", diag::format_diags(world, diagnostics))
+    anyhow::anyhow!("{context}\n{}", format_diagnostics(world, diagnostics))
+}
+
+fn format_diagnostics(
+    world: &impl DiagnosticWorld,
+    source_diagnostics: &[SourceDiagnostic],
+) -> String {
+    let mut buffer = Vec::new();
+    {
+        let mut writer = NoColor::new(&mut buffer);
+        if diagnostics::emit(
+            &mut writer,
+            world,
+            source_diagnostics.iter(),
+            DiagnosticFormat::Human,
+        )
+        .is_err()
+        {
+            for diagnostic in source_diagnostics {
+                let _ = writeln!(writer, "error: {diagnostic:?}");
+            }
+        }
+    }
+    String::from_utf8_lossy(&buffer).trim_end().to_owned()
+}
+
+fn format_warning(world: &impl DiagnosticWorld, warning: &SourceDiagnostic) -> String {
+    let formatted = format_diagnostics(world, std::slice::from_ref(warning));
+    formatted
+        .strip_prefix("warning: ")
+        .unwrap_or(&formatted)
+        .to_owned()
 }
 
 struct CompileWorld<'a> {
@@ -215,5 +245,39 @@ impl DiagnosticWorld for CompileWorld<'_> {
                     .to_string()
             })
             .unwrap_or_else(|| id.vpath().get_with_slash().to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn page_compilation_is_reused_and_invalidated_by_dependency_changes() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let marker = root.file_name().unwrap().to_string_lossy();
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::write(root.join("aster.toml"), "").unwrap();
+        let entry = root.join("src/index.typ");
+        let dependency = root.join("src/data.typ");
+        std::fs::write(&entry, "#import \"data.typ\": marker\n#let value = marker").unwrap();
+        std::fs::write(&dependency, format!("#let marker = \"first-{marker}\"")).unwrap();
+
+        let project = Project::open(root.to_owned()).unwrap();
+        let mut session = TypstSession::new(project);
+        let library = session.library(Dict::new());
+
+        session.compile_page(&entry, &library).unwrap();
+        assert!(!comemo::testing::last_was_hit());
+
+        session.reset();
+        session.compile_page(&entry, &library).unwrap();
+        assert!(comemo::testing::last_was_hit());
+
+        std::fs::write(&dependency, format!("#let marker = \"second-{marker}\"")).unwrap();
+        session.reset();
+        session.compile_page(&entry, &library).unwrap();
+        assert!(!comemo::testing::last_was_hit());
     }
 }

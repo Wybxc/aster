@@ -1,47 +1,54 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use typst::Library;
+use typst::ecow::EcoString;
+use typst::syntax::{RootedPath, VirtualPath, VirtualRoot};
 use typst::utils::LazyHash;
 
-use crate::build::output::{AssetPath, OutputPath, OutputPublication};
+use crate::build::output::{AssetPath, OutputPublication};
 use crate::build::transform;
 use crate::build::world::TypstSession;
-use crate::engine::{content, route};
+use crate::engine::content::{self, ContentEntry};
+use crate::engine::route::RoutePath;
+use crate::foundation::Project;
 use crate::foundation::config::AsterConfig;
+
+mod route_plan;
+
+use self::route_plan::RoutePlan;
 
 /// The complete build outcome. No build stage decides terminal formatting or
 /// exit status; the CLI renders this value after the pipeline finishes.
 pub struct BuildOutcome {
+    /// Published page paths, in deterministic route order.
     pub outputs: Vec<PathBuf>,
+    /// Non-fatal diagnostics collected during the build.
     pub warnings: Vec<String>,
+    /// Total build and publication time.
     pub elapsed: Duration,
 }
 
-impl BuildOutcome {
-    pub fn report(&self) {
-        for warning in &self.warnings {
-            crate::cli::diag::emit_warning(warning);
-        }
-        crate::cli::diag::emit_summary(self.outputs.len(), self.elapsed);
-    }
-}
-
-pub struct BuildDriver {
+/// A reusable build session bound to one Aster project.
+pub struct BuildSession {
     session: TypstSession,
     started: bool,
 }
 
-impl BuildDriver {
-    pub fn new(project: crate::foundation::project::ProjectRoot) -> Self {
+impl BuildSession {
+    /// Create a reusable session for `project`.
+    pub fn new(project: Project) -> Self {
         Self {
             session: TypstSession::new(project),
             started: false,
         }
     }
 
-    pub fn build(&mut self, config: AsterConfig) -> Result<BuildOutcome> {
+    /// Build and publish the complete project output tree.
+    pub fn build(&mut self) -> Result<BuildOutcome> {
+        let config = AsterConfig::load(&self.session.project().config_file())
+            .context("failed to parse aster.toml")?;
         let rebuilding = std::mem::replace(&mut self.started, true);
         if rebuilding {
             self.session.reset();
@@ -54,9 +61,20 @@ impl BuildDriver {
         outcome
     }
 
+    /// Return the dependencies observed by the latest build attempt.
     pub fn dependencies(&mut self) -> Vec<PathBuf> {
         self.session.dependencies()
     }
+
+    /// Return the project bound to this session.
+    pub fn project(&self) -> &Project {
+        self.session.project()
+    }
+}
+
+/// Build a project once using a fresh session.
+pub fn build(project: Project) -> Result<BuildOutcome> {
+    BuildSession::new(project).build()
 }
 
 fn build_once(session: &TypstSession, config: AsterConfig) -> Result<BuildOutcome> {
@@ -78,10 +96,10 @@ fn build_once(session: &TypstSession, config: AsterConfig) -> Result<BuildOutcom
         }
     };
 
-    let protocol = content::load(session).context("failed to load content collections")?;
+    let protocol = load_content(session).context("failed to load content collections")?;
     let base_inputs = content::install(config.dict, protocol)?;
     let base_library = session.library(base_inputs.clone());
-    let plan = route::RoutePlan::build(session, &base_inputs, &base_library)?;
+    let plan = RoutePlan::build(session, &base_inputs, &base_library)?;
     let (jobs, route_warnings) = plan.into_parts();
     warnings.extend(route_warnings);
 
@@ -115,7 +133,7 @@ fn render_page(
     session: &TypstSession,
     publication: &mut OutputPublication,
     template: &std::path::Path,
-    output: &OutputPath,
+    output: &RoutePath,
     library: &LazyHash<Library>,
     highlight_css: Option<&AssetPath>,
     warnings: &mut Vec<String>,
@@ -134,4 +152,46 @@ fn render_page(
     let html = typst_html::html(&document, &typst_html::HtmlOptions::default())
         .map_err(|error| anyhow::anyhow!("HTML encoding failed: {error:?}"))?;
     page.add_html(html)
+}
+
+fn load_content(session: &TypstSession) -> Result<typst::foundations::Value> {
+    let project = session.project();
+    let content_dir = project.content_dir();
+    let mut entries = Vec::new();
+
+    for path in session.content_files()? {
+        let content_relative = path
+            .strip_prefix(&content_dir)
+            .context("content path error")?;
+        let virtual_path = VirtualPath::virtualize(project.root(), &path)
+            .context("content path is outside project")?;
+        if content_relative.components().count() < 2 {
+            bail!(
+                "entry {} is not inside a collection; expected content/<collection>/.../<id>.typ",
+                path.display()
+            );
+        }
+
+        let mut components = content_relative.components();
+        let collection = components
+            .next()
+            .map(|component| EcoString::from(component.as_os_str().to_string_lossy().as_ref()))
+            .context("entry not inside a collection directory")?;
+        let id = {
+            let mut path = PathBuf::new();
+            for component in components {
+                path.push(component);
+            }
+            path.set_extension("");
+            EcoString::from(path.to_string_lossy().replace('\\', "/"))
+        };
+
+        entries.push(ContentEntry {
+            collection,
+            id,
+            source: RootedPath::new(VirtualRoot::Project, virtual_path),
+        });
+    }
+
+    Ok(content::protocol(entries))
 }

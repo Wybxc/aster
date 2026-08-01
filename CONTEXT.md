@@ -28,13 +28,13 @@ A **route plan** is the deterministic, collision-free set of pages produced befo
 
 A normal parameter fills one path segment and cannot contain separators. A spread parameter is a standalone segment and may expand into multiple validated segments. Generated output paths are always relative to `dist/` and cannot contain `.` or `..` components.
 
-## Typst build session
+## Build session
 
-A **Typst build session** is bound to one Aster project. It owns shared fonts, package and project-file access, tracked source and content discovery, input libraries, Typst world construction, page compilation, and source-aware diagnostics. The project-file store is the tracked filesystem surface for directory membership, dynamically imported content, and build transforms that need incremental file access.
+A **build session** is the reusable public build interface bound to one Aster project. It loads the project's configuration for each build and owns an internal Typst build session with shared fonts, package and project-file access, tracked source and content discovery, input libraries, Typst world construction, page compilation, and source-aware diagnostics. The project-file store is the tracked filesystem surface for directory membership, dynamically imported content, and build transforms that need incremental file access.
 
-The session is reused across builds. The first build compiles directly. Before each later build, the build driver marks loaded files stale; subsequent reads update Typst sources in place so comemo can validate and reuse unchanged compilation and transformation results. After the build attempt, the driver ages the global comemo cache. Page compilation is memoized through a tracked Typst world.
+The session is reused across builds. The first build compiles directly. Before each later build, it marks loaded files stale; subsequent reads update Typst sources in place so comemo can validate and reuse unchanged compilation and transformation results. After the build attempt, it ages the global comemo cache. Page compilation is memoized through a tracked Typst world.
 
-Callers do not construct or track Typst worlds. Source and content listings are memoized through the session's tracked project-file surface, so directory membership changes invalidate discovery. CSS bundling uses the same surface: path resolution and every entry or transitive import read become comemo constraints. Page compilation emits its source template only from inside the memoized body, so cache hits remain quiet.
+Callers do not construct or track Typst worlds. Source and content listings are memoized through the session's tracked project-file surface, so directory membership changes invalidate discovery. CSS bundling uses the same surface: path resolution and every entry or transitive import read become comemo constraints. Page compilation remains memoized through the tracked Typst world.
 
 ## Document transform
 

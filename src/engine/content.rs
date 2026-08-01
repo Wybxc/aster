@@ -1,67 +1,40 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
 use std::sync::LazyLock;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use typst::ecow::EcoString;
 use typst::foundations::{
     Capturer, Closure, ClosureNode, Dict, Func, Module, Scope, Scopes, Str, Value, dict,
 };
 use typst::syntax::ast::{self, AstNode};
-use typst::syntax::{RootedPath, SyntaxNode, VirtualPath, VirtualRoot, parse_code};
+use typst::syntax::{RootedPath, SyntaxNode, parse_code};
 use typst::{Library, LibraryExt};
 use typst_eval::CapturesVisitor;
-
-use crate::build::world::TypstSession;
 
 pub const PROTOCOL_VERSION: i64 = 3;
 pub const INPUT_NAME: &str = "_aster";
 
+pub(crate) struct ContentEntry {
+    pub collection: EcoString,
+    pub id: EcoString,
+    pub source: RootedPath,
+}
+
 /// Build the `_aster` lazy entry manifest, including the empty state.
-pub fn load(session: &TypstSession) -> Result<Value> {
-    let project = session.project();
-    let content_dir = project.content_dir();
+pub(crate) fn protocol(entries: impl IntoIterator<Item = ContentEntry>) -> Value {
     let mut collections: BTreeMap<EcoString, Vec<(EcoString, RootedPath)>> = BTreeMap::new();
-
-    for path in session.content_files()? {
-        let content_relative = path
-            .strip_prefix(&content_dir)
-            .context("content path error")?;
-        let virtual_path = VirtualPath::virtualize(project.root(), &path)
-            .context("content path is outside project")?;
-        if content_relative.components().count() < 2 {
-            bail!(
-                "entry {} is not inside a collection; expected content/<collection>/.../<id>.typ",
-                path.display()
-            );
-        }
-
-        let mut components = content_relative.components();
-        let collection = components
-            .next()
-            .map(|component| EcoString::from(component.as_os_str().to_string_lossy().as_ref()))
-            .context("entry not inside a collection directory")?;
-        let id = {
-            let mut path = PathBuf::new();
-            for component in components {
-                path.push(component);
-            }
-            path.set_extension("");
-            EcoString::from(path.to_string_lossy().replace('\\', "/"))
-        };
-
+    for entry in entries {
         collections
-            .entry(collection)
+            .entry(entry.collection)
             .or_default()
-            .push((id, RootedPath::new(VirtualRoot::Project, virtual_path)));
+            .push((entry.id, entry.source));
     }
-
-    Ok(protocol_value(collections))
+    protocol_value(collections)
 }
 
 #[cfg(test)]
 pub fn empty() -> Value {
-    protocol_value(BTreeMap::new())
+    protocol(std::iter::empty())
 }
 
 pub fn install(config: Dict, protocol: Value) -> Result<Dict> {
@@ -192,6 +165,43 @@ fn render_closure(source: RootedPath) -> Func {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use typst::syntax::{VirtualPath, VirtualRoot};
+
+    #[test]
+    fn protocol_contains_lazy_entry_modules() {
+        let protocol = protocol([ContentEntry {
+            collection: "blog".into(),
+            id: "nested/post".into(),
+            source: RootedPath::new(
+                VirtualRoot::Project,
+                VirtualPath::new("content/blog/nested/post.typ").unwrap(),
+            ),
+        }]);
+
+        let Value::Dict(protocol) = protocol else {
+            panic!("protocol must be a dictionary");
+        };
+        let Value::Dict(collections) = protocol.get("collections").unwrap() else {
+            panic!("collections must be a dictionary");
+        };
+        let Value::Dict(blog) = collections.get("blog").unwrap() else {
+            panic!("collection must be a dictionary");
+        };
+        let Value::Module(entry) = blog.get("nested/post").unwrap() else {
+            panic!("entry must be a module");
+        };
+        assert_eq!(
+            entry.field("id", ()).unwrap(),
+            &Value::Str(Str::from("nested/post"))
+        );
+        assert_eq!(
+            entry.field("collection", ()).unwrap(),
+            &Value::Str(Str::from("blog"))
+        );
+        assert!(matches!(entry.field("render", ()).unwrap(), Value::Func(_)));
+        assert!(entry.field("file-path", ()).is_err());
+        assert!(entry.field("content", ()).is_err());
+    }
 
     #[test]
     fn empty_protocol_has_one_owner() {

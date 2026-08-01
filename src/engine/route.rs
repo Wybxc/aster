@@ -1,19 +1,49 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail, ensure};
-use typst::Library;
+use anyhow::{Result, bail, ensure};
 use typst::ecow::EcoString;
-use typst::foundations::{Content, Dict, Value};
+use typst::foundations::{Content, Value};
 use typst::introspection::MetadataElem;
-use typst::utils::LazyHash;
-
-use crate::build::output::OutputPath;
-use crate::build::world::TypstSession;
-use crate::engine::content;
 
 /// Parameter assignments for one generated page.
 pub type ParamSet = BTreeMap<EcoString, EcoString>;
+
+/// A validated path generated from an Aster route pattern.
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct RoutePath(PathBuf);
+
+impl RoutePath {
+    pub fn new(path: impl Into<PathBuf>) -> Result<Self> {
+        use std::path::Component;
+
+        let path = path.into();
+        ensure!(!path.as_os_str().is_empty(), "route path cannot be empty");
+
+        for component in path.components() {
+            match component {
+                Component::Normal(_) => {}
+                Component::CurDir => bail!("route path cannot contain `.`"),
+                Component::ParentDir => bail!("route path cannot contain `..`"),
+                Component::RootDir | Component::Prefix(_) => {
+                    bail!("route path must be relative")
+                }
+            }
+        }
+
+        Ok(Self(path))
+    }
+
+    pub(crate) fn from_template(relative_template: &Path) -> Result<Self> {
+        let mut output = relative_template.to_path_buf();
+        output.set_extension("html");
+        Self::new(output)
+    }
+
+    pub fn as_path(&self) -> &Path {
+        &self.0
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 enum Part {
@@ -44,7 +74,7 @@ pub enum RouteError {
 }
 
 #[derive(Clone, Debug, thiserror::Error)]
-pub enum RouteMetadataError {
+pub(crate) enum RouteMetadataError {
     #[error("route metadata must be an array of dictionaries")]
     InvalidShape,
     #[error("route parameter `{0}` must be a string")]
@@ -144,7 +174,7 @@ impl RouteTemplate {
         !self.parameters.is_empty()
     }
 
-    pub fn generate(&self, params: &ParamSet) -> Result<OutputPath> {
+    pub fn generate(&self, params: &ParamSet) -> Result<RoutePath> {
         let supplied: BTreeSet<_> = params.keys().cloned().collect();
         let missing: Vec<_> = self.parameters.difference(&supplied).cloned().collect();
         let extra: Vec<_> = supplied.difference(&self.parameters).cloned().collect();
@@ -169,10 +199,7 @@ impl RouteTemplate {
                 );
                 let pieces = value.split('/').collect::<Vec<_>>();
                 for (piece_index, piece) in pieces.iter().enumerate() {
-                    ensure!(
-                        valid_parameter_segment(piece),
-                        "invalid route segment `{piece}`"
-                    );
+                    ensure!(valid_segment(piece), "invalid route segment `{piece}`");
                     if index + 1 == self.segments.len() && piece_index + 1 == pieces.len() {
                         output.push(format!("{piece}.html"));
                     } else {
@@ -189,7 +216,7 @@ impl RouteTemplate {
                     Part::Param(name) => {
                         let value = params.get(name).expect("validated parameter exists");
                         ensure!(
-                            valid_parameter_segment(value),
+                            valid_segment(value),
                             "invalid value for route parameter `{name}`"
                         );
                         text.push_str(value);
@@ -197,20 +224,17 @@ impl RouteTemplate {
                     Part::Spread(_) => unreachable!("spread is validated as standalone"),
                 }
             }
-            ensure!(
-                valid_parameter_segment(&text),
-                "invalid route segment `{text}`"
-            );
+            ensure!(valid_segment(&text), "invalid route segment `{text}`");
             if index + 1 == self.segments.len() {
                 text.push_str(".html");
             }
             output.push(text);
         }
-        OutputPath::new(output)
+        RoutePath::new(output)
     }
 }
 
-fn valid_parameter_segment(value: &str) -> bool {
+pub(crate) fn valid_segment(value: &str) -> bool {
     const WINDOWS_DEVICES: &[&str] = &[
         "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
         "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
@@ -241,7 +265,7 @@ fn join_names(names: &[EcoString]) -> String {
 }
 
 #[comemo::memoize]
-pub fn extract(content: &Content) -> Result<Vec<ParamSet>, RouteMetadataError> {
+pub(crate) fn extract(content: &Content) -> Result<Vec<ParamSet>, RouteMetadataError> {
     let mut declarations = Vec::new();
     let _ = content.traverse(&mut |element| {
         if element
@@ -277,130 +301,6 @@ pub fn extract(content: &Content) -> Result<Vec<ParamSet>, RouteMetadataError> {
         }
     }
     Ok(result)
-}
-
-/// A deterministic, collision-free page plan.
-pub struct RoutePlan {
-    jobs: Vec<PlannedRoute>,
-    warnings: Vec<String>,
-}
-
-pub struct PlannedRoute {
-    pub template: PathBuf,
-    pub output: OutputPath,
-    pub params: ParamSet,
-}
-
-impl RoutePlan {
-    /// Discover, parse, and probe every template exactly once.
-    pub fn build(
-        session: &TypstSession,
-        base_inputs: &Dict,
-        base_library: &LazyHash<Library>,
-    ) -> Result<Self> {
-        let project = session.project();
-        let templates = session.source_files()?;
-        let mut jobs = Vec::new();
-        let mut warnings = Vec::new();
-
-        for template in templates {
-            let relative = template
-                .strip_prefix(project.src_dir())
-                .context("source template is outside src/")?;
-            let route = parse_template(relative)
-                .with_context(|| format!("invalid route template {}", relative.display()))?;
-            if route.is_dynamic() {
-                let evaluated = session
-                    .evaluate(&template, base_library)
-                    .with_context(|| format!("failed to probe {}", relative.display()))?;
-                warnings.extend(evaluated.warnings);
-                let routes = extract(&evaluated.content)
-                    .with_context(|| format!("invalid route metadata in {}", relative.display()))?;
-                if routes.is_empty() {
-                    warnings.push(format!(
-                        "{} has a dynamic route pattern but no <route> metadata",
-                        relative.display()
-                    ));
-                }
-                for params in routes {
-                    content::with_route_params(base_inputs, &params)?;
-                    jobs.push(PlannedRoute {
-                        template: template.clone(),
-                        output: route.generate(&params)?,
-                        params,
-                    });
-                }
-            } else {
-                validate_static_output(relative)?;
-                jobs.push(PlannedRoute {
-                    output: OutputPath::from_template(relative)?,
-                    template,
-                    params: ParamSet::new(),
-                });
-            }
-        }
-
-        jobs.sort_by(|left, right| {
-            left.output
-                .cmp(&right.output)
-                .then_with(|| left.template.cmp(&right.template))
-        });
-        for (index, left) in jobs.iter().enumerate() {
-            for right in &jobs[index + 1..] {
-                let left_key = portable_output_key(&left.output);
-                let right_key = portable_output_key(&right.output);
-                if output_paths_collide(&left_key, &right_key) {
-                    bail!(
-                        "templates {} and {} generate conflicting outputs {} and {}",
-                        left.template.display(),
-                        right.template.display(),
-                        left.output.as_path().display(),
-                        right.output.as_path().display()
-                    );
-                }
-            }
-        }
-        Ok(Self { jobs, warnings })
-    }
-
-    pub fn into_parts(self) -> (Vec<PlannedRoute>, Vec<String>) {
-        (self.jobs, self.warnings)
-    }
-}
-
-fn validate_static_output(template: &Path) -> Result<()> {
-    let mut components = template.components().peekable();
-    while let Some(component) = components.next() {
-        let mut value = component.as_os_str().to_string_lossy().into_owned();
-        if components.peek().is_none() {
-            value = Path::new(&value)
-                .file_stem()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .into_owned();
-        }
-        ensure!(
-            valid_parameter_segment(&value),
-            "non-portable static route segment `{value}`"
-        );
-    }
-    Ok(())
-}
-
-fn portable_output_key(output: &OutputPath) -> Vec<String> {
-    output
-        .as_path()
-        .components()
-        .map(|component| component.as_os_str().to_string_lossy().to_lowercase())
-        .collect()
-}
-
-fn is_component_prefix(left: &[String], right: &[String]) -> bool {
-    left.len() < right.len() && right.starts_with(left)
-}
-
-fn output_paths_collide(left: &[String], right: &[String]) -> bool {
-    left == right || is_component_prefix(left, right) || is_component_prefix(right, left)
 }
 
 #[cfg(test)]
@@ -491,26 +391,6 @@ mod tests {
                 "{invalid} must be rejected"
             );
         }
-    }
-
-    #[test]
-    fn rejects_nonportable_static_paths() {
-        for template in ["CON.typ", "bad:name.typ", "trailing./page.typ"] {
-            assert!(validate_static_output(Path::new(template)).is_err());
-        }
-        assert!(validate_static_output(Path::new("docs/v1.2.typ")).is_ok());
-    }
-
-    #[test]
-    fn detects_portable_and_ancestor_output_collisions() {
-        let key = |path| portable_output_key(&OutputPath::new(path).unwrap());
-
-        assert!(output_paths_collide(&key("Case.html"), &key("case.html")));
-        assert!(output_paths_collide(
-            &key("foo.html"),
-            &key("foo.html/bar.html")
-        ));
-        assert!(!output_paths_collide(&key("foo.html"), &key("foobar.html")));
     }
 
     #[test]

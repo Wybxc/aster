@@ -11,9 +11,9 @@ use typst::ecow::{EcoString, EcoVec, eco_format, eco_vec};
 use typst::syntax::{LinkedNode, Span, SyntaxNode, parse_code, parse_math};
 use typst_html::{HtmlElement, HtmlNode};
 
+use crate::foundation::Project;
 use crate::foundation::config::HighlightConfig;
 use crate::foundation::files::{FileAccessError, ProjectFiles};
-use crate::foundation::project::ProjectRoot;
 
 use super::WalkControl;
 use crate::build::transform::dom::HtmlElementExt;
@@ -233,7 +233,7 @@ fn load_theme(
 /// are owned by the output publication module.
 pub fn compute_highlight_css(
     config: &HighlightConfig,
-    project: &ProjectRoot,
+    project: &Project,
     project_files: Tracked<ProjectFiles>,
 ) -> Result<Option<String>> {
     compute_highlight_css_impl(

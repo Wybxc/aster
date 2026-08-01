@@ -20,7 +20,7 @@ use typst_kit::files::{FileStore, FsRoot, SystemFiles};
 use typst_kit::packages::SystemPackages;
 use walkdir::WalkDir;
 
-use crate::foundation::project::ProjectRoot;
+use crate::foundation::project::Project;
 
 /// The tracked filesystem surface of a Typst build session.
 ///
@@ -133,7 +133,7 @@ impl FileAccessError {
 }
 
 impl ProjectFiles {
-    pub(crate) fn new(project: &ProjectRoot) -> Self {
+    pub(crate) fn new(project: &Project) -> Self {
         let root =
             std::fs::canonicalize(project.root()).unwrap_or_else(|_| project.root().to_owned());
         let downloader = SystemDownloader::new("aster/0.1.0");

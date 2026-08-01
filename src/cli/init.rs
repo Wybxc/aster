@@ -12,12 +12,6 @@ pub struct InitOutcome {
     pub project: PathBuf,
 }
 
-impl InitOutcome {
-    pub fn report(&self) {
-        crate::cli::diag::emit_initialized(&self.project);
-    }
-}
-
 pub fn run(destination: PathBuf) -> Result<InitOutcome> {
     let destination = absolute(destination)?;
     prepare_destination(&destination)?;

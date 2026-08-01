@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use aster::build::pipeline::BuildDriver;
+use aster::BuildSession;
 
 use crate::common::{build, generated_asset, project};
 
@@ -57,22 +57,22 @@ fn custom_theme_changes_replace_the_highlight_stylesheet() {
     write_theme(&theme, "#112233");
 
     let project = project(root);
-    let mut driver = BuildDriver::new(project.clone());
-    build(&mut driver, &project);
+    let mut driver = BuildSession::new(project.clone());
+    build(&mut driver);
     let (first_path, first_css) = generated_asset(&project, "hl.");
     assert!(
         first_css.contains("#112233"),
         "unexpected highlight CSS: {first_css}"
     );
 
-    build(&mut driver, &project);
+    build(&mut driver);
     assert_eq!(
         generated_asset(&project, "hl."),
         (first_path.clone(), first_css.clone())
     );
 
     write_theme(&theme, "#445566");
-    build(&mut driver, &project);
+    build(&mut driver);
     let (changed_path, changed_css) = generated_asset(&project, "hl.");
     assert_ne!(changed_path, first_path);
     assert_ne!(changed_css, first_css);

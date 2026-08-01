@@ -1,10 +1,11 @@
-//! Build layer: assembling foundation infrastructure into a build.
+//! Build orchestration and output publication.
 //!
-//! This layer mirrors the driving part of the `typst-cli` crate: the Typst
-//! build session, output publication, build pipeline, and document
-//! transforms. It depends on the foundation and engine layers.
+//! This layer combines the foundation and engine layers behind [`BuildSession`]
+//! and the one-shot [`build`] function.
 
-pub mod output;
-pub mod pipeline;
-pub mod transform;
-pub mod world;
+mod output;
+mod pipeline;
+mod transform;
+mod world;
+
+pub use pipeline::{BuildOutcome, BuildSession, build};

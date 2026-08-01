@@ -5,11 +5,12 @@ use walkdir::WalkDir;
 
 /// A discovered Aster project with one normalized layout policy.
 #[derive(Clone)]
-pub struct ProjectRoot {
+pub struct Project {
     root: PathBuf,
 }
 
-impl ProjectRoot {
+impl Project {
+    /// Find the nearest project at or above `dir`.
     pub fn find(dir: &Path) -> Option<Self> {
         let mut current = Some(dir);
         while let Some(path) = current {
@@ -23,7 +24,9 @@ impl ProjectRoot {
         None
     }
 
-    pub fn new(root: PathBuf) -> Result<Self> {
+    /// Open a directory containing an `aster.toml` project manifest.
+    pub fn open(root: impl Into<PathBuf>) -> Result<Self> {
+        let root = root.into();
         let root = normalize(&root);
         if !root.join("aster.toml").is_file() {
             bail!("no aster.toml found in {}", root.display());
@@ -31,22 +34,27 @@ impl ProjectRoot {
         Ok(Self { root })
     }
 
+    /// Return the normalized project root.
     pub fn root(&self) -> &Path {
         &self.root
     }
 
+    /// Return the page-template directory.
     pub fn src_dir(&self) -> PathBuf {
         self.root.join("src")
     }
 
+    /// Return the content collection directory.
     pub fn content_dir(&self) -> PathBuf {
         self.root.join("content")
     }
 
+    /// Return the published output directory.
     pub fn output_dir(&self) -> PathBuf {
         self.root.join("dist")
     }
 
+    /// Return the project manifest path.
     pub fn config_file(&self) -> PathBuf {
         self.root.join("aster.toml")
     }

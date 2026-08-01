@@ -1,21 +1,17 @@
 use std::path::{Path, PathBuf};
 
-use aster::build::pipeline::BuildDriver;
-use aster::foundation::config::AsterConfig;
-use aster::foundation::project::ProjectRoot;
+use aster::{BuildSession, Project};
 
-pub fn project(root: &Path) -> ProjectRoot {
+pub fn project(root: &Path) -> Project {
     let config = root.join("aster.toml");
     if !config.exists() {
         std::fs::write(config, "").unwrap();
     }
-    ProjectRoot::new(root.to_owned()).unwrap()
+    Project::open(root.to_owned()).unwrap()
 }
 
-pub fn build(driver: &mut BuildDriver, project: &ProjectRoot) {
-    driver
-        .build(AsterConfig::load(&project.config_file()).unwrap())
-        .unwrap();
+pub fn build(session: &mut BuildSession) {
+    session.build().unwrap();
 }
 
 pub fn install_content_adapter(root: &Path) {
@@ -42,7 +38,7 @@ pub fn write_css_page(root: &Path) {
     .unwrap();
 }
 
-pub fn generated_asset(project: &ProjectRoot, prefix: &str) -> (PathBuf, String) {
+pub fn generated_asset(project: &Project, prefix: &str) -> (PathBuf, String) {
     let path = std::fs::read_dir(project.output_dir().join("_assets"))
         .unwrap()
         .map(|entry| entry.unwrap().path())
