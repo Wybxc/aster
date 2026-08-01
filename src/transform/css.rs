@@ -16,17 +16,14 @@ pub(super) fn process_element(
     page: &mut PagePublication<'_>,
     project_files: Tracked<ProjectFiles>,
 ) -> Result<()> {
-    if !element.is_tag(typst_html::tag::link) {
-        return Ok(());
-    }
-    if !element.has_attr("rel", |value| value.as_str() == "css") {
+    if !element.is_tag(typst_html::tag::link) || !element.has_attr("rel", |value| value == "css") {
         return Ok(());
     }
 
-    let Some(href) = element.get_attr("href") else {
-        return Ok(());
-    };
-    let source = page.resolve_source(href.as_str())?;
+    let href = element
+        .get_attr("href")
+        .ok_or_else(|| anyhow::anyhow!("link element of type \"css\" is missing href attribute"))?;
+    let source = page.resolve_source(Path::new(href.as_str()))?;
     let css =
         bundle_file(project_files, &source, &page.source_root()?).map_err(anyhow::Error::msg)?;
     let url = page.add_asset("css", "css", css.into_bytes())?;

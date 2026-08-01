@@ -149,8 +149,7 @@ pub struct PagePublication<'a> {
 
 impl PagePublication<'_> {
     /// Resolve a source reference relative to the actual template, confined to `src/`.
-    pub fn resolve_source(&self, reference: &str) -> Result<PathBuf> {
-        let reference = Path::new(reference);
+    pub fn resolve_source(&self, reference: &Path) -> Result<PathBuf> {
         ensure!(
             !reference.is_absolute(),
             "source reference must be relative"
@@ -325,10 +324,10 @@ mod tests {
         let page = publication.page(&template, &output).unwrap();
 
         assert_eq!(
-            page.resolve_source("../style.css").unwrap(),
+            page.resolve_source(Path::new("../style.css")).unwrap(),
             std::fs::canonicalize(project.src_dir().join("style.css")).unwrap()
         );
-        assert!(page.resolve_source("../../aster.toml").is_err());
+        assert!(page.resolve_source(Path::new("../../aster.toml")).is_err());
     }
 
     #[test]
