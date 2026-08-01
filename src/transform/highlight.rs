@@ -1,6 +1,6 @@
 use std::fmt::Write;
-use std::path::Path;
-use std::sync::LazyLock;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, LazyLock};
 
 use anyhow::Result;
 use comemo::Tracked;
@@ -11,12 +11,25 @@ use typst::ecow::{EcoString, EcoVec, eco_format, eco_vec};
 use typst::syntax::{LinkedNode, Span, SyntaxNode, parse_code, parse_math};
 use typst_html::{HtmlElement, HtmlNode};
 
-use crate::compile::ProjectFiles;
+use crate::compile::{FileAccessError, ProjectFiles};
 use crate::config::HighlightConfig;
 use crate::project::ProjectRoot;
 
 use super::WalkControl;
 use crate::utils::HtmlElementExt;
+
+/// A cloneable theme-loading error at the memoization seam.
+#[derive(Debug, Clone, thiserror::Error)]
+enum ThemeError {
+    #[error("failed to load theme from {path}: {inner}")]
+    Load {
+        path: PathBuf,
+        #[source]
+        inner: Arc<anyhow::Error>,
+    },
+    #[error(transparent)]
+    File(#[from] FileAccessError),
+}
 
 static SS: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
 static THEMES: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
@@ -199,7 +212,7 @@ fn load_theme(
     name_or_path: &str,
     project_root: &Path,
     project_files: Tracked<ProjectFiles>,
-) -> std::result::Result<Theme, String> {
+) -> std::result::Result<Theme, ThemeError> {
     if let Some(theme) = THEMES.themes.get(name_or_path) {
         return Ok(theme.clone());
     }
@@ -207,8 +220,10 @@ fn load_theme(
     let path = project_files.canonicalize(&project_root.join(name_or_path))?;
     let bytes = project_files.read(&path)?;
     let mut reader = std::io::Cursor::new(bytes);
-    let theme = ThemeSet::load_from_reader(&mut reader)
-        .map_err(|error| format!("failed to load theme from {}: {error}", path.display()))?;
+    let theme = ThemeSet::load_from_reader(&mut reader).map_err(|error| ThemeError::Load {
+        path,
+        inner: Arc::new(anyhow::Error::new(error)),
+    })?;
     Ok(theme)
 }
 
@@ -236,7 +251,7 @@ fn compute_highlight_css_impl(
     dark_theme: &str,
     project_root: &Path,
     project_files: Tracked<ProjectFiles>,
-) -> std::result::Result<Option<String>, String> {
+) -> std::result::Result<Option<String>, ThemeError> {
     let light = load_theme(light_theme, project_root, project_files)?;
     let dark = load_theme(dark_theme, project_root, project_files)?;
     let light_h = Highlighter::new(&light);

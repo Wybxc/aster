@@ -7,9 +7,43 @@ use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions};
 use lightningcss::targets::Browsers;
 use typst_html::HtmlElement;
 
-use crate::compile::ProjectFiles;
+use crate::compile::{FileAccessError, ProjectFiles};
 use crate::output::PagePublication;
 use crate::utils::HtmlElementExt;
+
+/// A cloneable CSS transformation error at the memoization seam.
+///
+/// Upstream lightningcss errors carry non-static lifetimes or are not Clone,
+/// so their stable classifications and locations are decomposed into fields;
+/// the display strings are derived from those fields.
+#[derive(Debug, Clone, thiserror::Error)]
+enum BundleError {
+    #[error("failed to bundle {path}: {kind}{location}")]
+    Bundle {
+        path: PathBuf,
+        kind: String,
+        location: String,
+    },
+    #[error("failed to minify CSS: {kind}{location}")]
+    Minify { kind: String, location: String },
+    #[error("failed to serialize CSS: {kind}{location}")]
+    Serialize { kind: String, location: String },
+    #[error("CSS import {path} escapes {source_root}")]
+    Escapes { path: PathBuf, source_root: PathBuf },
+    #[error(transparent)]
+    File(#[from] FileAccessError),
+}
+
+/// Decompose a lightningcss error into its stable classification and a
+/// formatted source location, both of which are cloneable.
+fn decompose(error: &lightningcss::error::Error<impl std::fmt::Display>) -> (String, String) {
+    let location = error
+        .loc
+        .as_ref()
+        .map(|loc| format!(" at {}:{}:{}", loc.filename, loc.line, loc.column))
+        .unwrap_or_default();
+    (error.kind.to_string(), location)
+}
 
 pub(super) fn process_element(
     element: &mut HtmlElement,
@@ -24,8 +58,8 @@ pub(super) fn process_element(
         .get_attr("href")
         .ok_or_else(|| anyhow::anyhow!("link element of type \"css\" is missing href attribute"))?;
     let source = page.resolve_source(Path::new(href.as_str()))?;
-    let css =
-        bundle_file(project_files, &source, &page.source_root()?).map_err(anyhow::Error::msg)?;
+    let css = bundle_file(project_files, &source, &page.source_root()?)
+        .map_err(|error| anyhow::anyhow!("{error:#}"))?;
     let url = page.add_asset("css", "css", css.into_bytes())?;
 
     element.update_attr("href", |value| *value = url.as_str().into());
@@ -39,24 +73,35 @@ fn bundle_file(
     project_files: Tracked<ProjectFiles>,
     entry: &Path,
     source_root: &Path,
-) -> std::result::Result<String, String> {
+) -> std::result::Result<String, BundleError> {
     let provider = ConfinedFileProvider::new(source_root.to_owned(), project_files);
     let mut bundler = Bundler::new(&provider, None, ParserOptions::default());
-    let mut stylesheet = bundler
-        .bundle(entry)
-        .map_err(|error| format!("failed to bundle {}: {error:#}", entry.display()))?;
+    let mut stylesheet = bundler.bundle(entry).map_err(|error| {
+        let (kind, location) = decompose(&error);
+        BundleError::Bundle {
+            path: entry.to_owned(),
+            kind,
+            location,
+        }
+    })?;
     stylesheet
         .minify(MinifyOptions {
             targets: Browsers::default().into(),
             ..MinifyOptions::default()
         })
-        .map_err(|error| format!("failed to minify CSS: {error:#}"))?;
+        .map_err(|error| {
+            let (kind, location) = decompose(&error);
+            BundleError::Minify { kind, location }
+        })?;
     let result = stylesheet
         .to_css(PrinterOptions {
             minify: true,
             ..PrinterOptions::default()
         })
-        .map_err(|error| format!("failed to serialize CSS: {error:#}"))?;
+        .map_err(|error| {
+            let (kind, location) = decompose(&error);
+            BundleError::Serialize { kind, location }
+        })?;
     Ok(result.code)
 }
 
@@ -75,34 +120,27 @@ impl<'a> ConfinedFileProvider<'a> {
         }
     }
 
-    fn confined(&self, path: &Path) -> std::io::Result<PathBuf> {
-        let path = self
-            .project_files
-            .canonicalize(path)
-            .map_err(std::io::Error::other)?;
+    fn confined(&self, path: &Path) -> std::result::Result<PathBuf, BundleError> {
+        let path = self.project_files.canonicalize(path)?;
         if !path.starts_with(&self.source_root) {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::PermissionDenied,
-                format!(
-                    "CSS import {} escapes {}",
-                    path.display(),
-                    self.source_root.display()
-                ),
-            ));
+            return Err(BundleError::Escapes {
+                path,
+                source_root: self.source_root.clone(),
+            });
         }
         Ok(path)
     }
 }
 
 impl SourceProvider for ConfinedFileProvider<'_> {
-    type Error = std::io::Error;
+    type Error = BundleError;
 
     fn read<'a>(&'a self, file: &Path) -> std::result::Result<&'a str, Self::Error> {
         let file = self.confined(file)?;
-        self.project_files
+        self.project_files.read(&file)?;
+        self.files
             .read(&file)
-            .map_err(std::io::Error::other)?;
-        self.files.read(&file)
+            .map_err(|error| FileAccessError::io(file.clone(), error).into())
     }
 
     fn resolve(

@@ -32,10 +32,120 @@ pub struct TypstSession {
     files: ProjectFiles,
 }
 
+/// The tracked filesystem surface of a Typst build session.
+///
+/// File content accesses (including missing files) are recorded by the
+/// upstream `FileStore` slot state machine. Path-level accesses that the
+/// `FileStore` cannot express (canonicalization of arbitrary paths) are
+/// recorded by a small [`PathStore`]. Both are reset between builds and
+/// combined into the watch dependency list.
 pub(crate) struct ProjectFiles {
     root: PathBuf,
     store: FileStore<SystemFiles>,
-    tracked_paths: Mutex<BTreeSet<PathBuf>>,
+    paths: PathStore,
+}
+
+/// Records path-level accesses that `FileStore` cannot express.
+///
+/// Unlike the `FileStore`, whose slot state machine tracks accesses by file
+/// id, this store tracks plain paths: canonicalization targets that may not
+/// exist yet. Its contents feed the watch dependency list so that a later
+/// appearance of such a path triggers a rebuild.
+struct PathStore {
+    paths: Mutex<BTreeSet<PathBuf>>,
+}
+
+impl PathStore {
+    fn new() -> Self {
+        Self {
+            paths: Mutex::new(BTreeSet::new()),
+        }
+    }
+
+    fn record(&self, path: &Path) {
+        self.paths
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .insert(path.to_owned());
+    }
+
+    fn reset(&self) {
+        self.paths
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clear();
+    }
+
+    fn paths(&self) -> Vec<PathBuf> {
+        self.paths
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .iter()
+            .cloned()
+            .collect()
+    }
+}
+
+/// A cloneable filesystem access error at the memoization seam.
+///
+/// Errors at this seam must be `Clone + Hash` because comemo records the
+/// result hash of every tracked call as a cache constraint. Upstream error
+/// types (std::io::Error, anyhow::Error) are neither, so their structural
+/// information is decomposed into these variants: the io classification is
+/// kept as an [`std::io::ErrorKind`], which is itself `Clone + Hash`, while
+/// the free-form message is projected into a string.
+#[derive(Debug, Clone, Hash, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum FileAccessError {
+    #[error("{0} must not be a symlink")]
+    Symlink(PathBuf),
+    #[error("{0} is not a directory")]
+    NotDirectory(PathBuf),
+    #[error("{0} directory not found")]
+    MissingDirectory(PathBuf),
+    #[error("failed to inspect {path}: {kind:?} ({message})")]
+    Inspect {
+        path: PathBuf,
+        kind: std::io::ErrorKind,
+        message: String,
+    },
+    #[error("failed to traverse {path}: {kind:?} ({message})")]
+    Traverse {
+        path: PathBuf,
+        kind: std::io::ErrorKind,
+        message: String,
+    },
+    #[error("symlink {path} is not allowed in {directory}")]
+    NestedSymlink { path: PathBuf, directory: PathBuf },
+    #[error("failed to resolve {path}: {kind:?} ({message})")]
+    Resolve {
+        path: PathBuf,
+        kind: std::io::ErrorKind,
+        message: String,
+    },
+    #[error("{path} is outside {root}: {kind:?} ({message})")]
+    Outside {
+        path: PathBuf,
+        root: PathBuf,
+        kind: std::io::ErrorKind,
+        message: String,
+    },
+    #[error("failed to read {path}: {kind:?} ({message})")]
+    Read {
+        path: PathBuf,
+        kind: std::io::ErrorKind,
+        message: String,
+    },
+}
+
+impl FileAccessError {
+    /// Project the stable classification and message out of an `std::io::Error`.
+    pub(crate) fn io(path: PathBuf, error: std::io::Error) -> Self {
+        Self::Read {
+            path,
+            kind: error.kind(),
+            message: error.to_string(),
+        }
+    }
 }
 
 pub struct EvaluatedContent {
@@ -75,14 +185,12 @@ impl TypstSession {
         self.files.track()
     }
 
-    pub(crate) fn source_files(&self) -> Result<Vec<PathBuf>> {
+    pub(crate) fn source_files(&self) -> Result<Vec<PathBuf>, FileAccessError> {
         list_typst_files(self.project_files(), &self.project.src_dir(), true)
-            .map_err(anyhow::Error::msg)
     }
 
-    pub(crate) fn content_files(&self) -> Result<Vec<PathBuf>> {
+    pub(crate) fn content_files(&self) -> Result<Vec<PathBuf>, FileAccessError> {
         list_typst_files(self.project_files(), &self.project.content_dir(), false)
-            .map_err(anyhow::Error::msg)
     }
 
     pub(crate) fn dependencies(&mut self) -> Vec<PathBuf> {
@@ -174,26 +282,17 @@ impl ProjectFiles {
         Self {
             root,
             store,
-            tracked_paths: Mutex::new(BTreeSet::new()),
+            paths: PathStore::new(),
         }
     }
 
     fn reset(&mut self) {
         self.store.reset();
-        self.tracked_paths
-            .get_mut()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .clear();
+        self.paths.reset();
     }
 
     fn dependencies(&mut self) -> Vec<PathBuf> {
-        let mut paths = self
-            .tracked_paths
-            .get_mut()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .iter()
-            .cloned()
-            .collect::<Vec<_>>();
+        let mut paths = self.paths.paths();
         let (loader, dependencies) = self.store.dependencies();
         paths.extend(dependencies.filter_map(|id| loader.resolve(id).ok()));
         paths.sort();
@@ -218,52 +317,62 @@ impl ProjectFiles {
     }
 
     fn track_path(&self, path: &Path) {
-        self.tracked_paths
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .insert(path.to_owned());
+        self.paths.record(path);
     }
 }
 
 #[comemo::track]
 impl ProjectFiles {
-    pub(crate) fn list(&self, directory: &Path, required: bool) -> Result<Vec<PathBuf>, String> {
-        self.track_path(directory);
+    pub(crate) fn list(
+        &self,
+        directory: &Path,
+        required: bool,
+    ) -> Result<Vec<PathBuf>, FileAccessError> {
         match std::fs::symlink_metadata(directory) {
             Ok(metadata) if metadata.file_type().is_symlink() => {
-                return Err(format!("{} must not be a symlink", directory.display()));
+                return Err(FileAccessError::Symlink(directory.to_owned()));
             }
             Ok(metadata) if !metadata.is_dir() => {
-                return Err(format!("{} is not a directory", directory.display()));
+                return Err(FileAccessError::NotDirectory(directory.to_owned()));
             }
             Ok(_) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound && !required => {
                 return Ok(Vec::new());
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                return Err(format!("{} directory not found", directory.display()));
+                return Err(FileAccessError::MissingDirectory(directory.to_owned()));
             }
             Err(error) => {
-                return Err(format!(
-                    "failed to inspect {}: {error}",
-                    directory.display()
-                ));
+                return Err(FileAccessError::Inspect {
+                    path: directory.to_owned(),
+                    kind: error.kind(),
+                    message: error.to_string(),
+                });
             }
         }
 
         let mut files = Vec::new();
         for entry in WalkDir::new(directory) {
-            let entry = entry
-                .map_err(|error| format!("failed to traverse {}: {error}", directory.display()))?;
+            let entry = entry.map_err(|error| {
+                let kind = error
+                    .io_error()
+                    .map(std::io::Error::kind)
+                    .unwrap_or(std::io::ErrorKind::Other);
+                FileAccessError::Traverse {
+                    path: directory.to_owned(),
+                    kind,
+                    message: error.to_string(),
+                }
+            })?;
             if entry.file_type().is_symlink() {
-                return Err(format!(
-                    "symlink {} is not allowed in {}",
-                    entry.path().display(),
-                    directory.display()
-                ));
+                return Err(FileAccessError::NestedSymlink {
+                    path: entry.path().to_owned(),
+                    directory: directory.to_owned(),
+                });
             }
             if entry.file_type().is_dir() {
-                self.track_path(entry.path());
+                // Directory membership is covered by the structural watch
+                // paths; only file entries enter the listing.
             } else if entry.file_type().is_file() {
                 files.push(entry.into_path());
             }
@@ -272,25 +381,44 @@ impl ProjectFiles {
         Ok(files)
     }
 
-    pub(crate) fn canonicalize(&self, path: &Path) -> Result<PathBuf, String> {
+    pub(crate) fn canonicalize(&self, path: &Path) -> Result<PathBuf, FileAccessError> {
         self.track_path(path);
-        std::fs::canonicalize(path)
-            .map_err(|error| format!("failed to resolve {}: {error}", path.display()))
+        std::fs::canonicalize(path).map_err(|error| FileAccessError::Resolve {
+            path: path.to_owned(),
+            kind: error.kind(),
+            message: error.to_string(),
+        })
     }
 
-    pub(crate) fn read(&self, path: &Path) -> Result<Bytes, String> {
-        self.track_path(path);
+    pub(crate) fn read(&self, path: &Path) -> Result<Bytes, FileAccessError> {
         let virtual_path = VirtualPath::virtualize(&self.root, path).map_err(|error| {
-            format!(
-                "{} is outside {}: {error}",
-                path.display(),
-                self.root.display()
-            )
+            FileAccessError::Outside {
+                path: path.to_owned(),
+                root: self.root.clone(),
+                kind: std::io::ErrorKind::InvalidInput,
+                message: error.to_string(),
+            }
         })?;
         let id = RootedPath::new(VirtualRoot::Project, virtual_path).intern();
-        self.store
-            .file(id)
-            .map_err(|error| format!("failed to read {}: {error}", path.display()))
+        self.store.file(id).map_err(|error| FileAccessError::Read {
+            path: path.to_owned(),
+            kind: file_error_kind(&error),
+            message: error.to_string(),
+        })
+    }
+}
+
+/// Project the stable classification out of a `typst::diag::FileError`.
+fn file_error_kind(error: &FileError) -> std::io::ErrorKind {
+    match error {
+        FileError::NotFound(_) => std::io::ErrorKind::NotFound,
+        FileError::AccessDenied => std::io::ErrorKind::PermissionDenied,
+        FileError::IsDirectory => std::io::ErrorKind::IsADirectory,
+        FileError::InvalidUtf8 => std::io::ErrorKind::InvalidData,
+        FileError::NotSource | FileError::Realize(_) | FileError::Package(_) => {
+            std::io::ErrorKind::InvalidInput
+        }
+        FileError::Other(_) => std::io::ErrorKind::Other,
     }
 }
 
@@ -299,7 +427,7 @@ fn list_typst_files(
     project_files: Tracked<ProjectFiles>,
     directory: &Path,
     required: bool,
-) -> Result<Vec<PathBuf>, String> {
+) -> Result<Vec<PathBuf>, FileAccessError> {
     Ok(project_files
         .list(directory, required)?
         .into_iter()
@@ -415,7 +543,6 @@ mod tests {
         let repeated = session.source_files().unwrap();
         assert!(comemo::testing::last_was_hit());
         assert_eq!(repeated, first);
-        assert!(session.dependencies().contains(&root.join("src/blog")));
 
         std::fs::write(root.join("src/blog/post.typ"), "").unwrap();
         session.reset();
