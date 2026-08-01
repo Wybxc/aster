@@ -142,7 +142,6 @@ impl TypstSession {
             })?;
         let main = RootedPath::new(VirtualRoot::Project, virtual_path).intern();
         Ok(CompileWorld {
-            project_root: self.files.root(),
             library,
             fonts: &self.fonts,
             files: &self.files,
@@ -196,7 +195,6 @@ fn format_warning(world: &impl DiagnosticWorld, warning: &SourceDiagnostic) -> S
 }
 
 struct CompileWorld<'a> {
-    project_root: &'a Path,
     library: &'a LazyHash<Library>,
     fonts: &'a FontStore,
     files: &'a ProjectFiles,
@@ -235,16 +233,12 @@ impl World for CompileWorld<'_> {
 
 impl DiagnosticWorld for CompileWorld<'_> {
     fn name(&self, id: FileId) -> String {
-        self.files
-            .resolve(id)
-            .ok()
-            .map(|path| {
-                path.strip_prefix(self.project_root)
-                    .unwrap_or(&path)
-                    .display()
-                    .to_string()
-            })
-            .unwrap_or_else(|| id.vpath().get_with_slash().to_string())
+        match id.root() {
+            VirtualRoot::Project => id.vpath().get_without_slash().into(),
+            VirtualRoot::Package(package) => {
+                format!("{package}{}", id.vpath().get_with_slash())
+            }
+        }
     }
 }
 

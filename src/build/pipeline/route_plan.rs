@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail, ensure};
 use typst::Library;
 use typst::foundations::Dict;
+use typst::syntax::VirtualPath;
 use typst::utils::LazyHash;
 
 use crate::build::world::TypstSession;
@@ -30,13 +31,14 @@ impl RoutePlan {
     ) -> Result<Self> {
         let project = session.project();
         let templates = session.source_files()?;
+        let source_root = project.src_dir();
         let mut jobs = Vec::new();
         let mut warnings = Vec::new();
 
         for template in templates {
-            let relative = template
-                .strip_prefix(project.src_dir())
+            let virtual_path = VirtualPath::virtualize(&source_root, &template)
                 .context("source template is outside src/")?;
+            let relative = Path::new(virtual_path.get_without_slash());
             let pattern = route::parse_template(relative)
                 .with_context(|| format!("invalid route template {}", relative.display()))?;
             if pattern.is_dynamic() {

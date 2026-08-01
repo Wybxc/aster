@@ -30,14 +30,7 @@ pub fn run(destination: PathBuf) -> Result<InitOutcome> {
 }
 
 fn absolute(path: PathBuf) -> Result<PathBuf> {
-    let path = if path.is_absolute() {
-        path
-    } else {
-        std::env::current_dir()
-            .context("failed to get current directory")?
-            .join(path)
-    };
-    Ok(path.components().collect())
+    std::path::absolute(path).context("failed to make destination path absolute")
 }
 
 fn prepare_destination(destination: &Path) -> Result<()> {

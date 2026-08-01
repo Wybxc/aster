@@ -137,7 +137,6 @@ dependencies = [
  "data-url 0.3.2",
  "include_dir",
  "lightningcss",
- "pathdiff",
  "seahash",
  "syntect",
  "tempfile",

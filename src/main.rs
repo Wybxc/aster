@@ -65,16 +65,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
 
 fn resolve_project(project_dir: Option<std::path::PathBuf>) -> Result<Project> {
     match project_dir {
-        Some(dir) => {
-            let dir = if dir.is_absolute() {
-                dir
-            } else {
-                std::env::current_dir()
-                    .context("failed to get current directory")?
-                    .join(dir)
-            };
-            Project::open(dir)
-        }
+        Some(dir) => Project::open(dir),
         None => {
             let cwd = std::env::current_dir().context("failed to get current directory")?;
             Project::find(&cwd).context("no aster.toml found in current or parent directories")

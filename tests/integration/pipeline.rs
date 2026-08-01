@@ -1,4 +1,4 @@
-use aster::BuildSession;
+use aster::{BuildSession, Project};
 
 use crate::common::{build, install_content_adapter, project};
 
@@ -145,5 +145,36 @@ fn build_follows_a_source_directory_symlink_outside_the_project() {
         std::fs::read_to_string(project.output_dir().join("index.html"))
             .unwrap()
             .contains("External")
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn build_preserves_a_symlinked_project_root() {
+    use std::os::unix::fs::symlink;
+
+    let temp = tempfile::tempdir().unwrap();
+    let actual = temp.path().join("actual");
+    let linked = temp.path().join("linked");
+    std::fs::create_dir_all(actual.join("src")).unwrap();
+    std::fs::write(actual.join("aster.toml"), "").unwrap();
+    std::fs::write(
+        actual.join("src/index.typ"),
+        "#html.elem(\"p\")[Linked root]",
+    )
+    .unwrap();
+    symlink(&actual, &linked).unwrap();
+
+    let project = Project::open(&linked).unwrap();
+    let outcome = aster::build(project.clone()).unwrap();
+
+    assert_eq!(
+        outcome.outputs,
+        vec![project.output_dir().join("index.html")]
+    );
+    assert!(
+        std::fs::read_to_string(project.output_dir().join("index.html"))
+            .unwrap()
+            .contains("Linked root")
     );
 }

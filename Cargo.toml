@@ -10,7 +10,6 @@ comemo = "0.5"
 data-url = "0.3"
 include_dir = "0.7"
 lightningcss = "=1.0.0-alpha.72"
-pathdiff = "0.2"
 seahash = "4.1.0"
 syntect = { version = "5.3", features = ["default-syntaxes", "default-themes", "dump-load"] }
 termcolor = "1"

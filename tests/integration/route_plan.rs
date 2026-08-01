@@ -1,6 +1,7 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use aster::{BuildSession, Project};
+use typst::syntax::VirtualPath;
 
 fn fixture(files: &[&str]) -> (tempfile::TempDir, Project) {
     let temp = tempfile::tempdir().unwrap();
@@ -33,7 +34,10 @@ fn route_plan_is_sorted_and_probes_dynamic_templates() {
     let outputs = outcome
         .outputs
         .iter()
-        .map(|path| path.strip_prefix(project.output_dir()).unwrap())
+        .map(|path| {
+            let path = VirtualPath::virtualize(&project.output_dir(), path).unwrap();
+            PathBuf::from(path.get_without_slash())
+        })
         .collect::<Vec<_>>();
 
     assert_eq!(

@@ -1,9 +1,10 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
+use typst::syntax::VirtualPath;
 use walkdir::WalkDir;
 
-/// A discovered Aster project with one normalized layout policy.
+/// A discovered Aster project rooted at an absolute lexical path.
 #[derive(Clone)]
 pub struct Project {
     root: PathBuf,
@@ -12,11 +13,12 @@ pub struct Project {
 impl Project {
     /// Find the nearest project at or above `dir`.
     pub fn find(dir: &Path) -> Option<Self> {
-        let mut current = Some(dir);
+        let dir = std::path::absolute(dir).ok()?;
+        let mut current = Some(dir.as_path());
         while let Some(path) = current {
             if path.join("aster.toml").is_file() {
                 return Some(Self {
-                    root: normalize(path),
+                    root: path.to_owned(),
                 });
             }
             current = path.parent();
@@ -26,15 +28,15 @@ impl Project {
 
     /// Open a directory containing an `aster.toml` project manifest.
     pub fn open(root: impl Into<PathBuf>) -> Result<Self> {
-        let root = root.into();
-        let root = normalize(&root);
+        let root =
+            std::path::absolute(root.into()).context("failed to make project root absolute")?;
         if !root.join("aster.toml").is_file() {
             bail!("no aster.toml found in {}", root.display());
         }
         Ok(Self { root })
     }
 
-    /// Return the normalized project root.
+    /// Return the absolute project root without resolving symbolic links.
     pub fn root(&self) -> &Path {
         &self.root
     }
@@ -67,7 +69,7 @@ impl Project {
         paths.extend(
             dependencies
                 .iter()
-                .filter(|path| !path.starts_with(&output))
+                .filter(|path| VirtualPath::virtualize(&output, path).is_err())
                 .cloned(),
         );
         paths.sort();
@@ -98,15 +100,4 @@ impl Project {
         paths.dedup();
         paths
     }
-}
-
-fn normalize(path: &Path) -> PathBuf {
-    let absolute = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        std::env::current_dir()
-            .map(|current| current.join(path))
-            .unwrap_or_else(|_| path.to_path_buf())
-    };
-    std::fs::canonicalize(&absolute).unwrap_or(absolute)
 }

@@ -20,8 +20,8 @@ fn bundles_and_tracks_entry_and_transitive_imports() {
     assert!(first_css.contains(".theme"));
     assert!(first_css.contains(".page"));
     let dependencies = driver.dependencies();
-    assert!(dependencies.contains(&std::fs::canonicalize(&entry).unwrap()));
-    assert!(dependencies.contains(&std::fs::canonicalize(&dependency).unwrap()));
+    assert!(dependencies.contains(&entry));
+    assert!(dependencies.contains(&dependency));
 
     build(&mut driver);
     assert_eq!(
@@ -52,11 +52,9 @@ fn rechecks_missing_imports() {
     write_css_page(root);
     std::fs::write(root.join("src/style.css"), "@import \"missing.css\";").unwrap();
     let missing = root.join("src/missing.css");
-    let tracked_missing = std::fs::canonicalize(root.join("src"))
-        .unwrap()
-        .join("missing.css");
 
     let project = project(root);
+    let tracked_missing = project.src_dir().join("missing.css");
     let mut driver = BuildSession::new(project.clone());
     assert!(driver.build().is_err());
     assert!(driver.build().is_err());

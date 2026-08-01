@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, ensure};
 use typst::syntax::VirtualPath;
@@ -62,15 +62,16 @@ impl OutputPublication {
 
     pub fn page<'a>(
         &'a mut self,
-        template: &'a Path,
+        template: &Path,
         output: &'a RoutePath,
     ) -> Result<PagePublication<'a>> {
-        ensure!(
-            template.starts_with(&self.src_dir),
-            "page template {} is outside {}",
-            template.display(),
-            self.src_dir.display()
-        );
+        let template = VirtualPath::virtualize(&self.src_dir, template).with_context(|| {
+            format!(
+                "page template {} is outside {}",
+                template.display(),
+                self.src_dir.display()
+            )
+        })?;
 
         Ok(PagePublication {
             publication: self,
@@ -115,7 +116,7 @@ impl OutputPublication {
 /// Per-page access to output publication policy.
 pub struct PagePublication<'a> {
     publication: &'a mut OutputPublication,
-    template: &'a Path,
+    template: VirtualPath,
     output: &'a RoutePath,
 }
 
@@ -127,19 +128,19 @@ impl PagePublication<'_> {
             "source reference must be relative"
         );
 
+        let reference = reference
+            .to_str()
+            .context("source reference is not valid UTF-8")?;
         let template_dir = self
             .template
             .parent()
             .context("page template has no parent")?;
-        let candidate = template_dir.join(reference);
-        let virtual_path = VirtualPath::virtualize(&self.publication.src_dir, &candidate)
-            .with_context(|| {
-                format!(
-                    "source reference {} escapes {}",
-                    reference.display(),
-                    self.publication.src_dir.display()
-                )
-            })?;
+        let virtual_path = template_dir.join(reference).with_context(|| {
+            format!(
+                "source reference {reference} escapes {}",
+                self.publication.src_dir.display()
+            )
+        })?;
         virtual_path
             .realize(&self.publication.src_dir)
             .context("failed to realize source reference")
@@ -157,14 +158,10 @@ impl PagePublication<'_> {
 
     /// Return a browser-facing URL from this page to an existing generated asset.
     pub fn reference(&self, asset: &AssetPath) -> Result<String> {
-        let page_dir = self
-            .output
-            .as_path()
-            .parent()
-            .unwrap_or_else(|| Path::new(""));
-        let relative = pathdiff::diff_paths(asset.0.as_path(), page_dir)
-            .context("failed to compute generated asset reference")?;
-        Ok(path_to_url(&relative))
+        let asset = virtualize_route(&asset.0)?;
+        let output = virtualize_route(self.output)?;
+        let page_dir = output.parent().context("output page has no parent")?;
+        Ok(asset.relative_from(&page_dir).into())
     }
 
     /// Add the final serialized page to this publication.
@@ -190,16 +187,9 @@ fn valid_name_part(part: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
 }
 
-fn path_to_url(path: &Path) -> String {
-    path.components()
-        .map(|component| match component {
-            Component::ParentDir => "..".to_owned(),
-            Component::Normal(part) => part.to_string_lossy().into_owned(),
-            Component::CurDir => ".".to_owned(),
-            Component::RootDir | Component::Prefix(_) => unreachable!("relative path expected"),
-        })
-        .collect::<Vec<_>>()
-        .join("/")
+fn virtualize_route(path: &RoutePath) -> Result<VirtualPath> {
+    VirtualPath::virtualize(Path::new(""), path.as_path())
+        .context("generated output path is not a valid virtual path")
 }
 
 fn write_file(path: &Path, content: &[u8]) -> Result<()> {
@@ -239,7 +229,8 @@ mod tests {
         for entry in walkdir::WalkDir::new(root) {
             let entry = entry.unwrap();
             if entry.file_type().is_file() {
-                let relative = entry.path().strip_prefix(root).unwrap().to_owned();
+                let virtual_path = VirtualPath::virtualize(root, entry.path()).unwrap();
+                let relative = PathBuf::from(virtual_path.get_without_slash());
                 snapshot.insert(relative, std::fs::read(entry.path()).unwrap());
             }
         }

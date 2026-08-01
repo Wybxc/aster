@@ -151,20 +151,12 @@ impl ProjectFiles {
         paths
     }
 
-    pub(crate) fn root(&self) -> &Path {
-        &self.root
-    }
-
     pub(crate) fn source(&self, id: FileId) -> Result<typst::syntax::Source, FileError> {
         self.store.source(id)
     }
 
     pub(crate) fn file(&self, id: FileId) -> Result<Bytes, FileError> {
         self.store.file(id)
-    }
-
-    pub(crate) fn resolve(&self, id: FileId) -> Result<PathBuf, FileError> {
-        self.store.loader().resolve(id)
     }
 }
 

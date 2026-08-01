@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
@@ -160,9 +160,9 @@ fn load_content(session: &TypstSession) -> Result<typst::foundations::Value> {
     let mut entries = Vec::new();
 
     for path in session.content_files()? {
-        let content_relative = path
-            .strip_prefix(&content_dir)
-            .context("content path error")?;
+        let content_path =
+            VirtualPath::virtualize(&content_dir, &path).context("content path error")?;
+        let content_relative = Path::new(content_path.get_without_slash());
         let virtual_path = VirtualPath::virtualize(project.root(), &path)
             .context("content path is outside project")?;
         if content_relative.components().count() < 2 {
