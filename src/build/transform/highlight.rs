@@ -45,7 +45,7 @@ pub(super) fn process_element(element: &mut HtmlElement) -> WalkControl {
     let Some(lang) = element.get_attr("data-lang") else {
         return WalkControl::Continue;
     };
-    let raw = element.collect_text();
+    let raw = element.inner_text();
     if raw.is_empty() {
         return WalkControl::SkipChildren;
     }

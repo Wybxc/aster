@@ -20,7 +20,7 @@ pub(super) fn process_element(
     };
     if let Some((content, extension)) = try_extract(&src)? {
         let url = page.add_asset("img", extension, content)?;
-        element.update_attr("src", |value| *value = url.as_str().into());
+        element.update_attr("src", |value| *value = url);
     }
     Ok(())
 }

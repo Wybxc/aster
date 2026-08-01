@@ -8,17 +8,8 @@ use comemo::Tracked;
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 
 use crate::build::output::{AssetPath, PagePublication};
-use crate::foundation::Project;
-use crate::foundation::config::HighlightConfig;
 use crate::foundation::files::ProjectFiles;
-
-pub(crate) fn compute_highlight_css(
-    config: &HighlightConfig,
-    project: &Project,
-    project_files: Tracked<ProjectFiles>,
-) -> Result<Option<String>> {
-    highlight::compute_highlight_css(config, project, project_files)
-}
+pub use highlight::compute_highlight_css;
 
 /// Transform one compiled document and register every generated page asset.
 ///

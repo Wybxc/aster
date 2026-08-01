@@ -77,7 +77,7 @@ pub(super) fn process_element(
         .map_err(|error| anyhow::anyhow!("{error:#}"))?;
     let url = page.add_asset("css", "css", css.into_bytes())?;
 
-    element.update_attr("href", |value| *value = url.as_str().into());
+    element.update_attr("href", move |value| *value = url);
     element.update_attr("rel", |value| *value = "stylesheet".into());
     Ok(())
 }

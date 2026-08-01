@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, ensure};
+use typst::ecow::EcoString;
 use typst::syntax::VirtualPath;
 
 use crate::engine::route::RoutePath;
@@ -151,17 +152,22 @@ impl PagePublication<'_> {
     }
 
     /// Register an asset and return its browser-facing URL from this page.
-    pub fn add_asset(&mut self, kind: &str, extension: &str, content: Vec<u8>) -> Result<String> {
+    pub fn add_asset(
+        &mut self,
+        kind: &str,
+        extension: &str,
+        content: Vec<u8>,
+    ) -> Result<EcoString> {
         let asset = self.publication.add_asset(kind, extension, content)?;
         self.reference(&asset)
     }
 
     /// Return a browser-facing URL from this page to an existing generated asset.
-    pub fn reference(&self, asset: &AssetPath) -> Result<String> {
+    pub fn reference(&self, asset: &AssetPath) -> Result<EcoString> {
         let asset = virtualize_route(&asset.0)?;
         let output = virtualize_route(self.output)?;
         let page_dir = output.parent().context("output page has no parent")?;
-        Ok(asset.relative_from(&page_dir).into())
+        Ok(asset.relative_from(&page_dir))
     }
 
     /// Add the final serialized page to this publication.

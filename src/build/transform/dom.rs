@@ -20,13 +20,13 @@ pub trait HtmlElementExt {
     /// Return a clone of the value of the first attribute matching `name`.
     fn get_attr(&self, name: &str) -> Option<EcoString>;
 
-    /// Mutate every attribute whose name is `name` with `f`.
-    fn update_attr(&mut self, name: &str, f: impl Fn(&mut EcoString));
+    /// Mutate the first attribute whose name is `name` with `f`.
+    fn update_attr(&mut self, name: &str, f: impl FnOnce(&mut EcoString));
 
     /// Collect the text of all descendant `HtmlNode::Text` nodes,
     /// inserting `\n` for `<br>` elements so the result reflects
     /// multi-line content in source order.
-    fn collect_text(&self) -> String;
+    fn inner_text(&self) -> String;
 }
 
 impl HtmlElementExt for HtmlElement {
@@ -50,28 +50,50 @@ impl HtmlElementExt for HtmlElement {
             .map(|(_, v)| v.clone())
     }
 
-    fn update_attr(&mut self, name: &str, f: impl Fn(&mut EcoString)) {
+    fn update_attr(&mut self, name: &str, f: impl FnOnce(&mut EcoString)) {
         for (a, v) in self.attrs.0.make_mut().iter_mut() {
             if a.resolve().as_str() == name {
-                f(v);
+                return f(v);
             }
         }
     }
 
-    fn collect_text(&self) -> String {
-        fn collect_impl(elem: &HtmlElement, out: &mut String) {
+    fn inner_text(&self) -> String {
+        fn collect(elem: &HtmlElement, out: &mut String) {
             for child in &elem.children {
                 match child {
                     HtmlNode::Text(t, _) => out.push_str(t.as_str()),
                     HtmlNode::Element(e) if e.tag == typst_html::tag::br => out.push('\n'),
-                    HtmlNode::Element(e) => collect_impl(e, out),
+                    HtmlNode::Element(e) => collect(e, out),
                     _ => {}
                 }
             }
         }
 
         let mut out = String::new();
-        collect_impl(self, &mut out);
+        collect(self, &mut out);
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn updates_only_the_first_matching_attribute() {
+        let mut element = HtmlElement::new(typst_html::tag::link)
+            .with_attr(typst_html::attr::href, "first")
+            .with_attr(typst_html::attr::href, "second");
+
+        element.update_attr("href", |value| *value = "updated".into());
+
+        let values = element
+            .attrs
+            .0
+            .iter()
+            .map(|(_, value)| value.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(values, ["updated", "second"]);
     }
 }
