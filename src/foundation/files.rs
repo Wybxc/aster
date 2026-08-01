@@ -110,10 +110,19 @@ impl ProjectFiles {
 impl ProjectFiles {
     pub(crate) fn list(
         &self,
-        directory: &Path,
+        directory: &VirtualPath,
         required: bool,
-    ) -> Result<Vec<PathBuf>, FileAccessError> {
-        match std::fs::metadata(directory) {
+    ) -> Result<Vec<VirtualPath>, FileAccessError> {
+        let directory = directory.realize(&self.root).map_err(|error| {
+            FileAccessError::Other(
+                format!(
+                    "invalid project directory {}: {error}",
+                    directory.get_with_slash()
+                )
+                .into(),
+            )
+        })?;
+        match std::fs::metadata(&directory) {
             Ok(metadata) if !metadata.is_dir() => {
                 return Err(FileAccessError::Other(
                     format!("{} is not a directory", directory.display()).into(),
@@ -138,14 +147,14 @@ impl ProjectFiles {
         }
 
         let mut files = Vec::new();
-        for entry in WalkDir::new(directory).follow_links(true) {
+        for entry in WalkDir::new(&directory).follow_links(true) {
             let entry = entry.map_err(|error| {
                 let kind = error
                     .io_error()
                     .map(std::io::Error::kind)
                     .unwrap_or(std::io::ErrorKind::Other);
                 FileAccessError::Inspect {
-                    path: directory.into(),
+                    path: directory.as_path().into(),
                     kind,
                     message: error.to_string().into(),
                 }
@@ -154,25 +163,29 @@ impl ProjectFiles {
                 // Directory membership is covered by the structural watch
                 // paths; only file entries enter the listing.
             } else if entry.file_type().is_file() {
-                files.push(entry.into_path());
+                let path = entry.into_path();
+                let virtual_path = VirtualPath::virtualize(&self.root, &path).map_err(|error| {
+                    FileAccessError::Outside {
+                        path: path.into(),
+                        root: self.root.clone().into(),
+                        kind: std::io::ErrorKind::InvalidInput,
+                        message: error.to_string().into(),
+                    }
+                })?;
+                files.push(virtual_path);
             }
         }
-        files.sort();
+        files.sort_by(|left, right| left.get_with_slash().cmp(right.get_with_slash()));
         Ok(files)
     }
 
-    pub(crate) fn read(&self, path: &Path) -> Result<Bytes, FileAccessError> {
-        let virtual_path = VirtualPath::virtualize(&self.root, path).map_err(|error| {
-            FileAccessError::Outside {
-                path: path.into(),
-                root: self.root.clone().into(),
-                kind: std::io::ErrorKind::InvalidInput,
-                message: error.to_string().into(),
-            }
-        })?;
-        let id = RootedPath::new(VirtualRoot::Project, virtual_path).intern();
+    pub(crate) fn read(&self, path: &VirtualPath) -> Result<Bytes, FileAccessError> {
+        let id = RootedPath::new(VirtualRoot::Project, path.clone()).intern();
         self.store.file(id).map_err(|error| FileAccessError::Io {
-            path: path.into(),
+            path: path
+                .realize(&self.root)
+                .unwrap_or_else(|_| PathBuf::from(path.get_with_slash()))
+                .into(),
             kind: file_error_kind(&error),
             message: error.to_string().into(),
         })
@@ -196,9 +209,9 @@ fn file_error_kind(error: &FileError) -> std::io::ErrorKind {
 #[comemo::memoize]
 pub(crate) fn list_typst_files(
     project_files: Tracked<ProjectFiles>,
-    directory: &Path,
+    directory: &VirtualPath,
     required: bool,
-) -> Result<Vec<PathBuf>, FileAccessError> {
+) -> Result<Vec<VirtualPath>, FileAccessError> {
     Ok(project_files
         .list(directory, required)?
         .into_iter()
@@ -226,10 +239,12 @@ mod tests {
 
         let project = Project::open(&project_root).unwrap();
         let files = ProjectFiles::new(&project);
-        let source = project.src_dir().join("index.typ");
+        let source = VirtualPath::new("/src/index.typ").unwrap();
 
         assert_eq!(
-            files.list(&project.src_dir(), true).unwrap(),
+            files
+                .list(&VirtualPath::new("/src").unwrap(), true)
+                .unwrap(),
             vec![source.clone()]
         );
         assert_eq!(files.read(&source).unwrap().as_slice(), b"external");

@@ -1,7 +1,7 @@
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use comemo::{Track, Tracked};
 use termcolor::NoColor;
 use typst::diag::{FileError, SourceDiagnostic, SourceResult, Warned};
@@ -65,12 +65,20 @@ impl TypstSession {
         self.files.track()
     }
 
-    pub(crate) fn source_files(&self) -> Result<Vec<PathBuf>, FileAccessError> {
-        list_typst_files(self.project_files(), &self.project.src_dir(), true)
+    pub(crate) fn source_files(&self) -> Result<Vec<VirtualPath>, FileAccessError> {
+        list_typst_files(
+            self.project_files(),
+            &VirtualPath::new("/src").expect("src is a valid project path"),
+            true,
+        )
     }
 
-    pub(crate) fn content_files(&self) -> Result<Vec<PathBuf>, FileAccessError> {
-        list_typst_files(self.project_files(), &self.project.content_dir(), false)
+    pub(crate) fn content_files(&self) -> Result<Vec<VirtualPath>, FileAccessError> {
+        list_typst_files(
+            self.project_files(),
+            &VirtualPath::new("/content").expect("content is a valid project path"),
+            false,
+        )
     }
 
     pub(crate) fn dependencies(&mut self) -> Vec<PathBuf> {
@@ -86,8 +94,12 @@ impl TypstSession {
         )
     }
 
-    pub fn evaluate(&self, entry: &Path, library: &LazyHash<Library>) -> Result<EvaluatedContent> {
-        let world = self.world(entry, library)?;
+    pub fn evaluate(
+        &self,
+        entry: &VirtualPath,
+        library: &LazyHash<Library>,
+    ) -> Result<EvaluatedContent> {
+        let world = self.world(entry, library);
         let source = world
             .source(world.main())
             .map_err(|error| anyhow::anyhow!("failed to load source: {error}"))?;
@@ -113,8 +125,12 @@ impl TypstSession {
         })
     }
 
-    pub fn compile_page(&self, entry: &Path, library: &LazyHash<Library>) -> Result<CompiledPage> {
-        let world = self.world(entry, library)?;
+    pub fn compile_page(
+        &self,
+        entry: &VirtualPath,
+        library: &LazyHash<Library>,
+    ) -> Result<CompiledPage> {
+        let world = self.world(entry, library);
         let warned = compile_html((&world as &dyn World).track());
         let document = warned
             .output
@@ -129,24 +145,16 @@ impl TypstSession {
 
     fn world<'a>(
         &'a self,
-        entry: &Path,
+        entry: &VirtualPath,
         library: &'a LazyHash<Library>,
-    ) -> Result<CompileWorld<'a>> {
-        let virtual_path =
-            VirtualPath::virtualize(self.project.root(), entry).with_context(|| {
-                format!(
-                    "entry {} must be inside project {}",
-                    entry.display(),
-                    self.project.root().display()
-                )
-            })?;
-        let main = RootedPath::new(VirtualRoot::Project, virtual_path).intern();
-        Ok(CompileWorld {
+    ) -> CompileWorld<'a> {
+        let main = RootedPath::new(VirtualRoot::Project, entry.clone()).intern();
+        CompileWorld {
             library,
             fonts: &self.fonts,
             files: &self.files,
             main,
-        })
+        }
     }
 }
 
@@ -254,9 +262,13 @@ mod tests {
         std::fs::create_dir_all(root.join("src")).unwrap();
         std::fs::write(root.join("aster.toml"), "").unwrap();
         let project = Project::open(root.to_owned()).unwrap();
-        let entry = project.src_dir().join("index.typ");
+        let entry = VirtualPath::new("/src/index.typ").unwrap();
         let dependency = project.src_dir().join("data.typ");
-        std::fs::write(&entry, "#import \"data.typ\": marker\n#let value = marker").unwrap();
+        std::fs::write(
+            entry.realize(project.root()).unwrap(),
+            "#import \"data.typ\": marker\n#let value = marker",
+        )
+        .unwrap();
         std::fs::write(&dependency, format!("#let marker = \"first-{marker}\"")).unwrap();
 
         let mut session = TypstSession::new(project);

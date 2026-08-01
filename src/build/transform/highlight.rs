@@ -8,10 +8,9 @@ use syntect::easy::ScopeRegionIterator;
 use syntect::highlighting::{Highlighter, Theme, ThemeSet};
 use syntect::parsing::{ParseState, Scope, ScopeStack, SyntaxSet};
 use typst::ecow::{EcoString, EcoVec, eco_format, eco_vec};
-use typst::syntax::{LinkedNode, Span, SyntaxNode, parse_code, parse_math};
+use typst::syntax::{LinkedNode, Span, SyntaxNode, VirtualPath, parse_code, parse_math};
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 
-use crate::foundation::Project;
 use crate::foundation::config::HighlightConfig;
 use crate::foundation::files::{FileAccessError, ProjectFiles};
 
@@ -23,10 +22,12 @@ use crate::build::transform::dom::HtmlElementExt;
 enum ThemeError {
     #[error("failed to load theme from {path}: {inner}")]
     Load {
-        path: Arc<Path>,
+        path: EcoString,
         #[source]
         inner: Arc<anyhow::Error>,
     },
+    #[error("invalid theme path {path}: {message}")]
+    InvalidPath { path: EcoString, message: EcoString },
     #[error(transparent)]
     File(#[from] FileAccessError),
 }
@@ -223,21 +224,29 @@ fn walk_typst_node<'a>(
 // Theme resolution for CSS variable generation
 // ---------------------------------------------------------------------------
 
-/// Load a syntect theme by built-in name or file path (relative to `project_root`).
+/// Load a syntect theme by built-in name or project-root-relative virtual path.
 fn load_theme(
     name_or_path: &str,
-    project_root: &Path,
     project_files: Tracked<ProjectFiles>,
 ) -> std::result::Result<Theme, ThemeError> {
     if let Some(theme) = THEMES.themes.get(name_or_path) {
         return Ok(theme.clone());
     }
 
-    let path = project_root.join(name_or_path);
+    if Path::new(name_or_path).is_absolute() {
+        return Err(ThemeError::InvalidPath {
+            path: name_or_path.into(),
+            message: "theme path must be relative to the project root".into(),
+        });
+    }
+    let path = VirtualPath::new(name_or_path).map_err(|error| ThemeError::InvalidPath {
+        path: name_or_path.into(),
+        message: error.to_string().into(),
+    })?;
     let bytes = project_files.read(&path)?;
     let mut reader = std::io::Cursor::new(bytes);
     let theme = ThemeSet::load_from_reader(&mut reader).map_err(|error| ThemeError::Load {
-        path: path.into(),
+        path: path.get_with_slash().into(),
         inner: Arc::new(anyhow::Error::new(error)),
     })?;
     Ok(theme)
@@ -249,27 +258,20 @@ fn load_theme(
 /// are owned by the output publication module.
 pub fn compute_highlight_css(
     config: &HighlightConfig,
-    project: &Project,
     project_files: Tracked<ProjectFiles>,
 ) -> Result<Option<String>> {
-    compute_highlight_css_impl(
-        &config.themes.light,
-        &config.themes.dark,
-        project.root(),
-        project_files,
-    )
-    .map_err(anyhow::Error::msg)
+    compute_highlight_css_impl(&config.themes.light, &config.themes.dark, project_files)
+        .map_err(anyhow::Error::msg)
 }
 
 #[comemo::memoize]
 fn compute_highlight_css_impl(
     light_theme: &str,
     dark_theme: &str,
-    project_root: &Path,
     project_files: Tracked<ProjectFiles>,
 ) -> std::result::Result<Option<String>, ThemeError> {
-    let light = load_theme(light_theme, project_root, project_files)?;
-    let dark = load_theme(dark_theme, project_root, project_files)?;
+    let light = load_theme(light_theme, project_files)?;
+    let dark = load_theme(dark_theme, project_files)?;
     let light_h = Highlighter::new(&light);
     let dark_h = Highlighter::new(&dark);
 

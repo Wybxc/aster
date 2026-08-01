@@ -70,7 +70,7 @@ fn rechecks_missing_imports() {
 }
 
 #[test]
-fn rejects_transitive_import_outside_source_root() {
+fn allows_transitive_import_outside_source_directory() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
     std::fs::create_dir_all(root.join("src")).unwrap();
@@ -79,17 +79,33 @@ fn rejects_transitive_import_outside_source_root() {
     std::fs::write(root.join("secret.css"), ".secret { color: red; }").unwrap();
 
     let project = project(root);
-    let error = BuildSession::new(project.clone())
+    let mut session = BuildSession::new(project.clone());
+    build(&mut session);
+
+    assert!(generated_asset(&project, "css.").1.contains(".secret"));
+    assert!(session.dependencies().contains(&root.join("secret.css")));
+}
+
+#[test]
+fn rejects_transitive_import_outside_project_root() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join("src")).unwrap();
+    write_css_page(root);
+    std::fs::write(root.join("src/style.css"), "@import \"../../secret.css\";").unwrap();
+
+    let project = project(root);
+    let error = BuildSession::new(project)
         .build()
         .err()
         .expect("escaping import must fail");
 
-    assert!(format!("{error:#}").contains("escapes"));
+    assert!(format!("{error:#}").contains("escapes project root"));
 }
 
 #[cfg(unix)]
 #[test]
-fn allows_symlinked_css_outside_source_root() {
+fn allows_symlinked_css_outside_project_root() {
     use std::os::unix::fs::symlink;
 
     let temp = tempfile::tempdir().unwrap();

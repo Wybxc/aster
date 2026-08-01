@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{Context, Result, bail, ensure};
 use typst::Library;
@@ -17,7 +17,7 @@ pub(super) struct RoutePlan {
 }
 
 pub(super) struct PlannedRoute {
-    pub template: PathBuf,
+    pub template: VirtualPath,
     pub output: RoutePath,
     pub params: ParamSet,
 }
@@ -29,16 +29,14 @@ impl RoutePlan {
         base_inputs: &Dict,
         base_library: &LazyHash<Library>,
     ) -> Result<Self> {
-        let project = session.project();
         let templates = session.source_files()?;
-        let source_root = project.src_dir();
         let mut jobs = Vec::new();
         let mut warnings = Vec::new();
 
         for template in templates {
-            let virtual_path = VirtualPath::virtualize(&source_root, &template)
-                .context("source template is outside src/")?;
-            let relative = Path::new(virtual_path.get_without_slash());
+            let relative = Path::new(template.get_without_slash())
+                .strip_prefix("src")
+                .context("source template is outside /src")?;
             let pattern = route::parse_template(relative)
                 .with_context(|| format!("invalid route template {}", relative.display()))?;
             if pattern.is_dynamic() {
@@ -73,9 +71,11 @@ impl RoutePlan {
         }
 
         jobs.sort_by(|left, right| {
-            left.output
-                .cmp(&right.output)
-                .then_with(|| left.template.cmp(&right.template))
+            left.output.cmp(&right.output).then_with(|| {
+                left.template
+                    .get_with_slash()
+                    .cmp(right.template.get_with_slash())
+            })
         });
         for (index, left) in jobs.iter().enumerate() {
             for right in &jobs[index + 1..] {
@@ -84,8 +84,8 @@ impl RoutePlan {
                 if output_paths_collide(&left_key, &right_key) {
                     bail!(
                         "templates {} and {} generate conflicting outputs {} and {}",
-                        left.template.display(),
-                        right.template.display(),
+                        left.template.get_with_slash(),
+                        right.template.get_with_slash(),
                         left.output.as_path().display(),
                         right.output.as_path().display()
                     );

@@ -83,18 +83,15 @@ fn build_once(session: &TypstSession, config: AsterConfig) -> Result<BuildOutcom
     let mut warnings = Vec::new();
     let mut publication = OutputPublication::new(&project);
 
-    let highlight_css = match transform::compute_highlight_css(
-        &config.highlight,
-        &project,
-        session.project_files(),
-    ) {
-        Ok(Some(css)) => Some(publication.add_asset("hl", "css", css.into_bytes())?),
-        Ok(None) => None,
-        Err(error) => {
-            warnings.push(format!("failed to resolve highlight CSS: {error:#}"));
-            None
-        }
-    };
+    let highlight_css =
+        match transform::compute_highlight_css(&config.highlight, session.project_files()) {
+            Ok(Some(css)) => Some(publication.add_asset("hl", "css", css.into_bytes())?),
+            Ok(None) => None,
+            Err(error) => {
+                warnings.push(format!("failed to resolve highlight CSS: {error:#}"));
+                None
+            }
+        };
 
     let protocol = load_content(session).context("failed to load content collections")?;
     let base_inputs = content::install(config.dict, protocol)?;
@@ -132,7 +129,7 @@ fn build_once(session: &TypstSession, config: AsterConfig) -> Result<BuildOutcom
 fn render_page(
     session: &TypstSession,
     publication: &mut OutputPublication,
-    template: &std::path::Path,
+    template: &VirtualPath,
     output: &RoutePath,
     library: &LazyHash<Library>,
     highlight_css: Option<&AssetPath>,
@@ -142,7 +139,7 @@ fn render_page(
     warnings.extend(compiled.warnings);
 
     let mut document = compiled.document;
-    let mut page = publication.page(template, output)?;
+    let mut page = publication.page(template, output);
     transform::process_document(
         &mut document,
         &mut page,
@@ -155,20 +152,16 @@ fn render_page(
 }
 
 fn load_content(session: &TypstSession) -> Result<typst::foundations::Value> {
-    let project = session.project();
-    let content_dir = project.content_dir();
     let mut entries = Vec::new();
 
     for path in session.content_files()? {
-        let content_path =
-            VirtualPath::virtualize(&content_dir, &path).context("content path error")?;
-        let content_relative = Path::new(content_path.get_without_slash());
-        let virtual_path = VirtualPath::virtualize(project.root(), &path)
-            .context("content path is outside project")?;
+        let content_relative = Path::new(path.get_without_slash())
+            .strip_prefix("content")
+            .context("content path is outside /content")?;
         if content_relative.components().count() < 2 {
             bail!(
                 "entry {} is not inside a collection; expected content/<collection>/.../<id>.typ",
-                path.display()
+                path.get_with_slash()
             );
         }
 
@@ -189,7 +182,7 @@ fn load_content(session: &TypstSession) -> Result<typst::foundations::Value> {
         entries.push(ContentEntry {
             collection,
             id,
-            source: RootedPath::new(VirtualRoot::Project, virtual_path),
+            source: RootedPath::new(VirtualRoot::Project, path),
         });
     }
 

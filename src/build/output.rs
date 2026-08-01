@@ -17,8 +17,32 @@ fn content_hash(data: &[u8]) -> String {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct AssetPath(RoutePath);
 
+/// The publication-layer result returned to the build pipeline.
+///
+/// Publication writes both pages and generated assets, but only page paths are
+/// part of the build outcome. Keeping that distinction here prevents the
+/// pipeline from depending on the publication's internal file representation.
 pub(crate) struct PublishedOutput {
+    /// Published page paths in deterministic route order; generated assets are omitted.
     pub pages: Vec<PathBuf>,
+}
+
+#[derive(Eq, PartialEq)]
+enum OutputFile {
+    Page(Vec<u8>),
+    Asset(Vec<u8>),
+}
+
+impl OutputFile {
+    fn content(&self) -> &[u8] {
+        match self {
+            Self::Page(content) | Self::Asset(content) => content,
+        }
+    }
+
+    fn is_page(&self) -> bool {
+        matches!(self, Self::Page(_))
+    }
 }
 
 /// Collects an entire successful build before replacing `dist/`.
@@ -26,19 +50,17 @@ pub(crate) struct PublishedOutput {
 /// Asset identity, browser references, output confinement, stale-file removal,
 /// and filesystem publication all live behind this module's interface.
 pub(crate) struct OutputPublication {
-    src_dir: PathBuf,
+    project_root: PathBuf,
     output_dir: PathBuf,
-    files: BTreeMap<RoutePath, Vec<u8>>,
-    pages: Vec<RoutePath>,
+    files: BTreeMap<RoutePath, OutputFile>,
 }
 
 impl OutputPublication {
     pub fn new(project: &Project) -> Self {
         Self {
-            src_dir: project.src_dir(),
+            project_root: project.root().to_owned(),
             output_dir: project.output_dir(),
             files: BTreeMap::new(),
-            pages: Vec::new(),
         }
     }
 
@@ -57,28 +79,20 @@ impl OutputPublication {
         let hash = content_hash(&content);
         let path =
             RoutePath::new(PathBuf::from("_assets").join(format!("{kind}.{hash}.{extension}")))?;
-        self.insert(path.clone(), content)?;
+        self.insert(path.clone(), OutputFile::Asset(content))?;
         Ok(AssetPath(path))
     }
 
     pub fn page<'a>(
         &'a mut self,
-        template: &Path,
+        template: &VirtualPath,
         output: &'a RoutePath,
-    ) -> Result<PagePublication<'a>> {
-        let template = VirtualPath::virtualize(&self.src_dir, template).with_context(|| {
-            format!(
-                "page template {} is outside {}",
-                template.display(),
-                self.src_dir.display()
-            )
-        })?;
-
-        Ok(PagePublication {
+    ) -> PagePublication<'a> {
+        PagePublication {
             publication: self,
-            template,
+            template: template.clone(),
             output,
-        })
+        }
     }
 
     /// Replace the prior output tree with this complete build.
@@ -90,26 +104,28 @@ impl OutputPublication {
         remove_if_exists(&self.output_dir)?;
         std::fs::create_dir_all(&self.output_dir)
             .with_context(|| format!("failed to create {}", self.output_dir.display()))?;
-        write_output_files(&self.output_dir, &self.files)?;
+        for (relative, file) in &self.files {
+            write_file(&self.output_dir.join(relative.as_path()), file.content())?;
+        }
 
         let pages = self
-            .pages
+            .files
             .into_iter()
-            .map(|path| self.output_dir.join(path.as_path()))
+            .filter_map(|(path, file)| file.is_page().then(|| self.output_dir.join(path.as_path())))
             .collect();
         Ok(PublishedOutput { pages })
     }
 
-    fn insert(&mut self, path: RoutePath, content: Vec<u8>) -> Result<()> {
+    fn insert(&mut self, path: RoutePath, file: OutputFile) -> Result<()> {
         if let Some(existing) = self.files.get(&path) {
             ensure!(
-                existing == &content,
+                existing == &file,
                 "two generated files selected the same output path {}",
                 path.as_path().display()
             );
             return Ok(());
         }
-        self.files.insert(path, content);
+        self.files.insert(path, file);
         Ok(())
     }
 }
@@ -122,8 +138,8 @@ pub struct PagePublication<'a> {
 }
 
 impl PagePublication<'_> {
-    /// Resolve a source reference relative to the template with lexical `src/` confinement.
-    pub fn resolve_source(&self, reference: &Path) -> Result<PathBuf> {
+    /// Resolve a source reference relative to the template within the project virtual root.
+    pub fn resolve_source(&self, reference: &Path) -> Result<VirtualPath> {
         ensure!(
             !reference.is_absolute(),
             "source reference must be relative"
@@ -136,19 +152,16 @@ impl PagePublication<'_> {
             .template
             .parent()
             .context("page template has no parent")?;
-        let virtual_path = template_dir.join(reference).with_context(|| {
+        template_dir.join(reference).with_context(|| {
             format!(
-                "source reference {reference} escapes {}",
-                self.publication.src_dir.display()
+                "source reference {reference} escapes project root {}",
+                self.publication.project_root.display()
             )
-        })?;
-        virtual_path
-            .realize(&self.publication.src_dir)
-            .context("failed to realize source reference")
+        })
     }
 
-    pub fn source_root(&self) -> &Path {
-        &self.publication.src_dir
+    pub fn project_root(&self) -> &Path {
+        &self.publication.project_root
     }
 
     /// Register an asset and return its browser-facing URL from this page.
@@ -172,18 +185,9 @@ impl PagePublication<'_> {
 
     /// Add the final serialized page to this publication.
     pub fn add_html(self, html: String) -> Result<()> {
-        let output = self.output.clone();
-        self.publication.insert(output.clone(), html.into_bytes())?;
-        self.publication.pages.push(output);
-        Ok(())
+        self.publication
+            .insert(self.output.clone(), OutputFile::Page(html.into_bytes()))
     }
-}
-
-fn write_output_files(output_dir: &Path, files: &BTreeMap<RoutePath, Vec<u8>>) -> Result<()> {
-    for (relative, content) in files {
-        write_file(&output_dir.join(relative.as_path()), content)?;
-    }
-    Ok(())
 }
 
 fn valid_name_part(part: &str) -> bool {
@@ -258,9 +262,8 @@ mod tests {
             .add_asset("css", "css", b"body{}".to_vec())
             .unwrap();
         let output = RoutePath::new("blog/post.html").unwrap();
-        let template = project.src_dir().join("blog/[slug].typ");
-        std::fs::write(&template, "").unwrap();
-        let page = publication.page(&template, &output).unwrap();
+        let template = VirtualPath::new("/src/blog/[slug].typ").unwrap();
+        let page = publication.page(&template, &output);
 
         assert!(
             page.reference(&asset)
@@ -270,20 +273,22 @@ mod tests {
     }
 
     #[test]
-    fn source_resolution_uses_template_directory_and_is_confined() {
+    fn source_resolution_uses_template_directory_and_project_confinement() {
         let (_temp, project) = fixture();
-        std::fs::write(project.src_dir().join("style.css"), "body{}").unwrap();
-        let template = project.src_dir().join("blog/[slug].typ");
-        std::fs::write(&template, "").unwrap();
+        std::fs::write(project.root().join("style.css"), "body{}").unwrap();
+        let template = VirtualPath::new("/src/blog/[slug].typ").unwrap();
         let mut publication = OutputPublication::new(&project);
         let output = RoutePath::new("blog/post.html").unwrap();
-        let page = publication.page(&template, &output).unwrap();
+        let page = publication.page(&template, &output);
 
         assert_eq!(
-            page.resolve_source(Path::new("../style.css")).unwrap(),
-            project.src_dir().join("style.css")
+            page.resolve_source(Path::new("../../style.css")).unwrap(),
+            VirtualPath::new("/style.css").unwrap()
         );
-        assert!(page.resolve_source(Path::new("../../aster.toml")).is_err());
+        assert!(
+            page.resolve_source(Path::new("../../../outside.css"))
+                .is_err()
+        );
     }
 
     #[test]
@@ -301,15 +306,18 @@ mod tests {
             .unwrap();
         assert_eq!(first, second);
 
-        let template = project.src_dir().join("index.typ");
-        std::fs::write(&template, "").unwrap();
+        let template = VirtualPath::new("/src/index.typ").unwrap();
         let output = RoutePath::new("index.html").unwrap();
         publication
             .page(&template, &output)
-            .unwrap()
             .add_html("new".into())
             .unwrap();
-        publication.publish().unwrap();
+        let published = publication.publish().unwrap();
+
+        assert_eq!(
+            published.pages,
+            vec![project.output_dir().join("index.html")]
+        );
 
         let expected = snapshot_tree(&project.output_dir());
         std::fs::write(project.output_dir().join("stale.html"), "old").unwrap();
@@ -323,7 +331,6 @@ mod tests {
         );
         repeated
             .page(&template, &output)
-            .unwrap()
             .add_html("new".into())
             .unwrap();
         repeated.publish().unwrap();

@@ -38,10 +38,10 @@ enum BundleError {
         kind: EcoString,
         location: EcoString,
     },
-    #[error("CSS import {path} escapes {source_root}")]
+    #[error("CSS import {path} escapes project root {project_root}")]
     Escapes {
         path: Arc<Path>,
-        source_root: Arc<Path>,
+        project_root: Arc<Path>,
     },
     #[error("invalid CSS path {path}: {message}")]
     InvalidPath { path: Arc<Path>, message: EcoString },
@@ -73,7 +73,7 @@ pub(super) fn process_element(
         .get_attr("href")
         .ok_or_else(|| anyhow::anyhow!("link element of type \"css\" is missing href attribute"))?;
     let source = page.resolve_source(Path::new(href.as_str()))?;
-    let css = bundle_file(project_files, &source, page.source_root())
+    let css = bundle_file(project_files, &source, page.project_root())
         .map_err(|error| anyhow::anyhow!("{error:#}"))?;
     let url = page.add_asset("css", "css", css.into_bytes())?;
 
@@ -86,12 +86,18 @@ pub(super) fn process_element(
 #[comemo::memoize]
 fn bundle_file(
     project_files: Tracked<ProjectFiles>,
-    entry: &Path,
-    source_root: &Path,
+    entry: &VirtualPath,
+    project_root: &Path,
 ) -> std::result::Result<String, BundleError> {
-    let provider = ConfinedFileProvider::new(source_root.to_owned(), project_files);
+    let entry = entry
+        .realize(project_root)
+        .map_err(|error| BundleError::InvalidPath {
+            path: PathBuf::from(entry.get_with_slash()).into(),
+            message: error.to_string().into(),
+        })?;
+    let provider = ConfinedFileProvider::new(project_root.to_owned(), project_files);
     let mut bundler = Bundler::new(&provider, None, ParserOptions::default());
-    let mut stylesheet = bundler.bundle(entry).map_err(|error| {
+    let mut stylesheet = bundler.bundle(&entry).map_err(|error| {
         let (kind, location) = decompose(&error);
         BundleError::Bundle {
             path: entry.into(),
@@ -121,34 +127,35 @@ fn bundle_file(
 }
 
 struct ConfinedFileProvider<'a> {
-    source_root: PathBuf,
+    project_root: PathBuf,
     project_files: Tracked<'a, ProjectFiles>,
     files: FileProvider,
 }
 
 impl<'a> ConfinedFileProvider<'a> {
-    fn new(source_root: PathBuf, project_files: Tracked<'a, ProjectFiles>) -> Self {
+    fn new(project_root: PathBuf, project_files: Tracked<'a, ProjectFiles>) -> Self {
         Self {
-            source_root,
+            project_root,
             project_files,
             files: FileProvider::new(),
         }
     }
 
-    fn confined(&self, path: &Path) -> std::result::Result<PathBuf, BundleError> {
-        let virtual_path =
-            VirtualPath::virtualize(&self.source_root, path).map_err(|_| BundleError::Escapes {
+    fn confined(&self, path: &Path) -> std::result::Result<(VirtualPath, PathBuf), BundleError> {
+        let virtual_path = VirtualPath::virtualize(&self.project_root, path).map_err(|_| {
+            BundleError::Escapes {
                 path: path.into(),
-                source_root: self.source_root.clone().into(),
-            })?;
+                project_root: self.project_root.clone().into(),
+            }
+        })?;
         let path =
             virtual_path
-                .realize(&self.source_root)
+                .realize(&self.project_root)
                 .map_err(|error| BundleError::InvalidPath {
                     path: path.into(),
                     message: error.to_string().into(),
                 })?;
-        Ok(path)
+        Ok((virtual_path, path))
     }
 }
 
@@ -156,8 +163,8 @@ impl SourceProvider for ConfinedFileProvider<'_> {
     type Error = BundleError;
 
     fn read<'a>(&'a self, file: &Path) -> std::result::Result<&'a str, Self::Error> {
-        let file = self.confined(file)?;
-        self.project_files.read(&file)?;
+        let (virtual_file, file) = self.confined(file)?;
+        self.project_files.read(&virtual_file)?;
         self.files
             .read(&file)
             .map_err(|error| FileAccessError::io(file.into(), error).into())
@@ -169,6 +176,7 @@ impl SourceProvider for ConfinedFileProvider<'_> {
         originating_file: &Path,
     ) -> std::result::Result<ResolveResult, Self::Error> {
         let candidate = originating_file.with_file_name(specifier);
-        Ok(ResolveResult::File(self.confined(&candidate)?))
+        let (_, path) = self.confined(&candidate)?;
+        Ok(ResolveResult::File(path))
     }
 }
