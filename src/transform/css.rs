@@ -1,48 +1,60 @@
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::Result;
 use comemo::Tracked;
 use lightningcss::bundler::{Bundler, FileProvider, ResolveResult, SourceProvider};
 use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions};
 use lightningcss::targets::Browsers;
+use typst::ecow::EcoString;
 use typst_html::HtmlElement;
 
 use crate::compile::{FileAccessError, ProjectFiles};
 use crate::output::PagePublication;
 use crate::utils::HtmlElementExt;
 
-/// A cloneable CSS transformation error at the memoization seam.
+/// A cheaply cloneable CSS transformation error at the memoization seam.
 ///
 /// Upstream lightningcss errors carry non-static lifetimes or are not Clone,
 /// so their stable classifications and locations are decomposed into fields;
-/// the display strings are derived from those fields.
+/// the display strings are derived from those fields. All fields are
+/// reference-counted or cheap to clone.
 #[derive(Debug, Clone, thiserror::Error)]
 enum BundleError {
     #[error("failed to bundle {path}: {kind}{location}")]
     Bundle {
-        path: PathBuf,
-        kind: String,
-        location: String,
+        path: Arc<Path>,
+        kind: EcoString,
+        location: EcoString,
     },
     #[error("failed to minify CSS: {kind}{location}")]
-    Minify { kind: String, location: String },
+    Minify {
+        kind: EcoString,
+        location: EcoString,
+    },
     #[error("failed to serialize CSS: {kind}{location}")]
-    Serialize { kind: String, location: String },
+    Serialize {
+        kind: EcoString,
+        location: EcoString,
+    },
     #[error("CSS import {path} escapes {source_root}")]
-    Escapes { path: PathBuf, source_root: PathBuf },
+    Escapes {
+        path: Arc<Path>,
+        source_root: Arc<Path>,
+    },
     #[error(transparent)]
     File(#[from] FileAccessError),
 }
 
 /// Decompose a lightningcss error into its stable classification and a
-/// formatted source location, both of which are cloneable.
-fn decompose(error: &lightningcss::error::Error<impl std::fmt::Display>) -> (String, String) {
+/// formatted source location, both of which are cheaply cloneable.
+fn decompose(error: &lightningcss::error::Error<impl std::fmt::Display>) -> (EcoString, EcoString) {
     let location = error
         .loc
         .as_ref()
         .map(|loc| format!(" at {}:{}:{}", loc.filename, loc.line, loc.column))
         .unwrap_or_default();
-    (error.kind.to_string(), location)
+    (error.kind.to_string().into(), location.into())
 }
 
 pub(super) fn process_element(
@@ -79,7 +91,7 @@ fn bundle_file(
     let mut stylesheet = bundler.bundle(entry).map_err(|error| {
         let (kind, location) = decompose(&error);
         BundleError::Bundle {
-            path: entry.to_owned(),
+            path: entry.into(),
             kind,
             location,
         }
@@ -124,8 +136,8 @@ impl<'a> ConfinedFileProvider<'a> {
         let path = self.project_files.canonicalize(path)?;
         if !path.starts_with(&self.source_root) {
             return Err(BundleError::Escapes {
-                path,
-                source_root: self.source_root.clone(),
+                path: path.into(),
+                source_root: self.source_root.clone().into(),
             });
         }
         Ok(path)
@@ -140,7 +152,7 @@ impl SourceProvider for ConfinedFileProvider<'_> {
         self.project_files.read(&file)?;
         self.files
             .read(&file)
-            .map_err(|error| FileAccessError::io(file.clone(), error).into())
+            .map_err(|error| FileAccessError::io(file.into(), error).into())
     }
 
     fn resolve(

@@ -1,5 +1,5 @@
 use std::fmt::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Arc, LazyLock};
 
 use anyhow::Result;
@@ -18,12 +18,12 @@ use crate::project::ProjectRoot;
 use super::WalkControl;
 use crate::utils::HtmlElementExt;
 
-/// A cloneable theme-loading error at the memoization seam.
+/// A cheaply cloneable theme-loading error at the memoization seam.
 #[derive(Debug, Clone, thiserror::Error)]
 enum ThemeError {
     #[error("failed to load theme from {path}: {inner}")]
     Load {
-        path: PathBuf,
+        path: Arc<Path>,
         #[source]
         inner: Arc<anyhow::Error>,
     },
@@ -221,7 +221,7 @@ fn load_theme(
     let bytes = project_files.read(&path)?;
     let mut reader = std::io::Cursor::new(bytes);
     let theme = ThemeSet::load_from_reader(&mut reader).map_err(|error| ThemeError::Load {
-        path,
+        path: path.into(),
         inner: Arc::new(anyhow::Error::new(error)),
     })?;
     Ok(theme)
