@@ -37,7 +37,7 @@ pub fn empty() -> Value {
     protocol(std::iter::empty())
 }
 
-pub fn install(config: Dict, protocol: Value) -> Result<Dict> {
+pub fn with_protocol(config: Dict, protocol: Value) -> Result<Dict> {
     if config.contains(INPUT_NAME) {
         bail!("`{INPUT_NAME}` is reserved for Aster's content protocol");
     }
@@ -222,12 +222,12 @@ mod tests {
     fn rejects_reserved_config_input() {
         let mut config = Dict::new();
         config.insert(Str::from(INPUT_NAME), Value::Int(0));
-        assert!(install(config, empty()).is_err());
+        assert!(with_protocol(config, empty()).is_err());
     }
 
     #[test]
     fn route_params_cannot_replace_internal_or_config_inputs() {
-        let base = install(Dict::new(), empty()).unwrap();
+        let base = with_protocol(Dict::new(), empty()).unwrap();
         assert!(
             with_route_params(
                 &base,

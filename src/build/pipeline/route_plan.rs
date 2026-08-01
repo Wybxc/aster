@@ -41,11 +41,11 @@ impl RoutePlan {
             let pattern = route::parse_template(relative)
                 .with_context(|| format!("invalid route template {}", relative.display()))?;
             if pattern.is_dynamic() {
-                let evaluated = session
+                let (evaluated, evaluated_warnings) = session
                     .evaluate(&template, base_library)
                     .with_context(|| format!("failed to probe {}", relative.display()))?;
-                warnings.extend(evaluated.warnings);
-                let routes = route::extract(&evaluated.content)
+                warnings.extend(evaluated_warnings);
+                let routes = route::extract(&evaluated)
                     .with_context(|| format!("invalid route metadata in {}", relative.display()))?;
                 if routes.is_empty() {
                     warnings.push(BuildWarning::new(format!(

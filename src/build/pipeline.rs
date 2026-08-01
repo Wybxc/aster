@@ -69,7 +69,7 @@ impl BuildSession {
                 [&mut css, &mut image, &mut highlight];
 
             let protocol = load_content(session).context("failed to load content collections")?;
-            let base_inputs = content::install(config.dict, protocol)?;
+            let base_inputs = content::with_protocol(config.dict, protocol)?;
             let base_library = session.library(base_inputs.clone());
             let plan = RoutePlan::build(session, &base_inputs, &base_library)?;
             let (jobs, route_warnings) = plan.into_parts();
@@ -129,10 +129,9 @@ fn render_page(
     processors: &mut [&mut dyn transform::Processor],
     warnings: &mut Vec<BuildWarning>,
 ) -> Result<()> {
-    let compiled = session.compile_page(template, library)?;
-    warnings.extend(compiled.warnings);
+    let (mut document, compiled_warnings) = session.compile_page(template, library)?;
+    warnings.extend(compiled_warnings);
 
-    let mut document = compiled.document;
     let mut page = publication.page(template, output);
     transform::process_document(&mut document, &mut page, processors)?;
     let html = typst_html::html(&document, &typst_html::HtmlOptions::default())

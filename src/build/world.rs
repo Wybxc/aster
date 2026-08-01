@@ -29,16 +29,6 @@ pub struct TypstSession {
     files: ProjectFiles,
 }
 
-pub struct EvaluatedContent {
-    pub content: Content,
-    pub warnings: Vec<BuildWarning>,
-}
-
-pub struct CompiledPage {
-    pub document: typst_html::HtmlDocument,
-    pub warnings: Vec<BuildWarning>,
-}
-
 impl TypstSession {
     pub fn new(project: Project) -> Self {
         let fonts = {
@@ -99,7 +89,7 @@ impl TypstSession {
         &self,
         entry: &VirtualPath,
         library: &LazyHash<Library>,
-    ) -> Result<EvaluatedContent> {
+    ) -> Result<(Content, Vec<BuildWarning>)> {
         let world = self.world(entry, library);
         let source = world
             .source(world.main())
@@ -120,17 +110,14 @@ impl TypstSession {
             .iter()
             .map(|warning| format_warning(&world, warning))
             .collect();
-        Ok(EvaluatedContent {
-            content: module.content(),
-            warnings,
-        })
+        Ok((module.content(), warnings))
     }
 
     pub fn compile_page(
         &self,
         entry: &VirtualPath,
         library: &LazyHash<Library>,
-    ) -> Result<CompiledPage> {
+    ) -> Result<(typst_html::HtmlDocument, Vec<BuildWarning>)> {
         let world = self.world(entry, library);
         let warned = compile_html((&world as &dyn World).track());
         let document = warned
@@ -141,7 +128,7 @@ impl TypstSession {
             .iter()
             .map(|warning| format_warning(&world, warning))
             .collect();
-        Ok(CompiledPage { document, warnings })
+        Ok((document, warnings))
     }
 
     fn world<'a>(
