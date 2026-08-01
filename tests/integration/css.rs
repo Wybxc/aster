@@ -88,3 +88,31 @@ fn rejects_transitive_import_outside_source_root() {
 
     assert!(format!("{error:#}").contains("escapes"));
 }
+
+#[cfg(unix)]
+#[test]
+fn allows_symlinked_css_outside_source_root() {
+    use std::os::unix::fs::symlink;
+
+    let temp = tempfile::tempdir().unwrap();
+    let external = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join("src")).unwrap();
+    write_css_page(root);
+    std::fs::write(root.join("src/style.css"), "@import \"shared.css\";").unwrap();
+    std::fs::write(
+        external.path().join("shared.css"),
+        ".shared { color: green; }",
+    )
+    .unwrap();
+    let linked = root.join("src/shared.css");
+    symlink(external.path().join("shared.css"), &linked).unwrap();
+
+    let project = project(root);
+    let linked = project.src_dir().join("shared.css");
+    let mut session = BuildSession::new(project.clone());
+    build(&mut session);
+
+    assert!(generated_asset(&project, "css.").1.contains(".shared"));
+    assert!(session.dependencies().contains(&linked));
+}

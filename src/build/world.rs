@@ -259,12 +259,12 @@ mod tests {
         let marker = root.file_name().unwrap().to_string_lossy();
         std::fs::create_dir_all(root.join("src")).unwrap();
         std::fs::write(root.join("aster.toml"), "").unwrap();
-        let entry = root.join("src/index.typ");
-        let dependency = root.join("src/data.typ");
+        let project = Project::open(root.to_owned()).unwrap();
+        let entry = project.src_dir().join("index.typ");
+        let dependency = project.src_dir().join("data.typ");
         std::fs::write(&entry, "#import \"data.typ\": marker\n#let value = marker").unwrap();
         std::fs::write(&dependency, format!("#let marker = \"first-{marker}\"")).unwrap();
 
-        let project = Project::open(root.to_owned()).unwrap();
         let mut session = TypstSession::new(project);
         let library = session.library(Dict::new());
 

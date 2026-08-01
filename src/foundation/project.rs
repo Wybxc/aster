@@ -63,14 +63,11 @@ impl Project {
     /// observe, excluding the generated output tree.
     pub fn watch_paths(&self, dependencies: &[PathBuf]) -> Vec<PathBuf> {
         let output = self.output_dir();
-        let canonical_output = std::fs::canonicalize(self.root())
-            .ok()
-            .map(|root| root.join("dist"));
         let mut paths = self.structural_watch_paths();
         paths.extend(
             dependencies
                 .iter()
-                .filter(|path| !inside_output(path, &output, canonical_output.as_deref()))
+                .filter(|path| !path.starts_with(&output))
                 .cloned(),
         );
         paths.sort();
@@ -90,6 +87,7 @@ impl Project {
             // lets a later filesystem change recover without exiting watch mode.
             paths.extend(
                 WalkDir::new(directory)
+                    .follow_links(true)
                     .into_iter()
                     .filter_map(|entry| entry.ok())
                     .filter(|entry| entry.file_type().is_dir())
@@ -102,17 +100,13 @@ impl Project {
     }
 }
 
-fn inside_output(path: &Path, output: &Path, canonical_output: Option<&Path>) -> bool {
-    path.starts_with(output)
-        || canonical_output.is_some_and(|canonical| path.starts_with(canonical))
-}
-
 fn normalize(path: &Path) -> PathBuf {
-    if path.is_absolute() {
+    let absolute = if path.is_absolute() {
         path.to_path_buf()
     } else {
         std::env::current_dir()
             .map(|current| current.join(path))
             .unwrap_or_else(|_| path.to_path_buf())
-    }
+    };
+    std::fs::canonicalize(&absolute).unwrap_or(absolute)
 }

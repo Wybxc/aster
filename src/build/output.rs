@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
 
 use anyhow::{Context, Result, ensure};
+use typst::syntax::VirtualPath;
 
 use crate::engine::route::RoutePath;
 use crate::foundation::Project;
@@ -119,7 +120,7 @@ pub struct PagePublication<'a> {
 }
 
 impl PagePublication<'_> {
-    /// Resolve a source reference relative to the actual template, confined to `src/`.
+    /// Resolve a source reference relative to the template with lexical `src/` confinement.
     pub fn resolve_source(&self, reference: &Path) -> Result<PathBuf> {
         ensure!(
             !reference.is_absolute(),
@@ -130,35 +131,22 @@ impl PagePublication<'_> {
             .template
             .parent()
             .context("page template has no parent")?;
-        let source = std::fs::canonicalize(template_dir.join(reference)).with_context(|| {
-            format!(
-                "failed to resolve {} from {}",
-                reference.display(),
-                self.template.display()
-            )
-        })?;
-        let src_dir = std::fs::canonicalize(&self.publication.src_dir).with_context(|| {
-            format!(
-                "failed to resolve source directory {}",
-                self.publication.src_dir.display()
-            )
-        })?;
-        ensure!(
-            source.starts_with(&src_dir),
-            "source reference {} escapes {}",
-            reference.display(),
-            src_dir.display()
-        );
-        Ok(source)
+        let candidate = template_dir.join(reference);
+        let virtual_path = VirtualPath::virtualize(&self.publication.src_dir, &candidate)
+            .with_context(|| {
+                format!(
+                    "source reference {} escapes {}",
+                    reference.display(),
+                    self.publication.src_dir.display()
+                )
+            })?;
+        virtual_path
+            .realize(&self.publication.src_dir)
+            .context("failed to realize source reference")
     }
 
-    pub fn source_root(&self) -> Result<PathBuf> {
-        std::fs::canonicalize(&self.publication.src_dir).with_context(|| {
-            format!(
-                "failed to resolve source directory {}",
-                self.publication.src_dir.display()
-            )
-        })
+    pub fn source_root(&self) -> &Path {
+        &self.publication.src_dir
     }
 
     /// Register an asset and return its browser-facing URL from this page.
@@ -296,7 +284,7 @@ mod tests {
 
         assert_eq!(
             page.resolve_source(Path::new("../style.css")).unwrap(),
-            std::fs::canonicalize(project.src_dir().join("style.css")).unwrap()
+            project.src_dir().join("style.css")
         );
         assert!(page.resolve_source(Path::new("../../aster.toml")).is_err());
     }

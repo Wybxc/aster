@@ -25,10 +25,9 @@ use crate::foundation::project::Project;
 /// The tracked filesystem surface of a Typst build session.
 ///
 /// File content accesses (including missing files) are recorded by the
-/// upstream `FileStore` slot state machine. Path-level accesses that the
-/// `FileStore` cannot express (canonicalization of arbitrary paths) are
-/// recorded by a small [`PathStore`]. Both are reset between builds and
-/// combined into the watch dependency list.
+/// upstream `FileStore` slot state machine. Path-level accesses performed by
+/// transforms are recorded by a small [`PathStore`]. Both are reset between
+/// builds and combined into the watch dependency list.
 pub(crate) struct ProjectFiles {
     root: PathBuf,
     store: FileStore<SystemFiles>,
@@ -38,11 +37,9 @@ pub(crate) struct ProjectFiles {
 /// Records path-level accesses that `FileStore` cannot express.
 ///
 /// Unlike the `FileStore`, whose slot state machine tracks accesses by file
-/// id, this store tracks plain paths: canonicalization targets that may not
-/// exist yet. Tracking is implicit: every operation through this store
-/// records its path, so callers never invoke tracking explicitly. Its
-/// contents feed the watch dependency list so that a later appearance of
-/// such a path triggers a rebuild.
+/// id, this store tracks plain paths used by transforms, including targets
+/// that may not exist yet. Its contents feed the watch dependency list so that
+/// a later appearance of such a path triggers a rebuild.
 struct PathStore {
     paths: Mutex<BTreeSet<PathBuf>>,
 }
@@ -54,14 +51,8 @@ impl PathStore {
         }
     }
 
-    /// Canonicalize a path, recording it as a tracked dependency.
-    fn canonicalize(&self, path: &Path) -> Result<PathBuf, FileAccessError> {
+    fn track(&self, path: &Path) {
         self.record(path);
-        std::fs::canonicalize(path).map_err(|error| FileAccessError::Io {
-            path: path.into(),
-            kind: error.kind(),
-            message: error.to_string().into(),
-        })
     }
 
     fn record(&self, path: &Path) {
@@ -134,8 +125,7 @@ impl FileAccessError {
 
 impl ProjectFiles {
     pub(crate) fn new(project: &Project) -> Self {
-        let root =
-            std::fs::canonicalize(project.root()).unwrap_or_else(|_| project.root().to_owned());
+        let root = project.root().to_owned();
         let downloader = SystemDownloader::new("aster/0.1.0");
         let packages = SystemPackages::new(downloader);
         let fs_root = FsRoot::new(root.clone());
@@ -185,12 +175,7 @@ impl ProjectFiles {
         directory: &Path,
         required: bool,
     ) -> Result<Vec<PathBuf>, FileAccessError> {
-        match std::fs::symlink_metadata(directory) {
-            Ok(metadata) if metadata.file_type().is_symlink() => {
-                return Err(FileAccessError::Other(
-                    format!("{} must not be a symlink", directory.display()).into(),
-                ));
-            }
+        match std::fs::metadata(directory) {
             Ok(metadata) if !metadata.is_dir() => {
                 return Err(FileAccessError::Other(
                     format!("{} is not a directory", directory.display()).into(),
@@ -215,7 +200,7 @@ impl ProjectFiles {
         }
 
         let mut files = Vec::new();
-        for entry in WalkDir::new(directory) {
+        for entry in WalkDir::new(directory).follow_links(true) {
             let entry = entry.map_err(|error| {
                 let kind = error
                     .io_error()
@@ -227,16 +212,6 @@ impl ProjectFiles {
                     message: error.to_string().into(),
                 }
             })?;
-            if entry.file_type().is_symlink() {
-                return Err(FileAccessError::Other(
-                    format!(
-                        "symlink {} is not allowed in {}",
-                        entry.path().display(),
-                        directory.display()
-                    )
-                    .into(),
-                ));
-            }
             if entry.file_type().is_dir() {
                 // Directory membership is covered by the structural watch
                 // paths; only file entries enter the listing.
@@ -248,8 +223,8 @@ impl ProjectFiles {
         Ok(files)
     }
 
-    pub(crate) fn canonicalize(&self, path: &Path) -> Result<PathBuf, FileAccessError> {
-        self.paths.canonicalize(path)
+    pub(crate) fn track_path(&self, path: &Path) {
+        self.paths.track(path);
     }
 
     pub(crate) fn read(&self, path: &Path) -> Result<Bytes, FileAccessError> {
@@ -302,15 +277,40 @@ mod tests {
     use super::*;
 
     #[test]
-    fn path_store_records_missing_paths_and_resets() {
+    fn path_store_records_paths_and_resets() {
         let temp = tempfile::tempdir().unwrap();
         let missing = temp.path().join("missing-theme.tmTheme");
         let paths = PathStore::new();
 
-        assert!(paths.canonicalize(&missing).is_err());
+        paths.track(&missing);
         assert_eq!(paths.paths(), vec![missing]);
 
         paths.reset();
         assert!(paths.paths().is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn lists_and_reads_through_a_symlinked_source_directory() {
+        use std::os::unix::fs::symlink;
+
+        let temp = tempfile::tempdir().unwrap();
+        let project_root = temp.path().join("project");
+        let external = temp.path().join("external");
+        std::fs::create_dir_all(&project_root).unwrap();
+        std::fs::create_dir_all(&external).unwrap();
+        std::fs::write(project_root.join("aster.toml"), "").unwrap();
+        std::fs::write(external.join("index.typ"), "external").unwrap();
+        symlink(&external, project_root.join("src")).unwrap();
+
+        let project = Project::open(&project_root).unwrap();
+        let files = ProjectFiles::new(&project);
+        let source = project.src_dir().join("index.typ");
+
+        assert_eq!(
+            files.list(&project.src_dir(), true).unwrap(),
+            vec![source.clone()]
+        );
+        assert_eq!(files.read(&source).unwrap().as_slice(), b"external");
     }
 }

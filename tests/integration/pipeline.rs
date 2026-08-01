@@ -117,3 +117,33 @@ fn reentrant_build_recovers_after_compilation_failure() {
     let html = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
     assert!(html.contains("Recovered"));
 }
+
+#[cfg(unix)]
+#[test]
+fn build_follows_a_source_directory_symlink_outside_the_project() {
+    use std::os::unix::fs::symlink;
+
+    let temp = tempfile::tempdir().unwrap();
+    let external = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::write(root.join("aster.toml"), "").unwrap();
+    std::fs::write(
+        external.path().join("index.typ"),
+        "#html.elem(\"p\")[External]",
+    )
+    .unwrap();
+    symlink(external.path(), root.join("src")).unwrap();
+
+    let project = project(root);
+    let outcome = aster::build(project.clone()).unwrap();
+
+    assert_eq!(
+        outcome.outputs,
+        vec![project.output_dir().join("index.html")]
+    );
+    assert!(
+        std::fs::read_to_string(project.output_dir().join("index.html"))
+            .unwrap()
+            .contains("External")
+    );
+}

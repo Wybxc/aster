@@ -79,3 +79,42 @@ fn custom_theme_changes_replace_the_highlight_stylesheet() {
     assert!(changed_css.contains("#445566"));
     assert!(!first_path.exists());
 }
+
+#[cfg(unix)]
+#[test]
+fn allows_symlinked_theme_outside_project_root() {
+    use std::os::unix::fs::symlink;
+
+    let temp = tempfile::tempdir().unwrap();
+    let external = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::write(
+        root.join("aster.toml"),
+        concat!(
+            "[highlight.themes]\n",
+            "light = \"theme.tmTheme\"\n",
+            "dark = \"theme.tmTheme\"\n",
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("src/index.typ"),
+        concat!(
+            "#html.html({\n",
+            "  html.head[]\n",
+            "  html.body[Page]\n",
+            "})\n",
+        ),
+    )
+    .unwrap();
+    let external_theme = external.path().join("theme.tmTheme");
+    write_theme(&external_theme, "#123456");
+    symlink(external_theme, root.join("theme.tmTheme")).unwrap();
+
+    let project = project(root);
+    let mut session = BuildSession::new(project.clone());
+    build(&mut session);
+
+    assert!(generated_asset(&project, "hl.").1.contains("#123456"));
+}

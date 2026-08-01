@@ -217,7 +217,7 @@ fn load_theme(
         return Ok(theme.clone());
     }
 
-    let path = project_files.canonicalize(&project_root.join(name_or_path))?;
+    let path = project_root.join(name_or_path);
     let bytes = project_files.read(&path)?;
     let mut reader = std::io::Cursor::new(bytes);
     let theme = ThemeSet::load_from_reader(&mut reader).map_err(|error| ThemeError::Load {

@@ -7,6 +7,7 @@ use lightningcss::bundler::{Bundler, FileProvider, ResolveResult, SourceProvider
 use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions};
 use lightningcss::targets::Browsers;
 use typst::ecow::EcoString;
+use typst::syntax::VirtualPath;
 use typst_html::HtmlElement;
 
 use crate::build::output::PagePublication;
@@ -42,6 +43,8 @@ enum BundleError {
         path: Arc<Path>,
         source_root: Arc<Path>,
     },
+    #[error("invalid CSS path {path}: {message}")]
+    InvalidPath { path: Arc<Path>, message: EcoString },
     #[error(transparent)]
     File(#[from] FileAccessError),
 }
@@ -70,7 +73,7 @@ pub(super) fn process_element(
         .get_attr("href")
         .ok_or_else(|| anyhow::anyhow!("link element of type \"css\" is missing href attribute"))?;
     let source = page.resolve_source(Path::new(href.as_str()))?;
-    let css = bundle_file(project_files, &source, &page.source_root()?)
+    let css = bundle_file(project_files, &source, page.source_root())
         .map_err(|error| anyhow::anyhow!("{error:#}"))?;
     let url = page.add_asset("css", "css", css.into_bytes())?;
 
@@ -133,13 +136,19 @@ impl<'a> ConfinedFileProvider<'a> {
     }
 
     fn confined(&self, path: &Path) -> std::result::Result<PathBuf, BundleError> {
-        let path = self.project_files.canonicalize(path)?;
-        if !path.starts_with(&self.source_root) {
-            return Err(BundleError::Escapes {
+        let virtual_path =
+            VirtualPath::virtualize(&self.source_root, path).map_err(|_| BundleError::Escapes {
                 path: path.into(),
                 source_root: self.source_root.clone().into(),
-            });
-        }
+            })?;
+        let path =
+            virtual_path
+                .realize(&self.source_root)
+                .map_err(|error| BundleError::InvalidPath {
+                    path: path.into(),
+                    message: error.to_string().into(),
+                })?;
+        self.project_files.track_path(&path);
         Ok(path)
     }
 }

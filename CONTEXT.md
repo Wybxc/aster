@@ -12,6 +12,8 @@ An **Aster project** is a directory containing `aster.toml`. Its conventional di
 
 Project discovery selects the nearest ancestor containing an `aster.toml` file. A build requires `src/`; `content/` is optional. The project owns watch-path policy: configuration, structural directories, and tracked build dependencies are watched while `dist/` is always excluded.
 
+Like Typst's standard filesystem loader, project input confinement is lexical. Absolute paths and `..` paths that escape the project root are rejected, while filesystem access follows symbolic links even when their targets are outside the project root.
+
 ## Content protocol
 
 The **content protocol** is the `_aster` Typst input. Rust owns its version and complete value, including the empty state. It maps each collection and entry id to a lazy entry module. Each module exposes `id`, `collection`, and a Typst `render` closure; it does not expose a source path or contain evaluated content or frontmatter.
@@ -45,7 +47,7 @@ A **document transform** is the single ordered traversal from a compiled Typst H
 An **output publication** is the complete candidate output tree for one successful build. It owns:
 
 - output-path confinement
-- source-reference resolution relative to the actual page template
+- lexical source-reference resolution relative to the actual page template
 - generated-asset identity and content-addressed naming
 - browser-facing references relative to each output page
 - deduplication
