@@ -33,7 +33,6 @@ pub struct BuildOutcome {
 /// A reusable build session bound to one Aster project.
 pub struct BuildSession {
     session: TypstSession,
-    started: bool,
 }
 
 impl BuildSession {
@@ -41,7 +40,6 @@ impl BuildSession {
     pub fn new(project: Project) -> Self {
         Self {
             session: TypstSession::new(project),
-            started: false,
         }
     }
 
@@ -49,15 +47,10 @@ impl BuildSession {
     pub fn build(&mut self) -> Result<BuildOutcome> {
         let config = AsterConfig::load(&self.session.project().config_file())
             .context("failed to parse aster.toml")?;
-        let rebuilding = std::mem::replace(&mut self.started, true);
-        if rebuilding {
-            self.session.reset();
-        }
+        self.session.reset();
 
         let outcome = build_once(&self.session, config);
-        if rebuilding {
-            comemo::evict(10);
-        }
+        comemo::evict(10);
         outcome
     }
 
