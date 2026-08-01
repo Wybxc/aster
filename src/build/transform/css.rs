@@ -148,7 +148,6 @@ impl<'a> ConfinedFileProvider<'a> {
                     path: path.into(),
                     message: error.to_string().into(),
                 })?;
-        self.project_files.track_path(&path);
         Ok(path)
     }
 }

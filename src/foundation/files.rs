@@ -1,13 +1,11 @@
 //! Tracked filesystem access for a build session.
 //!
-//! Mirrors the `typst-kit` `files` module: file content accesses are recorded
-//! by the upstream `FileStore` slot state machine, and path-level accesses
-//! that the `FileStore` cannot express are recorded by a [`PathStore`]. Both
-//! are reset between builds and combined into the watch dependency list.
+//! Mirrors the `typst-kit` `files` module: file content accesses, including
+//! missing files, are recorded by the upstream `FileStore` slot state machine
+//! and surfaced as watch dependencies.
 
-use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use anyhow::Result;
 use comemo::Tracked;
@@ -25,58 +23,10 @@ use crate::foundation::project::Project;
 /// The tracked filesystem surface of a Typst build session.
 ///
 /// File content accesses (including missing files) are recorded by the
-/// upstream `FileStore` slot state machine. Path-level accesses performed by
-/// transforms are recorded by a small [`PathStore`]. Both are reset between
-/// builds and combined into the watch dependency list.
+/// upstream `FileStore` slot state machine and become watch dependencies.
 pub(crate) struct ProjectFiles {
     root: PathBuf,
     store: FileStore<SystemFiles>,
-    paths: PathStore,
-}
-
-/// Records path-level accesses that `FileStore` cannot express.
-///
-/// Unlike the `FileStore`, whose slot state machine tracks accesses by file
-/// id, this store tracks plain paths used by transforms, including targets
-/// that may not exist yet. Its contents feed the watch dependency list so that
-/// a later appearance of such a path triggers a rebuild.
-struct PathStore {
-    paths: Mutex<BTreeSet<PathBuf>>,
-}
-
-impl PathStore {
-    fn new() -> Self {
-        Self {
-            paths: Mutex::new(BTreeSet::new()),
-        }
-    }
-
-    fn track(&self, path: &Path) {
-        self.record(path);
-    }
-
-    fn record(&self, path: &Path) {
-        self.paths
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .insert(path.to_owned());
-    }
-
-    fn reset(&self) {
-        self.paths
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .clear();
-    }
-
-    fn paths(&self) -> Vec<PathBuf> {
-        self.paths
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .iter()
-            .cloned()
-            .collect()
-    }
 }
 
 /// A cheaply cloneable filesystem access error at the memoization seam.
@@ -130,22 +80,18 @@ impl ProjectFiles {
         let packages = SystemPackages::new(downloader);
         let fs_root = FsRoot::new(root.clone());
         let store = FileStore::new(SystemFiles::new(fs_root, packages));
-        Self {
-            root,
-            store,
-            paths: PathStore::new(),
-        }
+        Self { root, store }
     }
 
     pub(crate) fn reset(&mut self) {
         self.store.reset();
-        self.paths.reset();
     }
 
     pub(crate) fn dependencies(&mut self) -> Vec<PathBuf> {
-        let mut paths = self.paths.paths();
         let (loader, dependencies) = self.store.dependencies();
-        paths.extend(dependencies.filter_map(|id| loader.resolve(id).ok()));
+        let mut paths = dependencies
+            .filter_map(|id| loader.resolve(id).ok())
+            .collect::<Vec<_>>();
         paths.sort();
         paths.dedup();
         paths
@@ -215,10 +161,6 @@ impl ProjectFiles {
         Ok(files)
     }
 
-    pub(crate) fn track_path(&self, path: &Path) {
-        self.paths.track(path);
-    }
-
     pub(crate) fn read(&self, path: &Path) -> Result<Bytes, FileAccessError> {
         let virtual_path = VirtualPath::virtualize(&self.root, path).map_err(|error| {
             FileAccessError::Outside {
@@ -267,19 +209,6 @@ pub(crate) fn list_typst_files(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn path_store_records_paths_and_resets() {
-        let temp = tempfile::tempdir().unwrap();
-        let missing = temp.path().join("missing-theme.tmTheme");
-        let paths = PathStore::new();
-
-        paths.track(&missing);
-        assert_eq!(paths.paths(), vec![missing]);
-
-        paths.reset();
-        assert!(paths.paths().is_empty());
-    }
 
     #[cfg(unix)]
     #[test]
