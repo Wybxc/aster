@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
+use typst::ecow::EcoString;
 use typst::foundations::{Dict, Value};
 
 const DEFAULT_LIGHT: &str = "InspiredGitHub";
@@ -12,8 +13,8 @@ pub(crate) struct HighlightConfig {
 }
 
 pub(crate) struct Themes {
-    pub light: String,
-    pub dark: String,
+    pub light: EcoString,
+    pub dark: EcoString,
 }
 
 /// Complete parsed configuration from `aster.toml`.
@@ -55,16 +56,16 @@ fn parse_highlight_inner(table: &toml::Table) -> HighlightConfig {
         .and_then(|h| h.get("themes"))
         .and_then(|t| t.get("light"))
         .and_then(|v| v.as_str())
-        .map(String::from)
-        .unwrap_or_else(|| DEFAULT_LIGHT.to_string());
+        .map(EcoString::from)
+        .unwrap_or_else(|| DEFAULT_LIGHT.into());
 
     let dark = table
         .get("highlight")
         .and_then(|h| h.get("themes"))
         .and_then(|t| t.get("dark"))
         .and_then(|v| v.as_str())
-        .map(String::from)
-        .unwrap_or_else(|| DEFAULT_DARK.to_string());
+        .map(EcoString::from)
+        .unwrap_or_else(|| DEFAULT_DARK.into());
 
     HighlightConfig {
         themes: Themes { light, dark },

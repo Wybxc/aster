@@ -10,7 +10,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use comemo::Tracked;
 use typst::diag::FileError;
-use typst::ecow::EcoString;
+use typst::ecow::{EcoString, eco_format};
 use typst::foundations::Bytes;
 use typst::syntax::{FileId, RootedPath, VirtualPath, VirtualRoot};
 use typst_kit::downloader::SystemDownloader;
@@ -68,7 +68,7 @@ impl FileAccessError {
         Self::Io {
             path,
             kind: error.kind(),
-            message: error.to_string().into(),
+            message: eco_format!("{error}"),
         }
     }
 }
@@ -114,34 +114,33 @@ impl ProjectFiles {
         required: bool,
     ) -> Result<Vec<VirtualPath>, FileAccessError> {
         let directory = directory.realize(&self.root).map_err(|error| {
-            FileAccessError::Other(
-                format!(
-                    "invalid project directory {}: {error}",
-                    directory.get_with_slash()
-                )
-                .into(),
-            )
+            FileAccessError::Other(eco_format!(
+                "invalid project directory {}: {error}",
+                directory.get_with_slash()
+            ))
         })?;
         match std::fs::metadata(&directory) {
             Ok(metadata) if !metadata.is_dir() => {
-                return Err(FileAccessError::Other(
-                    format!("{} is not a directory", directory.display()).into(),
-                ));
+                return Err(FileAccessError::Other(eco_format!(
+                    "{} is not a directory",
+                    directory.display()
+                )));
             }
             Ok(_) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound && !required => {
                 return Ok(Vec::new());
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                return Err(FileAccessError::Other(
-                    format!("{} directory not found", directory.display()).into(),
-                ));
+                return Err(FileAccessError::Other(eco_format!(
+                    "{} directory not found",
+                    directory.display()
+                )));
             }
             Err(error) => {
                 return Err(FileAccessError::Inspect {
                     path: directory.into(),
                     kind: error.kind(),
-                    message: error.to_string().into(),
+                    message: eco_format!("{error}"),
                 });
             }
         }
@@ -156,7 +155,7 @@ impl ProjectFiles {
                 FileAccessError::Inspect {
                     path: directory.as_path().into(),
                     kind,
-                    message: error.to_string().into(),
+                    message: eco_format!("{error}"),
                 }
             })?;
             if entry.file_type().is_dir() {
@@ -169,7 +168,7 @@ impl ProjectFiles {
                         path: path.into(),
                         root: self.root.clone().into(),
                         kind: std::io::ErrorKind::InvalidInput,
-                        message: error.to_string().into(),
+                        message: eco_format!("{error}"),
                     }
                 })?;
                 files.push(virtual_path);
@@ -187,7 +186,7 @@ impl ProjectFiles {
                 .unwrap_or_else(|_| PathBuf::from(path.get_with_slash()))
                 .into(),
             kind: file_error_kind(&error),
-            message: error.to_string().into(),
+            message: eco_format!("{error}"),
         })
     }
 }

@@ -6,7 +6,7 @@ use comemo::Tracked;
 use lightningcss::bundler::{Bundler, FileProvider, ResolveResult, SourceProvider};
 use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions};
 use lightningcss::targets::Browsers;
-use typst::ecow::EcoString;
+use typst::ecow::{EcoString, eco_format};
 use typst::syntax::VirtualPath;
 use typst_html::HtmlElement;
 
@@ -55,9 +55,9 @@ fn decompose(error: &lightningcss::error::Error<impl std::fmt::Display>) -> (Eco
     let location = error
         .loc
         .as_ref()
-        .map(|loc| format!(" at {}:{}:{}", loc.filename, loc.line, loc.column))
+        .map(|loc| eco_format!(" at {}:{}:{}", loc.filename, loc.line, loc.column))
         .unwrap_or_default();
-    (error.kind.to_string().into(), location.into())
+    (eco_format!("{}", error.kind), location)
 }
 
 pub(crate) struct CssProcessor<'a> {
@@ -107,7 +107,7 @@ fn bundle_file(
         .realize(project_root)
         .map_err(|error| BundleError::InvalidPath {
             path: PathBuf::from(entry.get_with_slash()).into(),
-            message: error.to_string().into(),
+            message: eco_format!("{error}"),
         })?;
     let provider = ConfinedFileProvider::new(project_root.to_owned(), project_files);
     let mut bundler = Bundler::new(&provider, None, ParserOptions::default());
@@ -167,7 +167,7 @@ impl<'a> ConfinedFileProvider<'a> {
                 .realize(&self.project_root)
                 .map_err(|error| BundleError::InvalidPath {
                     path: path.into(),
-                    message: error.to_string().into(),
+                    message: eco_format!("{error}"),
                 })?;
         Ok((virtual_path, path))
     }

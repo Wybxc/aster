@@ -5,6 +5,8 @@
 
 use std::fmt;
 
+use typst::ecow::EcoString;
+
 mod output;
 mod pipeline;
 mod transform;
@@ -14,16 +16,16 @@ pub use pipeline::{BuildOutcome, BuildSession, build};
 
 /// A non-fatal diagnostic produced while building a project.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct BuildWarning(String);
+pub struct BuildWarning(EcoString);
 
 impl BuildWarning {
-    pub(crate) fn new(message: impl Into<String>) -> Self {
+    pub(crate) fn new(message: impl Into<EcoString>) -> Self {
         Self(message.into())
     }
 
     /// Return the warning message without presentation-specific formatting.
     pub fn as_str(&self) -> &str {
-        &self.0
+        self.0.as_str()
     }
 }
 

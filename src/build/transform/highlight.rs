@@ -57,7 +57,7 @@ impl HighlightProcessor {
             Ok(Some(css)) => Some(publication.add_highlight_stylesheet(css.into_bytes())?),
             Ok(None) => None,
             Err(error) => {
-                warnings.push(BuildWarning::new(format!(
+                warnings.push(BuildWarning::new(eco_format!(
                     "failed to resolve highlight CSS: {error:#}"
                 )));
                 None
@@ -290,7 +290,7 @@ fn load_theme(
     }
     let path = VirtualPath::new(name_or_path).map_err(|error| ThemeError::InvalidPath {
         path: name_or_path.into(),
-        message: error.to_string().into(),
+        message: eco_format!("{error}"),
     })?;
     let bytes = project_files.read(&path)?;
     let mut reader = std::io::Cursor::new(bytes);
@@ -309,8 +309,12 @@ fn compute_highlight_css(
     config: &HighlightConfig,
     project_files: Tracked<ProjectFiles>,
 ) -> Result<Option<String>> {
-    compute_highlight_css_impl(&config.themes.light, &config.themes.dark, project_files)
-        .map_err(anyhow::Error::msg)
+    compute_highlight_css_impl(
+        config.themes.light.as_str(),
+        config.themes.dark.as_str(),
+        project_files,
+    )
+    .map_err(anyhow::Error::msg)
 }
 
 #[comemo::memoize]
@@ -331,7 +335,7 @@ fn compute_highlight_css_impl(
     );
 
     // Collect unique scope names from theme selectors, resolve colours + font style.
-    let mut vars: Vec<(EcoString, String, u8, String, u8)> = Vec::new();
+    let mut vars: Vec<(EcoString, EcoString, u8, EcoString, u8)> = Vec::new();
     for theme in [&light, &dark] {
         for scope_entry in &theme.scopes {
             for single in &scope_entry.scope.selectors {

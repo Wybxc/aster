@@ -2,6 +2,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 use typst::Library;
+use typst::ecow::eco_format;
 use typst::foundations::Dict;
 use typst::syntax::VirtualPath;
 use typst::utils::LazyHash;
@@ -48,7 +49,7 @@ impl RoutePlan {
                 let routes = route::extract(&evaluated)
                     .with_context(|| format!("invalid route metadata in {}", relative.display()))?;
                 if routes.is_empty() {
-                    warnings.push(BuildWarning::new(format!(
+                    warnings.push(BuildWarning::new(eco_format!(
                         "{} has a dynamic route pattern but no <route> metadata",
                         relative.display()
                     )));

@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::sync::LazyLock;
 
 use anyhow::{Result, bail};
-use typst::ecow::EcoString;
+use typst::ecow::{EcoString, eco_format};
 use typst::foundations::{
     Capturer, Closure, ClosureNode, Dict, Func, Module, Scope, Scopes, Str, Value, dict,
 };
@@ -90,7 +90,7 @@ fn entry_module(collection: &EcoString, id: &EcoString, source: RootedPath) -> M
     scope.define("id", Str::from(id.as_str()));
     scope.define("collection", Str::from(collection.as_str()));
     scope.define("render", render_closure(source));
-    Module::new(format!("{collection}/{id}"), scope)
+    Module::new(eco_format!("{collection}/{id}"), scope)
 }
 
 fn render_closure(source: RootedPath) -> Func {
