@@ -50,8 +50,10 @@ pub(crate) struct ProjectFiles {
 ///
 /// Unlike the `FileStore`, whose slot state machine tracks accesses by file
 /// id, this store tracks plain paths: canonicalization targets that may not
-/// exist yet. Its contents feed the watch dependency list so that a later
-/// appearance of such a path triggers a rebuild.
+/// exist yet. Tracking is implicit: every operation through this store
+/// records its path, so callers never invoke tracking explicitly. Its
+/// contents feed the watch dependency list so that a later appearance of
+/// such a path triggers a rebuild.
 struct PathStore {
     paths: Mutex<BTreeSet<PathBuf>>,
 }
@@ -61,6 +63,16 @@ impl PathStore {
         Self {
             paths: Mutex::new(BTreeSet::new()),
         }
+    }
+
+    /// Canonicalize a path, recording it as a tracked dependency.
+    fn canonicalize(&self, path: &Path) -> Result<PathBuf, FileAccessError> {
+        self.record(path);
+        std::fs::canonicalize(path).map_err(|error| FileAccessError::Io {
+            path: path.into(),
+            kind: error.kind(),
+            message: error.to_string().into(),
+        })
     }
 
     fn record(&self, path: &Path) {
@@ -298,10 +310,6 @@ impl ProjectFiles {
     fn resolve(&self, id: FileId) -> Result<PathBuf, FileError> {
         self.store.loader().resolve(id)
     }
-
-    fn track_path(&self, path: &Path) {
-        self.paths.record(path);
-    }
 }
 
 #[comemo::track]
@@ -375,12 +383,7 @@ impl ProjectFiles {
     }
 
     pub(crate) fn canonicalize(&self, path: &Path) -> Result<PathBuf, FileAccessError> {
-        self.track_path(path);
-        std::fs::canonicalize(path).map_err(|error| FileAccessError::Io {
-            path: path.into(),
-            kind: error.kind(),
-            message: error.to_string().into(),
-        })
+        self.paths.canonicalize(path)
     }
 
     pub(crate) fn read(&self, path: &Path) -> Result<Bytes, FileAccessError> {
