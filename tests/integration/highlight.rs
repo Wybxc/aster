@@ -57,7 +57,7 @@ fn custom_theme_changes_replace_the_highlight_stylesheet() {
     write_theme(&theme, "#112233");
 
     let project = project(root);
-    let mut driver = BuildSession::new(project.clone()).unwrap();
+    let mut driver = BuildSession::new(project.clone());
     build(&mut driver);
     let (first_path, first_css) = generated_asset_containing(root, "#112233");
     assert!(
@@ -95,7 +95,7 @@ fn creates_head_before_body_for_highlight_stylesheet() {
     .unwrap();
 
     let project = project(root);
-    let mut session = BuildSession::new(project.clone()).unwrap();
+    let mut session = BuildSession::new(project.clone());
     build(&mut session);
 
     let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
@@ -129,7 +129,7 @@ fn invalid_theme_warns_once_for_the_whole_build() {
     }
 
     let project = project(root);
-    let outcome = BuildSession::new(project.clone()).unwrap().build().unwrap();
+    let outcome = BuildSession::new(project.clone()).build().unwrap();
 
     assert_eq!(
         outcome
@@ -176,7 +176,7 @@ fn allows_symlinked_theme_outside_project_root() {
     symlink(external_theme, root.join("theme.tmTheme")).unwrap();
 
     let project = project(root);
-    let mut session = BuildSession::new(project.clone()).unwrap();
+    let mut session = BuildSession::new(project.clone());
     build(&mut session);
 
     assert!(

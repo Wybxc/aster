@@ -11,7 +11,7 @@ fn build_reuses_the_session_and_observes_source_changes() {
     std::fs::write(&entry, "#html.elem(\"p\")[first]").unwrap();
 
     let project = project(root);
-    let mut driver = BuildSession::new(project.clone()).unwrap();
+    let mut driver = BuildSession::new(project.clone());
     build(&mut driver);
     let first = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
 
@@ -54,7 +54,7 @@ fn build_loads_content_and_frontmatter_through_entry_module() {
     .unwrap();
 
     let project = project(root);
-    let mut driver = BuildSession::new(project.clone()).unwrap();
+    let mut driver = BuildSession::new(project.clone());
     build(&mut driver);
     let first = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     assert!(first.contains("First"));
@@ -82,7 +82,7 @@ fn reentrant_build_discovers_added_and_removed_pages() {
     std::fs::write(&index, "#html.elem(\"p\")[Index]").unwrap();
 
     let project = project(root);
-    let mut driver = BuildSession::new(project.clone()).unwrap();
+    let mut driver = BuildSession::new(project.clone());
     build(&mut driver);
     assert!(root.join("dist/index.html").is_file());
 
@@ -106,7 +106,7 @@ fn reentrant_build_recovers_after_compilation_failure() {
     std::fs::write(&entry, "#html.elem(\"p\")[First]").unwrap();
 
     let project = project(root);
-    let mut driver = BuildSession::new(project.clone()).unwrap();
+    let mut driver = BuildSession::new(project.clone());
     build(&mut driver);
 
     std::fs::write(&entry, "#let broken =").unwrap();
@@ -135,7 +135,7 @@ fn build_follows_a_source_directory_symlink_outside_the_project() {
     symlink(external.path(), root.join("src")).unwrap();
 
     let project = project(root);
-    let outcome = BuildSession::new(project.clone()).unwrap().build().unwrap();
+    let outcome = BuildSession::new(project.clone()).build().unwrap();
 
     assert_eq!(outcome.outputs, vec![root.join("dist/index.html")]);
     assert!(
@@ -163,7 +163,7 @@ fn build_preserves_a_symlinked_project_root() {
     symlink(&actual, &linked).unwrap();
 
     let project = Project::open(&linked).unwrap();
-    let outcome = BuildSession::new(project.clone()).unwrap().build().unwrap();
+    let outcome = BuildSession::new(project.clone()).build().unwrap();
 
     assert_eq!(outcome.outputs, vec![linked.join("dist/index.html")]);
     assert!(

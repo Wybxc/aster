@@ -2,7 +2,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail, ensure};
 use typst::syntax::VirtualPath;
-use walkdir::WalkDir;
 
 use crate::foundation::config::AsterConfig;
 
@@ -46,6 +45,10 @@ impl Project {
     /// Return the project manifest path.
     pub fn config_file(&self) -> PathBuf {
         self.root.join("aster.toml")
+    }
+
+    pub(crate) fn config_path(&self) -> VirtualPath {
+        VirtualPath::new("aster.toml").expect("the manifest path is a valid virtual path")
     }
 
     pub(crate) fn realize(&self, path: &VirtualPath) -> PathBuf {
@@ -106,59 +109,12 @@ impl ProjectLayout {
         &self.assets
     }
 
-    pub(crate) fn output_dir(&self, project: &Project) -> PathBuf {
-        project.realize(&self.output)
+    pub(crate) fn output(&self) -> &VirtualPath {
+        &self.output
     }
 
-    pub(crate) fn font_dirs<'a>(
-        &'a self,
-        project: &'a Project,
-    ) -> impl Iterator<Item = PathBuf> + 'a {
-        self.fonts.iter().map(move |path| project.realize(path))
-    }
-
-    /// Return every structural and tracked build input that watch mode should
-    /// observe, excluding the generated output tree.
-    pub(crate) fn watch_paths<I>(&self, project: &Project, dependencies: I) -> Vec<PathBuf>
-    where
-        I: IntoIterator<Item = PathBuf>,
-    {
-        let output = self.output_dir(project);
-        let mut paths = self.structural_watch_paths(project);
-        paths.extend(
-            dependencies
-                .into_iter()
-                .filter(|path| VirtualPath::virtualize(&output, path).is_err()),
-        );
-        paths.sort();
-        paths.dedup();
-        paths
-    }
-
-    fn structural_watch_paths(&self, project: &Project) -> Vec<PathBuf> {
-        let mut directories = vec![
-            project.realize(&self.source),
-            project.realize(&self.content),
-        ];
-        directories.extend(self.font_dirs(project));
-        let mut paths = vec![project.config_file()];
-        paths.extend(directories.iter().cloned());
-        for directory in directories {
-            if !directory.is_dir() {
-                continue;
-            }
-            // Builds report traversal errors; watching every reachable directory
-            // lets a later filesystem change recover without exiting watch mode.
-            paths.extend(
-                WalkDir::new(directory)
-                    .follow_links(true)
-                    .into_iter()
-                    .filter_map(|entry| entry.ok())
-                    .filter(|entry| entry.file_type().is_dir())
-                    .map(|entry| entry.into_path()),
-            );
-        }
-        paths
+    pub(crate) fn font_dirs(&self) -> impl Iterator<Item = &VirtualPath> {
+        self.fonts.iter()
     }
 }
 

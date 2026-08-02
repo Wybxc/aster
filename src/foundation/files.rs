@@ -1,11 +1,12 @@
 //! Tracked filesystem access for a build session.
 //!
-//! Mirrors the `typst-kit` `files` module: file content accesses, including
-//! missing files, are recorded by the upstream `FileStore` slot state machine
-//! and surfaced as watch dependencies.
+//! File content accesses are recorded by the upstream `FileStore`; configured
+//! directory accesses are recorded here at the same boundary that validates
+//! them. Both are surfaced as build dependencies.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use comemo::Tracked;
@@ -22,11 +23,39 @@ use crate::foundation::project::Project;
 
 /// The tracked filesystem surface of a Typst build session.
 ///
-/// File content accesses (including missing files) are recorded by the
-/// upstream `FileStore` slot state machine and become watch dependencies.
+/// File content accesses use the upstream `FileStore` slot state machine.
+/// Directory accesses use a small access journal rather than a second cache.
 pub(crate) struct ProjectFiles {
     root: PathBuf,
     store: FileStore<SystemFiles>,
+    directories: Mutex<HashSet<VirtualPath>>,
+}
+
+/// A filesystem input observed through tracked project access.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum FilesystemDependency {
+    /// A file whose contents were accessed.
+    File(PathBuf),
+    /// A directory whose recursive membership was accessed.
+    Tree(PathBuf),
+}
+
+impl FilesystemDependency {
+    /// Return the dependency's filesystem path.
+    pub fn path(&self) -> &Path {
+        match self {
+            Self::File(path) | Self::Tree(path) => path,
+        }
+    }
+}
+
+/// A configured project directory whose access has been recorded.
+pub(crate) struct ProjectDirectory(PathBuf);
+
+impl ProjectDirectory {
+    pub(crate) fn path(&self) -> &Path {
+        &self.0
+    }
 }
 
 /// A cheaply cloneable filesystem access error at the memoization seam.
@@ -80,16 +109,35 @@ impl ProjectFiles {
         let packages = SystemPackages::new(downloader);
         let fs_root = FsRoot::new(root.clone());
         let store = FileStore::new(SystemFiles::new(fs_root, packages));
-        Self { root, store }
+        Self {
+            root,
+            store,
+            directories: Mutex::new(HashSet::new()),
+        }
     }
 
     pub(crate) fn reset(&mut self) {
         self.store.reset();
+        self.directories.get_mut().unwrap().clear();
     }
 
-    pub(crate) fn dependencies(&mut self) -> impl Iterator<Item = PathBuf> + '_ {
+    pub(crate) fn dependencies(&mut self) -> Vec<FilesystemDependency> {
         let (loader, dependencies) = self.store.dependencies();
-        dependencies.filter_map(move |id| loader.resolve(id).ok())
+        let mut observed = dependencies
+            .filter_map(|id| loader.resolve(id).ok().map(FilesystemDependency::File))
+            .collect::<Vec<_>>();
+        observed.extend(
+            self.directories
+                .get_mut()
+                .unwrap()
+                .iter()
+                .filter_map(|path| {
+                    path.realize(&self.root)
+                        .ok()
+                        .map(FilesystemDependency::Tree)
+                }),
+        );
+        observed
     }
 
     pub(crate) fn source(&self, id: FileId) -> Result<typst::syntax::Source, FileError> {
@@ -98,6 +146,33 @@ impl ProjectFiles {
 
     pub(crate) fn file(&self, id: FileId) -> Result<Bytes, FileError> {
         self.store.file(id)
+    }
+
+    pub(crate) fn directory(
+        &self,
+        path: &VirtualPath,
+    ) -> Result<ProjectDirectory, FileAccessError> {
+        let directory = path.realize(&self.root).map_err(|error| {
+            FileAccessError::Other(eco_format!(
+                "invalid project directory {}: {error}",
+                path.get_with_slash()
+            ))
+        })?;
+        self.directories.lock().unwrap().insert(path.clone());
+        let result = std::fs::metadata(&directory);
+
+        match result {
+            Ok(metadata) if metadata.is_dir() => Ok(ProjectDirectory(directory)),
+            Ok(_) => Err(FileAccessError::Other(eco_format!(
+                "{} is not a directory",
+                directory.display()
+            ))),
+            Err(error) => Err(FileAccessError::Inspect {
+                path: directory.into(),
+                kind: error.kind(),
+                message: eco_format!("{error}"),
+            }),
+        }
     }
 }
 
@@ -108,54 +183,33 @@ impl ProjectFiles {
         directory: &VirtualPath,
         required: bool,
     ) -> Result<EcoVec<VirtualPath>, FileAccessError> {
-        let directory = directory.realize(&self.root).map_err(|error| {
-            FileAccessError::Other(eco_format!(
-                "invalid project directory {}: {error}",
-                directory.get_with_slash()
-            ))
-        })?;
-        match std::fs::metadata(&directory) {
-            Ok(metadata) if !metadata.is_dir() => {
-                return Err(FileAccessError::Other(eco_format!(
-                    "{} is not a directory",
-                    directory.display()
-                )));
-            }
-            Ok(_) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound && !required => {
+        let directory = match self.directory(directory) {
+            Ok(directory) => directory,
+            Err(FileAccessError::Inspect {
+                kind: std::io::ErrorKind::NotFound,
+                ..
+            }) if !required => {
                 return Ok(EcoVec::new());
             }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                return Err(FileAccessError::Other(eco_format!(
-                    "{} directory not found",
-                    directory.display()
-                )));
-            }
-            Err(error) => {
-                return Err(FileAccessError::Inspect {
-                    path: directory.into(),
-                    kind: error.kind(),
-                    message: eco_format!("{error}"),
-                });
-            }
-        }
+            Err(error) => return Err(error),
+        };
 
         let mut files = EcoVec::new();
-        for entry in WalkDir::new(&directory).follow_links(true) {
+        for entry in WalkDir::new(directory.path()).follow_links(true) {
             let entry = entry.map_err(|error| {
                 let kind = error
                     .io_error()
                     .map(std::io::Error::kind)
                     .unwrap_or(std::io::ErrorKind::Other);
                 FileAccessError::Inspect {
-                    path: directory.as_path().into(),
+                    path: directory.path().into(),
                     kind,
                     message: eco_format!("{error}"),
                 }
             })?;
             if entry.file_type().is_dir() {
-                // Directory membership is covered by the structural watch
-                // paths; only file entries enter the listing.
+                // Directory membership is represented by structural tree
+                // dependencies; only file entries enter the listing.
             } else if entry.file_type().is_file() {
                 let path = entry.into_path();
                 let virtual_path = VirtualPath::virtualize(&self.root, &path).map_err(|error| {

@@ -88,7 +88,7 @@ impl OutputPublication {
             .context("invalid output assets directory")?;
         Ok(Self {
             project_root: project.root().to_owned(),
-            output_dir: layout.output_dir(project),
+            output_dir: project.realize(layout.output()),
             assets_dir,
             files: BTreeMap::new(),
         })
@@ -330,7 +330,7 @@ mod tests {
     #[test]
     fn publication_is_idempotent_and_removes_stale_output() {
         let (temp, project, layout) = fixture();
-        let output_dir = layout.output_dir(&project);
+        let output_dir = project.realize(layout.output());
         std::fs::create_dir_all(&output_dir).unwrap();
         std::fs::write(output_dir.join("stale.html"), "old").unwrap();
 
@@ -377,7 +377,7 @@ mod tests {
     #[test]
     fn empty_publication_replaces_output_with_empty_directory() {
         let (_temp, project, layout) = fixture();
-        let output_dir = layout.output_dir(&project);
+        let output_dir = project.realize(layout.output());
         std::fs::create_dir_all(&output_dir).unwrap();
         std::fs::write(output_dir.join("stale.html"), "old").unwrap();
 

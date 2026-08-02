@@ -30,7 +30,7 @@ fn route_plan_is_sorted_and_probes_dynamic_templates() {
     let (_temp, project) = fixture(&["z.typ", "blog/[slug].typ", "a.typ"]);
     write_routes(&project, "blog/[slug].typ", "((slug: \"post\"),)");
 
-    let outcome = BuildSession::new(project.clone()).unwrap().build().unwrap();
+    let outcome = BuildSession::new(project.clone()).build().unwrap();
     let output_dir = project.root().join("dist");
     let outputs = outcome
         .outputs
@@ -56,14 +56,14 @@ fn route_plan_rejects_static_dynamic_collision() {
     let (_temp, project) = fixture(&["post.typ", "[slug].typ"]);
     write_routes(&project, "[slug].typ", "((slug: \"post\"),)");
 
-    assert!(BuildSession::new(project).unwrap().build().is_err());
+    assert!(BuildSession::new(project).build().is_err());
 }
 
 #[test]
 fn route_plan_reports_missing_dynamic_metadata() {
     let (_temp, project) = fixture(&["[slug].typ"]);
 
-    let outcome = BuildSession::new(project).unwrap().build().unwrap();
+    let outcome = BuildSession::new(project).build().unwrap();
 
     assert!(outcome.outputs.is_empty());
     assert_eq!(outcome.warnings.len(), 1);

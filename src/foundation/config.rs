@@ -130,10 +130,10 @@ pub(crate) struct AsterConfig {
 }
 
 impl ProjectManifest {
-    /// Read `aster.toml` and create its Typst and typed Aster views.
-    pub(crate) fn load(path: &Path) -> Result<Self> {
-        let content = std::fs::read_to_string(path)
-            .with_context(|| format!("failed to read {}", path.display()))?;
+    /// Parse `aster.toml` into its Typst and typed Aster views.
+    pub(crate) fn parse(content: &[u8], path: &Path) -> Result<Self> {
+        let content = std::str::from_utf8(content)
+            .with_context(|| format!("{} is not valid UTF-8", path.display()))?;
         let table: toml::Table = content
             .parse()
             .with_context(|| format!("failed to parse {}", path.display()))?;
@@ -156,6 +156,11 @@ mod tests {
     use super::*;
     use typst::foundations::{Str, Value};
 
+    fn load(path: &Path) -> Result<ProjectManifest> {
+        let content = std::fs::read(path)?;
+        ProjectManifest::parse(&content, path)
+    }
+
     #[test]
     fn loads_typst_inputs_and_highlight_config() {
         let temp = tempfile::tempdir().unwrap();
@@ -174,7 +179,7 @@ mod tests {
         )
         .unwrap();
 
-        let manifest = ProjectManifest::load(&config_file).unwrap();
+        let manifest = load(&config_file).unwrap();
 
         assert_eq!(
             manifest.inputs.get("title").unwrap(),
@@ -206,7 +211,7 @@ mod tests {
         )
         .unwrap();
 
-        let manifest = ProjectManifest::load(&config_file).unwrap();
+        let manifest = load(&config_file).unwrap();
 
         assert_eq!(manifest.config.highlight.themes.light, "Solarized (light)");
         assert_eq!(
@@ -240,7 +245,7 @@ mod tests {
         )
         .unwrap();
 
-        let config = ProjectManifest::load(&config_file).unwrap().config;
+        let config = load(&config_file).unwrap().config;
 
         assert_eq!(config.paths.source, "pages");
         assert_eq!(config.paths.content, "content");
@@ -261,7 +266,7 @@ mod tests {
         let config_file = temp.path().join("aster.toml");
         std::fs::write(&config_file, "[highlight]\nthemes = \"InspiredGitHub\"\n").unwrap();
 
-        let error = match ProjectManifest::load(&config_file) {
+        let error = match load(&config_file) {
             Ok(_) => panic!("invalid highlight settings must be rejected"),
             Err(error) => error,
         };

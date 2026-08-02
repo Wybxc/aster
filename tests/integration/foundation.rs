@@ -1,8 +1,7 @@
-use aster::{BuildSession, Project};
-use typst::syntax::VirtualPath;
+use aster::{BuildSession, FilesystemDependency, Project};
 
 #[test]
-fn structural_watch_paths_include_nested_and_missing_layout_directories() {
+fn dependencies_include_accessed_trees_even_when_missing() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
     std::fs::create_dir_all(root.join("pages/blog/nested")).unwrap();
@@ -13,19 +12,42 @@ fn structural_watch_paths_include_nested_and_missing_layout_directories() {
     .unwrap();
     let project = Project::open(root.to_owned()).unwrap();
 
-    let mut session = BuildSession::new(project.clone()).unwrap();
-    let paths = session.watch_paths();
+    let mut session = BuildSession::new(project.clone());
+    assert!(
+        !session
+            .dependencies()
+            .any(|dependency| dependency == FilesystemDependency::File(project.config_file()))
+    );
+    assert!(
+        !session
+            .dependencies()
+            .any(|dependency| dependency == FilesystemDependency::Tree(root.join("pages")))
+    );
+    assert!(
+        !session
+            .dependencies()
+            .any(|dependency| dependency == FilesystemDependency::Tree(root.join("entries")))
+    );
 
-    assert!(paths.contains(&project.config_file()));
-    assert!(paths.contains(&root.join("pages")));
-    assert!(paths.contains(&root.join("pages/blog")));
-    assert!(paths.contains(&root.join("pages/blog/nested")));
-    assert!(paths.contains(&root.join("entries")));
-    assert!(!paths.contains(&root.join("src")));
+    session.build().unwrap();
+    let dependencies = session.dependencies().collect::<Vec<_>>();
+
+    assert!(dependencies.contains(&FilesystemDependency::File(project.config_file())));
+    assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("pages"))));
+    assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("entries"))));
+    assert!(!dependencies.contains(&FilesystemDependency::Tree(root.join("src"))));
+
+    std::fs::create_dir(root.join("entries")).unwrap();
+    session.build().unwrap();
+    assert!(
+        session
+            .dependencies()
+            .any(|dependency| dependency == FilesystemDependency::Tree(root.join("entries")))
+    );
 }
 
 #[test]
-fn watch_paths_merge_dependencies_and_exclude_output() {
+fn dependencies_include_observed_inputs_but_not_generated_outputs() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
     std::fs::create_dir_all(root.join("src/blog")).unwrap();
@@ -44,18 +66,55 @@ fn watch_paths_merge_dependencies_and_exclude_output() {
     let theme = root.join("theme.tmTheme");
     let generated = root.join("dist/index.html");
 
-    let mut session = BuildSession::new(project).unwrap();
+    let mut session = BuildSession::new(project);
     session.build().unwrap();
-    let paths = session.watch_paths();
+    let dependencies = session.dependencies().collect::<Vec<_>>();
 
-    assert!(paths.contains(&theme));
-    assert!(paths.contains(&root.join("src/blog")));
-    assert!(!paths.contains(&generated));
+    assert!(dependencies.contains(&FilesystemDependency::File(theme)));
+    assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("src"))));
+    assert!(!dependencies.contains(&FilesystemDependency::File(generated)));
     assert!(
-        !paths
+        !dependencies
             .iter()
-            .any(|path| VirtualPath::virtualize(&root.join("dist"), path).is_ok())
+            .any(|dependency| dependency.path().starts_with(root.join("dist")))
     );
+
+    session.build().unwrap();
+    assert!(
+        session
+            .dependencies()
+            .any(|dependency| dependency == FilesystemDependency::Tree(root.join("src"))),
+        "a cached build must still record its directory access"
+    );
+}
+
+#[test]
+fn dependency_snapshot_follows_reloaded_layout() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir(root.join("src")).unwrap();
+    std::fs::write(root.join("aster.toml"), "").unwrap();
+    let project = Project::open(root.to_owned()).unwrap();
+    let mut session = BuildSession::new(project);
+    session.build().unwrap();
+
+    assert!(
+        session
+            .dependencies()
+            .any(|dependency| dependency == FilesystemDependency::Tree(root.join("src")))
+    );
+
+    std::fs::write(
+        root.join("aster.toml"),
+        "[paths]\nsource = \"pages\"\ncontent = \"entries\"\n",
+    )
+    .unwrap();
+    assert!(session.build().is_err());
+    let dependencies = session.dependencies().collect::<Vec<_>>();
+
+    assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("pages"))));
+    assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("entries"))));
+    assert!(!dependencies.contains(&FilesystemDependency::Tree(root.join("src"))));
 }
 
 #[cfg(unix)]

@@ -8,5 +8,6 @@ pub(crate) mod config;
 pub(crate) mod files;
 mod project;
 
+pub use files::FilesystemDependency;
 pub use project::Project;
 pub(crate) use project::ProjectLayout;

@@ -33,38 +33,39 @@ pub struct BuildOutcome {
 
 /// A reusable build session bound to one Aster project.
 pub struct BuildSession {
-    session: TypstSession,
-    layout: ProjectLayout,
+    pub(super) session: TypstSession,
 }
 
 impl BuildSession {
-    /// Create a reusable session after loading and validating its manifest.
-    pub fn new(project: Project) -> Result<Self> {
-        let manifest =
-            ProjectManifest::load(&project.config_file()).context("failed to parse aster.toml")?;
-        let layout = ProjectLayout::new(&manifest.config).context("invalid project layout")?;
-        Ok(Self {
+    /// Create a reusable session bound to a validated project.
+    pub fn new(project: Project) -> Self {
+        Self {
             session: TypstSession::new(project),
-            layout,
-        })
+        }
     }
 
     /// Build and publish the complete project output tree.
     pub fn build(&mut self) -> Result<BuildOutcome> {
-        let manifest = ProjectManifest::load(&self.session.project().config_file())
-            .context("failed to parse aster.toml")?;
-        self.layout = ProjectLayout::new(&manifest.config).context("invalid project layout")?;
-        self.session
-            .configure_fonts(&manifest.config.typst.fonts, &self.layout)?;
         self.session.reset();
-
-        let session = &self.session;
-        let layout = &self.layout;
         let outcome = (|| {
+            let config_file = self.session.project().config_file();
+            let config_path = self.session.project().config_path();
+            let content = self
+                .session
+                .project_files()
+                .read(&config_path)
+                .context("failed to read aster.toml")?;
+            let manifest = ProjectManifest::parse(content.as_slice(), &config_file)
+                .context("failed to parse aster.toml")?;
+            let layout = ProjectLayout::new(&manifest.config).context("invalid project layout")?;
+            self.session
+                .configure_fonts(&manifest.config.typst.fonts, &layout)?;
+
+            let session = &self.session;
             let started = Instant::now();
             let project = session.project().clone();
             let mut warnings = Vec::new();
-            let mut publication = OutputPublication::new(&project, layout)?;
+            let mut publication = OutputPublication::new(&project, &layout)?;
 
             let mut css = transform::CssProcessor::new(
                 session.project_files(),
@@ -82,10 +83,10 @@ impl BuildSession {
                 [&mut css, &mut image, &mut highlight];
 
             let protocol =
-                load_content(session, layout).context("failed to load content collections")?;
+                load_content(session, &layout).context("failed to load content collections")?;
             let base_inputs = content::with_protocol(manifest.inputs, protocol)?;
             let base_library = session.library(base_inputs.clone());
-            let plan = RoutePlan::build(session, layout, &base_inputs, &base_library)?;
+            let plan = RoutePlan::build(session, &layout, &base_inputs, &base_library)?;
             let (jobs, route_warnings) = plan.into_parts();
             warnings.extend(route_warnings);
 
@@ -116,18 +117,6 @@ impl BuildSession {
         })();
         comemo::evict(10);
         outcome
-    }
-
-    /// Iterate over the dependencies observed by the latest build attempt.
-    pub fn dependencies(&mut self) -> impl Iterator<Item = PathBuf> + '_ {
-        self.session.dependencies()
-    }
-
-    /// Return structural and tracked inputs that watch mode should observe.
-    pub fn watch_paths(&mut self) -> Vec<PathBuf> {
-        let dependencies = self.session.dependencies().collect::<Vec<_>>();
-        self.layout
-            .watch_paths(self.session.project(), dependencies)
     }
 
     /// Return the project bound to this session.

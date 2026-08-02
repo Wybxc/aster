@@ -1,7 +1,7 @@
 //! CLI layer: command-line application.
 //!
-//! This layer mirrors the `typst-cli` crate: terminal rendering, build, watch,
-//! and init commands, and process entry. It depends on the build layer.
+//! This layer owns terminal rendering and command loops. Build behavior and
+//! filesystem watching remain behind the library APIs it drives.
 
 use std::path::PathBuf;
 

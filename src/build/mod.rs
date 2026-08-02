@@ -6,12 +6,21 @@ use std::fmt;
 
 use typst::ecow::EcoString;
 
+use crate::foundation::FilesystemDependency;
+
 mod output;
 mod pipeline;
 mod transform;
 mod world;
 
 pub use pipeline::{BuildOutcome, BuildSession};
+
+impl BuildSession {
+    /// Iterate over the inputs observed by the latest build attempt.
+    pub fn dependencies(&mut self) -> impl Iterator<Item = FilesystemDependency> + use<> {
+        self.session.dependencies().into_iter()
+    }
+}
 
 /// A non-fatal diagnostic produced while building a project.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]

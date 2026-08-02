@@ -1,4 +1,4 @@
-use aster::BuildSession;
+use aster::{BuildSession, FilesystemDependency};
 
 use crate::common::{install_content_adapter, project};
 
@@ -57,7 +57,7 @@ fn build_honors_configured_layout_and_processing_options() {
     .unwrap();
 
     let project = project(root);
-    let mut session = BuildSession::new(project).unwrap();
+    let mut session = BuildSession::new(project);
     let outcome = session.build().unwrap();
 
     assert_eq!(outcome.outputs, [root.join("public/index.html")]);
@@ -83,15 +83,14 @@ fn build_honors_configured_layout_and_processing_options() {
         .unwrap();
     assert!(css.contains('\n'), "CSS should not be minified: {css}");
 
-    let watch_paths = session.watch_paths();
-    assert!(watch_paths.contains(&root.join("pages")));
-    assert!(watch_paths.contains(&root.join("entries")));
-    assert!(watch_paths.contains(&root.join("fonts")));
-    assert!(watch_paths.contains(&root.join("fonts/nested")));
+    let dependencies = session.dependencies().collect::<Vec<_>>();
+    assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("pages"))));
+    assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("entries"))));
+    assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("fonts"))));
     assert!(
-        !watch_paths
+        !dependencies
             .iter()
-            .any(|path| path.starts_with(root.join("public")))
+            .any(|dependency| dependency.path().starts_with(root.join("public")))
     );
 }
 
@@ -109,9 +108,40 @@ fn rejects_output_that_overlaps_source_without_deleting_files() {
     .unwrap();
 
     let error = BuildSession::new(project(root))
+        .build()
         .err()
         .expect("overlapping output must fail");
 
     assert!(format!("{error:#}").contains("source and output directories must not overlap"));
     assert!(source.is_file());
+}
+
+#[test]
+fn session_recovers_after_manifest_is_fixed() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir(root.join("src")).unwrap();
+    std::fs::write(root.join("src/index.typ"), "#html.elem(\"p\")[Page]").unwrap();
+    let project = project(root);
+
+    std::fs::write(root.join("aster.toml"), "[paths\n").unwrap();
+    let mut session = BuildSession::new(project.clone());
+    assert!(session.build().is_err());
+    assert!(
+        session
+            .dependencies()
+            .any(|dependency| dependency == FilesystemDependency::File(project.config_file()))
+    );
+
+    std::fs::remove_file(root.join("aster.toml")).unwrap();
+    assert!(session.build().is_err());
+    assert!(
+        session
+            .dependencies()
+            .any(|dependency| dependency == FilesystemDependency::File(project.config_file()))
+    );
+
+    std::fs::write(root.join("aster.toml"), "").unwrap();
+    session.build().unwrap();
+    assert!(root.join("dist/index.html").is_file());
 }

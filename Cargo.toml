@@ -10,6 +10,7 @@ comemo = "0.5"
 data-url = "0.3"
 include_dir = "0.7"
 lightningcss = "=1.0.0-alpha.72"
+notify-debouncer-full = "0.7"
 seahash = "4.1.0"
 serde = { version = "1", features = ["derive"] }
 syntect = { version = "5.3", features = ["default-syntaxes", "default-themes", "dump-load"] }
@@ -19,7 +20,7 @@ toml = "1.1"
 typst = "0.15.1"
 typst-eval = "0.15.1"
 typst-html = "0.15.1"
-typst-kit = { version = "0.15.1", features = ["emit-diagnostics", "scan-fonts", "system-downloader", "system-files", "watcher"] }
+typst-kit = { version = "0.15.1", features = ["emit-diagnostics", "scan-fonts", "system-downloader", "system-files"] }
 typst-library = "0.15.1"
 typst-svg = "0.15.1"
 walkdir = "2.5"

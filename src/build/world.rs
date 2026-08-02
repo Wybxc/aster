@@ -1,7 +1,6 @@
 use std::io::Write;
-use std::path::PathBuf;
 
-use anyhow::{Result, ensure};
+use anyhow::Result;
 use comemo::{Track, Tracked};
 use termcolor::NoColor;
 use typst::diag::{FileError, SourceDiagnostic, SourceResult, Warned};
@@ -17,8 +16,8 @@ use typst_kit::fonts::FontStore;
 
 use crate::build::BuildWarning;
 use crate::foundation::config::FontConfig;
-use crate::foundation::files::{FileAccessError, ProjectFiles, list_typst_files};
-use crate::foundation::{Project, ProjectLayout};
+use crate::foundation::files::{FileAccessError, ProjectDirectory, ProjectFiles, list_typst_files};
+use crate::foundation::{FilesystemDependency, Project, ProjectLayout};
 
 /// A project-bound Typst build session.
 ///
@@ -60,16 +59,12 @@ impl TypstSession {
         config: &FontConfig,
         layout: &ProjectLayout,
     ) -> Result<()> {
-        let directories = layout.font_dirs(&self.project).collect::<Vec<_>>();
-        for directory in &directories {
-            ensure!(
-                directory.is_dir(),
-                "configured font path {} is not a directory",
-                directory.display()
-            );
-        }
+        let directories = layout
+            .font_dirs()
+            .map(|path| self.files.directory(path))
+            .collect::<Result<Vec<_>, _>>()?;
         if self.font_config.as_ref() != Some(config) || !config.paths.is_empty() {
-            self.fonts = discover_fonts(config, directories.iter().map(PathBuf::as_path));
+            self.fonts = discover_fonts(config, directories.iter().map(ProjectDirectory::path));
             self.font_config = Some(config.clone());
         }
         Ok(())
@@ -89,7 +84,7 @@ impl TypstSession {
         list_typst_files(self.project_files(), layout.content(), false)
     }
 
-    pub(crate) fn dependencies(&mut self) -> impl Iterator<Item = PathBuf> + '_ {
+    pub(crate) fn dependencies(&mut self) -> Vec<FilesystemDependency> {
         self.files.dependencies()
     }
 
