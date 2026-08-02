@@ -1,10 +1,13 @@
+use std::path::PathBuf;
+
 use anyhow::{Context, Result};
-use aster::{BuildSession, Project};
+use aster::BuildSession;
 use typst_kit::watcher::Watcher;
 
-use crate::cli::diag;
+use crate::cli::{diag, resolve_project};
 
-pub fn run(project: Project) -> Result<()> {
+pub fn run(project_dir: Option<PathBuf>) -> Result<()> {
+    let project = resolve_project(project_dir)?;
     let mut watcher = Watcher::new(None)
         .map_err(anyhow::Error::msg)
         .context("failed to initialize file watcher")?;

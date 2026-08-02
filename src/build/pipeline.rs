@@ -115,11 +115,6 @@ impl BuildSession {
     }
 }
 
-/// Build a project once using a fresh session.
-pub fn build(project: Project) -> Result<BuildOutcome> {
-    BuildSession::new(project).build()
-}
-
 fn render_page(
     session: &TypstSession,
     publication: &mut OutputPublication,

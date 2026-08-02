@@ -3,16 +3,13 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail, ensure};
 use include_dir::{Dir, include_dir};
 
+use crate::cli::diag;
+
 static PROJECT_TEMPLATE: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/templates/default");
 
 const DEFAULT_PROJECT_NAME: &str = "aster-site";
 
-#[derive(Debug)]
-pub struct InitOutcome {
-    pub project: PathBuf,
-}
-
-pub fn run(destination: PathBuf) -> Result<InitOutcome> {
+pub fn run(destination: PathBuf) -> Result<()> {
     let destination = absolute(destination)?;
     prepare_destination(&destination)?;
 
@@ -24,9 +21,8 @@ pub fn run(destination: PathBuf) -> Result<InitOutcome> {
     })?;
     set_project_name(&destination)?;
 
-    Ok(InitOutcome {
-        project: destination,
-    })
+    diag::emit_initialized(&destination);
+    Ok(())
 }
 
 fn absolute(path: PathBuf) -> Result<PathBuf> {

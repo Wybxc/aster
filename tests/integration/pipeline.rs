@@ -135,7 +135,7 @@ fn build_follows_a_source_directory_symlink_outside_the_project() {
     symlink(external.path(), root.join("src")).unwrap();
 
     let project = project(root);
-    let outcome = aster::build(project.clone()).unwrap();
+    let outcome = BuildSession::new(project.clone()).build().unwrap();
 
     assert_eq!(
         outcome.outputs,
@@ -166,7 +166,7 @@ fn build_preserves_a_symlinked_project_root() {
     symlink(&actual, &linked).unwrap();
 
     let project = Project::open(&linked).unwrap();
-    let outcome = aster::build(project.clone()).unwrap();
+    let outcome = BuildSession::new(project.clone()).build().unwrap();
 
     assert_eq!(
         outcome.outputs,

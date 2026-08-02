@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::process::{Command, Output};
 
-use aster::Project;
+use aster::{BuildSession, Project};
 
 fn init(destination: &Path) -> Output {
     Command::new(env!("CARGO_BIN_EXE_aster"))
@@ -30,7 +30,7 @@ fn initializes_a_buildable_project_with_a_real_library_directory() {
     assert!(config.contains("name = \"my-site\""));
 
     let project = Project::open(destination).unwrap();
-    let outcome = aster::build(project).unwrap();
+    let outcome = BuildSession::new(project).build().unwrap();
     assert_eq!(outcome.outputs.len(), 1);
 }
 

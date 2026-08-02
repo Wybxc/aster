@@ -1,7 +1,6 @@
 //! Build orchestration and output publication.
 //!
-//! This layer combines the foundation and engine layers behind [`BuildSession`]
-//! and the one-shot [`build`] function.
+//! This layer combines the foundation and engine layers behind [`BuildSession`].
 
 use std::fmt;
 
@@ -12,7 +11,7 @@ mod pipeline;
 mod transform;
 mod world;
 
-pub use pipeline::{BuildOutcome, BuildSession, build};
+pub use pipeline::{BuildOutcome, BuildSession};
 
 /// A non-fatal diagnostic produced while building a project.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
