@@ -57,25 +57,25 @@ fn custom_theme_changes_replace_the_highlight_stylesheet() {
     write_theme(&theme, "#112233");
 
     let project = project(root);
-    let mut driver = BuildSession::new(project.clone());
+    let mut driver = BuildSession::new(project.clone()).unwrap();
     build(&mut driver);
-    let (first_path, first_css) = generated_asset_containing(&project, "#112233");
+    let (first_path, first_css) = generated_asset_containing(root, "#112233");
     assert!(
         first_css.contains("#112233"),
         "unexpected highlight CSS: {first_css}"
     );
-    let html = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
+    let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     assert_eq!(html.matches("<head>").count(), 1);
 
     build(&mut driver);
     assert_eq!(
-        generated_asset_containing(&project, "#112233"),
+        generated_asset_containing(root, "#112233"),
         (first_path.clone(), first_css.clone())
     );
 
     write_theme(&theme, "#445566");
     build(&mut driver);
-    let (changed_path, changed_css) = generated_asset_containing(&project, "#445566");
+    let (changed_path, changed_css) = generated_asset_containing(root, "#445566");
     assert_ne!(changed_path, first_path);
     assert_ne!(changed_css, first_css);
     assert!(changed_css.contains("#445566"));
@@ -95,10 +95,10 @@ fn creates_head_before_body_for_highlight_stylesheet() {
     .unwrap();
 
     let project = project(root);
-    let mut session = BuildSession::new(project.clone());
+    let mut session = BuildSession::new(project.clone()).unwrap();
     build(&mut session);
 
-    let html = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
+    let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     let head = html.find("<head>").expect("generated head");
     let body = html.find("<body>").expect("existing body");
     assert!(head < body);
@@ -129,7 +129,7 @@ fn invalid_theme_warns_once_for_the_whole_build() {
     }
 
     let project = project(root);
-    let outcome = BuildSession::new(project.clone()).build().unwrap();
+    let outcome = BuildSession::new(project.clone()).unwrap().build().unwrap();
 
     assert_eq!(
         outcome
@@ -139,8 +139,8 @@ fn invalid_theme_warns_once_for_the_whole_build() {
             .count(),
         1
     );
-    assert!(project.output_dir().join("index.html").is_file());
-    assert!(project.output_dir().join("about.html").is_file());
+    assert!(root.join("dist/index.html").is_file());
+    assert!(root.join("dist/about.html").is_file());
 }
 
 #[cfg(unix)]
@@ -176,11 +176,11 @@ fn allows_symlinked_theme_outside_project_root() {
     symlink(external_theme, root.join("theme.tmTheme")).unwrap();
 
     let project = project(root);
-    let mut session = BuildSession::new(project.clone());
+    let mut session = BuildSession::new(project.clone()).unwrap();
     build(&mut session);
 
     assert!(
-        generated_asset_containing(&project, "#123456")
+        generated_asset_containing(root, "#123456")
             .1
             .contains("#123456")
     );

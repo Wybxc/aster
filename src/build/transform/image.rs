@@ -5,14 +5,13 @@ use typst_html::HtmlElement;
 use crate::build::output::{ImageFormat, PagePublication};
 use crate::build::transform::{Processor, WalkControl, dom::HtmlElementExt};
 
-/// Minimum decoded size (bytes) below which a data URI stays inline.
-const IMAGE_EXTRACT_THRESHOLD: usize = 1024;
-
-pub(crate) struct ImageProcessor;
+pub(crate) struct ImageProcessor {
+    inline_threshold: usize,
+}
 
 impl ImageProcessor {
-    pub fn new() -> Self {
-        Self
+    pub fn new(inline_threshold: usize) -> Self {
+        Self { inline_threshold }
     }
 }
 
@@ -28,7 +27,7 @@ impl Processor for ImageProcessor {
         let Some(src) = element.get_attr("src") else {
             return Ok(WalkControl::Continue);
         };
-        if let Some((content, format)) = try_extract(&src)? {
+        if let Some((content, format)) = try_extract(&src, self.inline_threshold)? {
             let url = page.add_image(format, content)?;
             element.update_attr("src", |value| *value = url);
         }
@@ -36,14 +35,14 @@ impl Processor for ImageProcessor {
     }
 }
 
-fn try_extract(src: &str) -> Result<Option<(Vec<u8>, ImageFormat)>> {
+fn try_extract(src: &str, inline_threshold: usize) -> Result<Option<(Vec<u8>, ImageFormat)>> {
     let Ok(data_url) = DataUrl::process(src) else {
         return Ok(None);
     };
     let (decoded, _) = data_url
         .decode_to_vec()
         .context("failed to decode image data URL")?;
-    if decoded.len() < IMAGE_EXTRACT_THRESHOLD {
+    if decoded.len() < inline_threshold {
         return Ok(None);
     }
     Ok(Some((decoded, media_type_to_format(data_url.mime_type()))))
@@ -71,6 +70,8 @@ fn media_type_to_format(mediatype: &Mime) -> ImageFormat {
 mod tests {
     use super::*;
 
+    const DEFAULT_INLINE_THRESHOLD: usize = 1024;
+
     #[test]
     fn extracts_standard_base64_data_urls_with_mime_parameters() {
         let source = format!(
@@ -78,7 +79,9 @@ mod tests {
             "AAAA".repeat(342)
         );
 
-        let (content, format) = try_extract(&source).unwrap().unwrap();
+        let (content, format) = try_extract(&source, DEFAULT_INLINE_THRESHOLD)
+            .unwrap()
+            .unwrap();
 
         assert_eq!(content.len(), 1026);
         assert_eq!(format, ImageFormat::Png);
@@ -88,24 +91,45 @@ mod tests {
     fn extracts_percent_encoded_data_urls() {
         let source = format!(
             "data:image/svg+xml,{}",
-            "%78".repeat(IMAGE_EXTRACT_THRESHOLD)
+            "%78".repeat(DEFAULT_INLINE_THRESHOLD)
         );
 
-        let (content, format) = try_extract(&source).unwrap().unwrap();
+        let (content, format) = try_extract(&source, DEFAULT_INLINE_THRESHOLD)
+            .unwrap()
+            .unwrap();
 
-        assert_eq!(content, vec![b'x'; IMAGE_EXTRACT_THRESHOLD]);
+        assert_eq!(content, vec![b'x'; DEFAULT_INLINE_THRESHOLD]);
         assert_eq!(format, ImageFormat::Svg);
     }
 
     #[test]
     fn keeps_small_or_non_data_urls_inline() {
-        assert!(try_extract("data:image/png;base64,AAAA").unwrap().is_none());
-        assert!(try_extract("image.png").unwrap().is_none());
-        assert!(try_extract("data:image/png").unwrap().is_none());
+        assert!(
+            try_extract("data:image/png;base64,AAAA", DEFAULT_INLINE_THRESHOLD)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            try_extract("image.png", DEFAULT_INLINE_THRESHOLD)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            try_extract("data:image/png", DEFAULT_INLINE_THRESHOLD)
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
     fn rejects_invalid_base64_data() {
-        assert!(try_extract("data:image/png;base64,%%%!").is_err());
+        assert!(try_extract("data:image/png;base64,%%%!", DEFAULT_INLINE_THRESHOLD).is_err());
+    }
+
+    #[test]
+    fn configured_threshold_controls_extraction() {
+        let source = "data:image/png;base64,AAAA";
+        assert!(try_extract(source, 4).unwrap().is_none());
+        assert!(try_extract(source, 3).unwrap().is_some());
     }
 }

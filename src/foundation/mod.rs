@@ -9,3 +9,4 @@ pub(crate) mod files;
 mod project;
 
 pub use project::Project;
+pub(crate) use project::ProjectLayout;

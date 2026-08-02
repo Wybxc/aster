@@ -38,8 +38,8 @@ pub fn write_css_page(root: &Path) {
     .unwrap();
 }
 
-pub fn generated_asset_containing(project: &Project, marker: &str) -> (PathBuf, String) {
-    std::fs::read_dir(project.output_dir().join("_assets"))
+pub fn generated_asset_containing(root: &Path, marker: &str) -> (PathBuf, String) {
+    std::fs::read_dir(root.join("dist/_assets"))
         .unwrap()
         .map(|entry| entry.unwrap().path())
         .find_map(|path| {

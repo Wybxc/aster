@@ -2,6 +2,8 @@ mod common;
 
 #[path = "integration/build.rs"]
 mod build;
+#[path = "integration/config.rs"]
+mod config;
 #[path = "integration/css.rs"]
 mod css;
 #[path = "integration/foundation.rs"]

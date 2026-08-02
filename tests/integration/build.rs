@@ -8,7 +8,7 @@ fn build_command_builds_the_selected_project() {
     let root = temp.path();
     std::fs::create_dir_all(root.join("src")).unwrap();
     std::fs::write(root.join("src/index.typ"), "#html.elem(\"p\")[Built]").unwrap();
-    let project = project(root);
+    project(root);
 
     let output = Command::new(env!("CARGO_BIN_EXE_aster"))
         .arg("build")
@@ -22,6 +22,6 @@ fn build_command_builds_the_selected_project() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert!(project.output_dir().join("index.html").is_file());
+    assert!(root.join("dist/index.html").is_file());
     assert!(String::from_utf8_lossy(&output.stderr).contains("built 1 page"));
 }

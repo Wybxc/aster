@@ -11,10 +11,10 @@ pub fn run(project_dir: Option<PathBuf>) -> Result<()> {
     let mut watcher = Watcher::new(None)
         .map_err(anyhow::Error::msg)
         .context("failed to initialize file watcher")?;
-    let mut session = BuildSession::new(project.clone());
+    let mut session = BuildSession::new(project.clone())?;
 
     watcher
-        .update(project.watch_paths(std::iter::empty()))
+        .update(session.watch_paths())
         .map_err(anyhow::Error::msg)
         .context("failed to watch project inputs")?;
     diag::emit_watching(project.root());
@@ -27,7 +27,7 @@ pub fn run(project_dir: Option<PathBuf>) -> Result<()> {
         }
 
         watcher
-            .update(project.watch_paths(session.dependencies()))
+            .update(session.watch_paths())
             .map_err(anyhow::Error::msg)
             .context("failed to update watched inputs")?;
         watcher

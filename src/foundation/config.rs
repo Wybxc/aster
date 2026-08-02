@@ -5,9 +5,6 @@ use serde::Deserialize;
 use typst::ecow::EcoString;
 use typst::foundations::{Dict, Value};
 
-const DEFAULT_LIGHT: &str = "InspiredGitHub";
-const DEFAULT_DARK: &str = "base16-eighties.dark";
-
 /// Complete `aster.toml` manifest, represented for both Typst and Aster.
 pub(crate) struct ProjectManifest {
     /// Complete Typst-friendly manifest dictionary for `sys.inputs`.
@@ -17,13 +14,23 @@ pub(crate) struct ProjectManifest {
 }
 
 /// Highlight theme configuration from `aster.toml`.
-#[derive(Default, Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(default)]
 pub(crate) struct HighlightConfig {
+    pub enabled: bool,
     pub themes: Themes,
 }
 
-#[derive(Deserialize)]
+impl Default for HighlightConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            themes: Themes::default(),
+        }
+    }
+}
+
+#[derive(Clone, Deserialize)]
 #[serde(default)]
 pub(crate) struct Themes {
     pub light: EcoString,
@@ -33,8 +40,80 @@ pub(crate) struct Themes {
 impl Default for Themes {
     fn default() -> Self {
         Self {
-            light: DEFAULT_LIGHT.into(),
-            dark: DEFAULT_DARK.into(),
+            light: "InspiredGitHub".into(),
+            dark: "base16-eighties.dark".into(),
+        }
+    }
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(default)]
+pub(crate) struct PathsConfig {
+    pub source: EcoString,
+    pub content: EcoString,
+    pub output: EcoString,
+}
+
+impl Default for PathsConfig {
+    fn default() -> Self {
+        Self {
+            source: "src".into(),
+            content: "content".into(),
+            output: "dist".into(),
+        }
+    }
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(default)]
+pub(crate) struct OutputConfig {
+    pub assets: EcoString,
+    pub pretty: bool,
+}
+
+impl Default for OutputConfig {
+    fn default() -> Self {
+        Self {
+            assets: "_assets".into(),
+            pretty: false,
+        }
+    }
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub(crate) struct AssetsConfig {
+    pub image_inline_threshold: usize,
+    pub minify_css: bool,
+}
+
+impl Default for AssetsConfig {
+    fn default() -> Self {
+        Self {
+            image_inline_threshold: 1024,
+            minify_css: true,
+        }
+    }
+}
+
+#[derive(Clone, Default, Deserialize)]
+#[serde(default)]
+pub(crate) struct TypstConfig {
+    pub fonts: FontConfig,
+}
+
+#[derive(Clone, Deserialize, Eq, PartialEq)]
+#[serde(default)]
+pub(crate) struct FontConfig {
+    pub paths: Vec<EcoString>,
+    pub system: bool,
+}
+
+impl Default for FontConfig {
+    fn default() -> Self {
+        Self {
+            paths: Vec::new(),
+            system: true,
         }
     }
 }
@@ -43,6 +122,10 @@ impl Default for Themes {
 #[derive(Default, Deserialize)]
 #[serde(default)]
 pub(crate) struct AsterConfig {
+    pub paths: PathsConfig,
+    pub output: OutputConfig,
+    pub assets: AssetsConfig,
+    pub typst: TypstConfig,
     pub highlight: HighlightConfig,
 }
 
@@ -126,7 +209,50 @@ mod tests {
         let manifest = ProjectManifest::load(&config_file).unwrap();
 
         assert_eq!(manifest.config.highlight.themes.light, "Solarized (light)");
-        assert_eq!(manifest.config.highlight.themes.dark, DEFAULT_DARK);
+        assert_eq!(
+            manifest.config.highlight.themes.dark,
+            "base16-eighties.dark"
+        );
+    }
+
+    #[test]
+    fn loads_build_options_and_fills_their_defaults() {
+        let temp = tempfile::tempdir().unwrap();
+        let config_file = temp.path().join("aster.toml");
+        std::fs::write(
+            &config_file,
+            concat!(
+                "[paths]\n",
+                "source = \"pages\"\n",
+                "output = \"public\"\n",
+                "[output]\n",
+                "assets = \"static/generated\"\n",
+                "pretty = true\n",
+                "[assets]\n",
+                "image-inline-threshold = 2048\n",
+                "minify-css = false\n",
+                "[typst.fonts]\n",
+                "paths = [\"fonts\"]\n",
+                "system = false\n",
+                "[highlight]\n",
+                "enabled = false\n",
+            ),
+        )
+        .unwrap();
+
+        let config = ProjectManifest::load(&config_file).unwrap().config;
+
+        assert_eq!(config.paths.source, "pages");
+        assert_eq!(config.paths.content, "content");
+        assert_eq!(config.paths.output, "public");
+        assert_eq!(config.output.assets, "static/generated");
+        assert!(config.output.pretty);
+        assert_eq!(config.assets.image_inline_threshold, 2048);
+        assert!(!config.assets.minify_css);
+        assert_eq!(config.typst.fonts.paths, ["fonts"]);
+        assert!(!config.typst.fonts.system);
+        assert!(!config.highlight.enabled);
+        assert_eq!(config.highlight.themes.light, "InspiredGitHub");
     }
 
     #[test]

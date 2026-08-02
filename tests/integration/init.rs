@@ -30,7 +30,7 @@ fn initializes_a_buildable_project_with_a_real_library_directory() {
     assert!(config.contains("name = \"my-site\""));
 
     let project = Project::open(destination).unwrap();
-    let outcome = BuildSession::new(project).build().unwrap();
+    let outcome = BuildSession::new(project).unwrap().build().unwrap();
     assert_eq!(outcome.outputs.len(), 1);
 }
 

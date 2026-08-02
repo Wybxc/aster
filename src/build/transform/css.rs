@@ -62,11 +62,15 @@ fn decompose(error: &lightningcss::error::Error<impl std::fmt::Display>) -> (Eco
 
 pub(crate) struct CssProcessor<'a> {
     project_files: Tracked<'a, ProjectFiles>,
+    minify: bool,
 }
 
 impl<'a> CssProcessor<'a> {
-    pub fn new(project_files: Tracked<'a, ProjectFiles>) -> Self {
-        Self { project_files }
+    pub fn new(project_files: Tracked<'a, ProjectFiles>, minify: bool) -> Self {
+        Self {
+            project_files,
+            minify,
+        }
     }
 }
 
@@ -86,8 +90,13 @@ impl Processor for CssProcessor<'_> {
             anyhow::anyhow!("link element of type \"css\" is missing href attribute")
         })?;
         let source = page.resolve_source(Path::new(href.as_str()))?;
-        let css = bundle_file(self.project_files, &source, page.project_root())
-            .map_err(|error| anyhow::anyhow!("{error:#}"))?;
+        let css = bundle_file(
+            self.project_files,
+            &source,
+            page.project_root(),
+            self.minify,
+        )
+        .map_err(|error| anyhow::anyhow!("{error:#}"))?;
         let url = page.add_bundled_stylesheet(&source, css.into_bytes())?;
 
         element.update_attr("href", move |value| *value = url);
@@ -102,6 +111,7 @@ fn bundle_file(
     project_files: Tracked<ProjectFiles>,
     entry: &VirtualPath,
     project_root: &Path,
+    minify: bool,
 ) -> std::result::Result<String, BundleError> {
     let entry = entry
         .realize(project_root)
@@ -119,18 +129,20 @@ fn bundle_file(
             location,
         }
     })?;
-    stylesheet
-        .minify(MinifyOptions {
-            targets: Browsers::default().into(),
-            ..MinifyOptions::default()
-        })
-        .map_err(|error| {
-            let (kind, location) = decompose(&error);
-            BundleError::Minify { kind, location }
-        })?;
+    if minify {
+        stylesheet
+            .minify(MinifyOptions {
+                targets: Browsers::default().into(),
+                ..MinifyOptions::default()
+            })
+            .map_err(|error| {
+                let (kind, location) = decompose(&error);
+                BundleError::Minify { kind, location }
+            })?;
+    }
     let result = stylesheet
         .to_css(PrinterOptions {
-            minify: true,
+            minify,
             ..PrinterOptions::default()
         })
         .map_err(|error| {

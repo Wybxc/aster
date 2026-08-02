@@ -43,6 +43,7 @@ const TYPST_LANGS: &[&str] = &["typ", "typst", "typc", "typm"];
 type HighlightToken = (Option<EcoString>, EcoString);
 
 pub(crate) struct HighlightProcessor {
+    enabled: bool,
     stylesheet: Option<AssetPath>,
 }
 
@@ -52,6 +53,15 @@ impl HighlightProcessor {
         project_files: Tracked<ProjectFiles>,
         publication: &mut OutputPublication,
     ) -> Result<(Self, Vec<BuildWarning>)> {
+        if !config.enabled {
+            return Ok((
+                Self {
+                    enabled: false,
+                    stylesheet: None,
+                },
+                Vec::new(),
+            ));
+        }
         let mut warnings = Vec::new();
         let stylesheet = match compute_highlight_css(config, project_files) {
             Ok(Some(css)) => Some(publication.add_highlight_stylesheet(css.into_bytes())?),
@@ -63,7 +73,13 @@ impl HighlightProcessor {
                 None
             }
         };
-        Ok((Self { stylesheet }, warnings))
+        Ok((
+            Self {
+                enabled: true,
+                stylesheet,
+            },
+            warnings,
+        ))
     }
 }
 
@@ -85,6 +101,9 @@ impl Processor for HighlightProcessor {
         element: &mut HtmlElement,
         _page: &mut PagePublication<'_>,
     ) -> Result<WalkControl> {
+        if !self.enabled {
+            return Ok(WalkControl::Continue);
+        }
         Ok(process_element(element))
     }
 }

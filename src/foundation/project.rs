@@ -1,8 +1,10 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, bail, ensure};
 use typst::syntax::VirtualPath;
 use walkdir::WalkDir;
+
+use crate::foundation::config::AsterConfig;
 
 /// A discovered Aster project rooted at an absolute lexical path.
 #[derive(Clone)]
@@ -41,34 +43,88 @@ impl Project {
         &self.root
     }
 
-    /// Return the page-template directory.
-    pub fn src_dir(&self) -> PathBuf {
-        self.root.join("src")
-    }
-
-    /// Return the content collection directory.
-    pub fn content_dir(&self) -> PathBuf {
-        self.root.join("content")
-    }
-
-    /// Return the published output directory.
-    pub fn output_dir(&self) -> PathBuf {
-        self.root.join("dist")
-    }
-
     /// Return the project manifest path.
     pub fn config_file(&self) -> PathBuf {
         self.root.join("aster.toml")
     }
 
+    pub(crate) fn realize(&self, path: &VirtualPath) -> PathBuf {
+        path.realize(&self.root)
+            .expect("validated project path must realize within the project root")
+    }
+}
+
+/// Validated project-relative paths used by one build configuration.
+#[derive(Clone)]
+pub(crate) struct ProjectLayout {
+    source: VirtualPath,
+    content: VirtualPath,
+    output: VirtualPath,
+    assets: VirtualPath,
+    fonts: Vec<VirtualPath>,
+}
+
+impl ProjectLayout {
+    pub(crate) fn new(config: &AsterConfig) -> Result<Self> {
+        let source = project_directory(&config.paths.source, "source")?;
+        let content = project_directory(&config.paths.content, "content")?;
+        let output = project_directory(&config.paths.output, "output")?;
+        ensure_disjoint(&source, "source", &content, "content")?;
+        ensure_disjoint(&source, "source", &output, "output")?;
+        ensure_disjoint(&content, "content", &output, "output")?;
+
+        let assets = project_directory(&config.output.assets, "assets")?;
+        let fonts = config
+            .typst
+            .fonts
+            .paths
+            .iter()
+            .map(|path| project_path(path, "font"))
+            .collect::<Result<_>>()?;
+        for font in &fonts {
+            ensure_disjoint(font, "font", &output, "output")?;
+        }
+
+        Ok(Self {
+            source,
+            content,
+            output,
+            assets,
+            fonts,
+        })
+    }
+
+    pub(crate) fn source(&self) -> &VirtualPath {
+        &self.source
+    }
+
+    pub(crate) fn content(&self) -> &VirtualPath {
+        &self.content
+    }
+
+    pub(crate) fn assets(&self) -> &VirtualPath {
+        &self.assets
+    }
+
+    pub(crate) fn output_dir(&self, project: &Project) -> PathBuf {
+        project.realize(&self.output)
+    }
+
+    pub(crate) fn font_dirs<'a>(
+        &'a self,
+        project: &'a Project,
+    ) -> impl Iterator<Item = PathBuf> + 'a {
+        self.fonts.iter().map(move |path| project.realize(path))
+    }
+
     /// Return every structural and tracked build input that watch mode should
     /// observe, excluding the generated output tree.
-    pub fn watch_paths<I>(&self, dependencies: I) -> Vec<PathBuf>
+    pub(crate) fn watch_paths<I>(&self, project: &Project, dependencies: I) -> Vec<PathBuf>
     where
         I: IntoIterator<Item = PathBuf>,
     {
-        let output = self.output_dir();
-        let mut paths = self.structural_watch_paths();
+        let output = self.output_dir(project);
+        let mut paths = self.structural_watch_paths(project);
         paths.extend(
             dependencies
                 .into_iter()
@@ -79,9 +135,13 @@ impl Project {
         paths
     }
 
-    fn structural_watch_paths(&self) -> Vec<PathBuf> {
-        let directories = [self.src_dir(), self.content_dir()];
-        let mut paths = vec![self.config_file()];
+    fn structural_watch_paths(&self, project: &Project) -> Vec<PathBuf> {
+        let mut directories = vec![
+            project.realize(&self.source),
+            project.realize(&self.content),
+        ];
+        directories.extend(self.font_dirs(project));
+        let mut paths = vec![project.config_file()];
         paths.extend(directories.iter().cloned());
         for directory in directories {
             if !directory.is_dir() {
@@ -100,4 +160,36 @@ impl Project {
         }
         paths
     }
+}
+
+fn project_directory(value: &str, name: &str) -> Result<VirtualPath> {
+    let path = project_path(value, name)?;
+    ensure!(
+        !path.is_root(),
+        "{name} directory cannot be the project root"
+    );
+    Ok(path)
+}
+
+fn project_path(value: &str, name: &str) -> Result<VirtualPath> {
+    ensure!(
+        !Path::new(value).is_absolute(),
+        "{name} path must be relative"
+    );
+    VirtualPath::new(value).with_context(|| format!("invalid {name} path `{value}`"))
+}
+
+fn ensure_disjoint(
+    left: &VirtualPath,
+    left_name: &str,
+    right: &VirtualPath,
+    right_name: &str,
+) -> Result<()> {
+    let left_path = Path::new(left.get_without_slash());
+    let right_path = Path::new(right.get_without_slash());
+    ensure!(
+        !left_path.starts_with(right_path) && !right_path.starts_with(left_path),
+        "{left_name} and {right_name} directories must not overlap"
+    );
+    Ok(())
 }

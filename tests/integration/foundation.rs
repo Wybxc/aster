@@ -1,21 +1,27 @@
-use aster::Project;
+use aster::{BuildSession, Project};
 use typst::syntax::VirtualPath;
 
 #[test]
 fn structural_watch_paths_include_nested_and_missing_layout_directories() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src/blog/nested")).unwrap();
-    std::fs::write(root.join("aster.toml"), "").unwrap();
+    std::fs::create_dir_all(root.join("pages/blog/nested")).unwrap();
+    std::fs::write(
+        root.join("aster.toml"),
+        "[paths]\nsource = \"pages\"\ncontent = \"entries\"\noutput = \"public\"\n",
+    )
+    .unwrap();
     let project = Project::open(root.to_owned()).unwrap();
 
-    let paths = project.watch_paths(std::iter::empty());
+    let mut session = BuildSession::new(project.clone()).unwrap();
+    let paths = session.watch_paths();
 
     assert!(paths.contains(&project.config_file()));
-    assert!(paths.contains(&project.src_dir()));
-    assert!(paths.contains(&project.src_dir().join("blog")));
-    assert!(paths.contains(&project.src_dir().join("blog/nested")));
-    assert!(paths.contains(&project.content_dir()));
+    assert!(paths.contains(&root.join("pages")));
+    assert!(paths.contains(&root.join("pages/blog")));
+    assert!(paths.contains(&root.join("pages/blog/nested")));
+    assert!(paths.contains(&root.join("entries")));
+    assert!(!paths.contains(&root.join("src")));
 }
 
 #[test]
@@ -24,20 +30,31 @@ fn watch_paths_merge_dependencies_and_exclude_output() {
     let root = temp.path();
     std::fs::create_dir_all(root.join("src/blog")).unwrap();
     std::fs::create_dir_all(root.join("dist")).unwrap();
-    std::fs::write(root.join("aster.toml"), "").unwrap();
+    std::fs::write(
+        root.join("aster.toml"),
+        concat!(
+            "[highlight.themes]\n",
+            "light = \"theme.tmTheme\"\n",
+            "dark = \"theme.tmTheme\"\n",
+        ),
+    )
+    .unwrap();
+    std::fs::write(root.join("src/index.typ"), "#html.elem(\"p\")[Page]").unwrap();
     let project = Project::open(root.to_owned()).unwrap();
     let theme = root.join("theme.tmTheme");
-    let generated = project.output_dir().join("index.html");
+    let generated = root.join("dist/index.html");
 
-    let paths = project.watch_paths([theme.clone(), generated.clone()]);
+    let mut session = BuildSession::new(project).unwrap();
+    session.build().unwrap();
+    let paths = session.watch_paths();
 
     assert!(paths.contains(&theme));
-    assert!(paths.contains(&project.src_dir().join("blog")));
+    assert!(paths.contains(&root.join("src/blog")));
     assert!(!paths.contains(&generated));
     assert!(
         !paths
             .iter()
-            .any(|path| VirtualPath::virtualize(&project.output_dir(), path).is_ok())
+            .any(|path| VirtualPath::virtualize(&root.join("dist"), path).is_ok())
     );
 }
 

@@ -76,7 +76,7 @@ impl FileAccessError {
 impl ProjectFiles {
     pub(crate) fn new(project: &Project) -> Self {
         let root = project.root().to_owned();
-        let downloader = SystemDownloader::new("aster/0.1.0");
+        let downloader = SystemDownloader::new(concat!("aster/", env!("CARGO_PKG_VERSION")));
         let packages = SystemPackages::new(downloader);
         let fs_root = FsRoot::new(root.clone());
         let store = FileStore::new(SystemFiles::new(fs_root, packages));

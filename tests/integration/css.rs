@@ -14,9 +14,9 @@ fn bundles_and_tracks_entry_and_transitive_imports() {
     std::fs::write(&dependency, ".theme { color: blue; }").unwrap();
 
     let project = project(root);
-    let mut driver = BuildSession::new(project.clone());
+    let mut driver = BuildSession::new(project.clone()).unwrap();
     build(&mut driver);
-    let (first_path, first_css) = generated_asset_containing(&project, ".page");
+    let (first_path, first_css) = generated_asset_containing(root, ".page");
     assert!(
         first_path
             .file_name()
@@ -30,20 +30,20 @@ fn bundles_and_tracks_entry_and_transitive_imports() {
 
     build(&mut driver);
     assert_eq!(
-        generated_asset_containing(&project, ".page"),
+        generated_asset_containing(root, ".page"),
         (first_path.clone(), first_css.clone())
     );
 
     std::fs::write(root.join("src/unrelated.css"), ".unused { color: black; }").unwrap();
     build(&mut driver);
     assert_eq!(
-        generated_asset_containing(&project, ".page"),
+        generated_asset_containing(root, ".page"),
         (first_path.clone(), first_css.clone())
     );
 
     std::fs::write(&dependency, ".theme { color: green; }").unwrap();
     build(&mut driver);
-    let (changed_path, changed_css) = generated_asset_containing(&project, ".page");
+    let (changed_path, changed_css) = generated_asset_containing(root, ".page");
     assert_ne!(changed_path, first_path);
     assert_ne!(changed_css, first_css);
     assert!(!first_path.exists());
@@ -59,8 +59,8 @@ fn rechecks_missing_imports() {
     let missing = root.join("src/missing.css");
 
     let project = project(root);
-    let tracked_missing = project.src_dir().join("missing.css");
-    let mut driver = BuildSession::new(project.clone());
+    let tracked_missing = root.join("src/missing.css");
+    let mut driver = BuildSession::new(project.clone()).unwrap();
     assert!(driver.build().is_err());
     assert!(driver.build().is_err());
     let dependencies = driver.dependencies().collect::<Vec<_>>();
@@ -72,7 +72,7 @@ fn rechecks_missing_imports() {
     std::fs::write(&missing, ".created { color: green; }").unwrap();
     build(&mut driver);
     assert!(
-        generated_asset_containing(&project, ".created")
+        generated_asset_containing(root, ".created")
             .1
             .contains(".created")
     );
@@ -88,11 +88,11 @@ fn allows_transitive_import_outside_source_directory() {
     std::fs::write(root.join("secret.css"), ".secret { color: red; }").unwrap();
 
     let project = project(root);
-    let mut session = BuildSession::new(project.clone());
+    let mut session = BuildSession::new(project.clone()).unwrap();
     build(&mut session);
 
     assert!(
-        generated_asset_containing(&project, ".secret")
+        generated_asset_containing(root, ".secret")
             .1
             .contains(".secret")
     );
@@ -113,6 +113,7 @@ fn rejects_transitive_import_outside_project_root() {
 
     let project = project(root);
     let error = BuildSession::new(project)
+        .unwrap()
         .build()
         .err()
         .expect("escaping import must fail");
@@ -140,12 +141,12 @@ fn allows_symlinked_css_outside_project_root() {
     symlink(external.path().join("shared.css"), &linked).unwrap();
 
     let project = project(root);
-    let linked = project.src_dir().join("shared.css");
-    let mut session = BuildSession::new(project.clone());
+    let linked = root.join("src/shared.css");
+    let mut session = BuildSession::new(project.clone()).unwrap();
     build(&mut session);
 
     assert!(
-        generated_asset_containing(&project, ".shared")
+        generated_asset_containing(root, ".shared")
             .1
             .contains(".shared")
     );

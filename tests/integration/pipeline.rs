@@ -11,17 +11,17 @@ fn build_reuses_the_session_and_observes_source_changes() {
     std::fs::write(&entry, "#html.elem(\"p\")[first]").unwrap();
 
     let project = project(root);
-    let mut driver = BuildSession::new(project.clone());
+    let mut driver = BuildSession::new(project.clone()).unwrap();
     build(&mut driver);
-    let first = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
+    let first = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
 
     build(&mut driver);
-    let repeated = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
+    let repeated = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     assert_eq!(repeated, first);
 
     std::fs::write(&entry, "#html.elem(\"p\")[second]").unwrap();
     build(&mut driver);
-    let changed = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
+    let changed = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     assert_ne!(changed, first);
     assert!(changed.contains("second"));
 }
@@ -54,9 +54,9 @@ fn build_loads_content_and_frontmatter_through_entry_module() {
     .unwrap();
 
     let project = project(root);
-    let mut driver = BuildSession::new(project.clone());
+    let mut driver = BuildSession::new(project.clone()).unwrap();
     build(&mut driver);
-    let first = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
+    let first = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     assert!(first.contains("First"));
     assert!(first.contains("First body"));
 
@@ -66,7 +66,7 @@ fn build_loads_content_and_frontmatter_through_entry_module() {
     )
     .unwrap();
     build(&mut driver);
-    let second = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
+    let second = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     assert!(second.contains("Second"));
     assert!(second.contains("Second body"));
     assert_ne!(second, first);
@@ -82,19 +82,19 @@ fn reentrant_build_discovers_added_and_removed_pages() {
     std::fs::write(&index, "#html.elem(\"p\")[Index]").unwrap();
 
     let project = project(root);
-    let mut driver = BuildSession::new(project.clone());
+    let mut driver = BuildSession::new(project.clone()).unwrap();
     build(&mut driver);
-    assert!(project.output_dir().join("index.html").is_file());
+    assert!(root.join("dist/index.html").is_file());
 
     std::fs::write(&about, "#html.elem(\"p\")[About]").unwrap();
     build(&mut driver);
-    assert!(project.output_dir().join("index.html").is_file());
-    assert!(project.output_dir().join("about.html").is_file());
+    assert!(root.join("dist/index.html").is_file());
+    assert!(root.join("dist/about.html").is_file());
 
     std::fs::remove_file(index).unwrap();
     build(&mut driver);
-    assert!(!project.output_dir().join("index.html").exists());
-    assert!(project.output_dir().join("about.html").is_file());
+    assert!(!root.join("dist/index.html").exists());
+    assert!(root.join("dist/about.html").is_file());
 }
 
 #[test]
@@ -106,7 +106,7 @@ fn reentrant_build_recovers_after_compilation_failure() {
     std::fs::write(&entry, "#html.elem(\"p\")[First]").unwrap();
 
     let project = project(root);
-    let mut driver = BuildSession::new(project.clone());
+    let mut driver = BuildSession::new(project.clone()).unwrap();
     build(&mut driver);
 
     std::fs::write(&entry, "#let broken =").unwrap();
@@ -114,7 +114,7 @@ fn reentrant_build_recovers_after_compilation_failure() {
 
     std::fs::write(&entry, "#html.elem(\"p\")[Recovered]").unwrap();
     build(&mut driver);
-    let html = std::fs::read_to_string(project.output_dir().join("index.html")).unwrap();
+    let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     assert!(html.contains("Recovered"));
 }
 
@@ -135,14 +135,11 @@ fn build_follows_a_source_directory_symlink_outside_the_project() {
     symlink(external.path(), root.join("src")).unwrap();
 
     let project = project(root);
-    let outcome = BuildSession::new(project.clone()).build().unwrap();
+    let outcome = BuildSession::new(project.clone()).unwrap().build().unwrap();
 
-    assert_eq!(
-        outcome.outputs,
-        vec![project.output_dir().join("index.html")]
-    );
+    assert_eq!(outcome.outputs, vec![root.join("dist/index.html")]);
     assert!(
-        std::fs::read_to_string(project.output_dir().join("index.html"))
+        std::fs::read_to_string(root.join("dist/index.html"))
             .unwrap()
             .contains("External")
     );
@@ -166,14 +163,11 @@ fn build_preserves_a_symlinked_project_root() {
     symlink(&actual, &linked).unwrap();
 
     let project = Project::open(&linked).unwrap();
-    let outcome = BuildSession::new(project.clone()).build().unwrap();
+    let outcome = BuildSession::new(project.clone()).unwrap().build().unwrap();
 
-    assert_eq!(
-        outcome.outputs,
-        vec![project.output_dir().join("index.html")]
-    );
+    assert_eq!(outcome.outputs, vec![linked.join("dist/index.html")]);
     assert!(
-        std::fs::read_to_string(project.output_dir().join("index.html"))
+        std::fs::read_to_string(linked.join("dist/index.html"))
             .unwrap()
             .contains("Linked root")
     );

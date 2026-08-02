@@ -19,7 +19,7 @@ fn fixture(files: &[&str]) -> (tempfile::TempDir, Project) {
 
 fn write_routes(project: &Project, template: &str, routes: &str) {
     std::fs::write(
-        project.src_dir().join(template),
+        project.root().join("src").join(template),
         format!("#metadata({routes}) <route>\n#html.elem(\"p\")[Page]"),
     )
     .unwrap();
@@ -30,12 +30,13 @@ fn route_plan_is_sorted_and_probes_dynamic_templates() {
     let (_temp, project) = fixture(&["z.typ", "blog/[slug].typ", "a.typ"]);
     write_routes(&project, "blog/[slug].typ", "((slug: \"post\"),)");
 
-    let outcome = BuildSession::new(project.clone()).build().unwrap();
+    let outcome = BuildSession::new(project.clone()).unwrap().build().unwrap();
+    let output_dir = project.root().join("dist");
     let outputs = outcome
         .outputs
         .iter()
         .map(|path| {
-            let path = VirtualPath::virtualize(&project.output_dir(), path).unwrap();
+            let path = VirtualPath::virtualize(&output_dir, path).unwrap();
             PathBuf::from(path.get_without_slash())
         })
         .collect::<Vec<_>>();
@@ -55,14 +56,14 @@ fn route_plan_rejects_static_dynamic_collision() {
     let (_temp, project) = fixture(&["post.typ", "[slug].typ"]);
     write_routes(&project, "[slug].typ", "((slug: \"post\"),)");
 
-    assert!(BuildSession::new(project).build().is_err());
+    assert!(BuildSession::new(project).unwrap().build().is_err());
 }
 
 #[test]
 fn route_plan_reports_missing_dynamic_metadata() {
     let (_temp, project) = fixture(&["[slug].typ"]);
 
-    let outcome = BuildSession::new(project).build().unwrap();
+    let outcome = BuildSession::new(project).unwrap().build().unwrap();
 
     assert!(outcome.outputs.is_empty());
     assert_eq!(outcome.warnings.len(), 1);

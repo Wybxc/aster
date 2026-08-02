@@ -4,20 +4,20 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result, bail};
 use typst::Library;
 use typst::ecow::EcoString;
-use typst::syntax::{RootedPath, VirtualPath, VirtualRoot};
+use typst::syntax::{RootedPath, VirtualRoot};
 use typst::utils::LazyHash;
 
 use crate::build::output::OutputPublication;
 use crate::build::transform;
 use crate::build::world::TypstSession;
 use crate::engine::content::{self, ContentEntry};
-use crate::engine::route::RoutePath;
 use crate::foundation::Project;
+use crate::foundation::ProjectLayout;
 use crate::foundation::config::ProjectManifest;
 
 mod route_plan;
 
-use self::route_plan::RoutePlan;
+use self::route_plan::{PlannedRoute, RoutePlan};
 use super::BuildWarning;
 
 /// The complete build outcome. No build stage decides terminal formatting or
@@ -34,31 +34,44 @@ pub struct BuildOutcome {
 /// A reusable build session bound to one Aster project.
 pub struct BuildSession {
     session: TypstSession,
+    layout: ProjectLayout,
 }
 
 impl BuildSession {
-    /// Create a reusable session for `project`.
-    pub fn new(project: Project) -> Self {
-        Self {
+    /// Create a reusable session after loading and validating its manifest.
+    pub fn new(project: Project) -> Result<Self> {
+        let manifest =
+            ProjectManifest::load(&project.config_file()).context("failed to parse aster.toml")?;
+        let layout = ProjectLayout::new(&manifest.config).context("invalid project layout")?;
+        Ok(Self {
             session: TypstSession::new(project),
-        }
+            layout,
+        })
     }
 
     /// Build and publish the complete project output tree.
     pub fn build(&mut self) -> Result<BuildOutcome> {
         let manifest = ProjectManifest::load(&self.session.project().config_file())
             .context("failed to parse aster.toml")?;
+        self.layout = ProjectLayout::new(&manifest.config).context("invalid project layout")?;
+        self.session
+            .configure_fonts(&manifest.config.typst.fonts, &self.layout)?;
         self.session.reset();
 
         let session = &self.session;
+        let layout = &self.layout;
         let outcome = (|| {
             let started = Instant::now();
             let project = session.project().clone();
             let mut warnings = Vec::new();
-            let mut publication = OutputPublication::new(&project);
+            let mut publication = OutputPublication::new(&project, layout)?;
 
-            let mut css = transform::CssProcessor::new(session.project_files());
-            let mut image = transform::ImageProcessor::new();
+            let mut css = transform::CssProcessor::new(
+                session.project_files(),
+                manifest.config.assets.minify_css,
+            );
+            let mut image =
+                transform::ImageProcessor::new(manifest.config.assets.image_inline_threshold);
             let (mut highlight, highlight_warnings) = transform::HighlightProcessor::new(
                 &manifest.config.highlight,
                 session.project_files(),
@@ -68,10 +81,11 @@ impl BuildSession {
             let mut processors: [&mut dyn transform::Processor; 3] =
                 [&mut css, &mut image, &mut highlight];
 
-            let protocol = load_content(session).context("failed to load content collections")?;
+            let protocol =
+                load_content(session, layout).context("failed to load content collections")?;
             let base_inputs = content::with_protocol(manifest.inputs, protocol)?;
             let base_library = session.library(base_inputs.clone());
-            let plan = RoutePlan::build(session, &base_inputs, &base_library)?;
+            let plan = RoutePlan::build(session, layout, &base_inputs, &base_library)?;
             let (jobs, route_warnings) = plan.into_parts();
             warnings.extend(route_warnings);
 
@@ -84,9 +98,9 @@ impl BuildSession {
                 render_page(
                     session,
                     &mut publication,
-                    &job.template,
-                    &job.output,
+                    &job,
                     &library,
+                    manifest.config.output.pretty,
                     &mut processors,
                     &mut warnings,
                 )
@@ -109,6 +123,13 @@ impl BuildSession {
         self.session.dependencies()
     }
 
+    /// Return structural and tracked inputs that watch mode should observe.
+    pub fn watch_paths(&mut self) -> Vec<PathBuf> {
+        let dependencies = self.session.dependencies().collect::<Vec<_>>();
+        self.layout
+            .watch_paths(self.session.project(), dependencies)
+    }
+
     /// Return the project bound to this session.
     pub fn project(&self) -> &Project {
         self.session.project()
@@ -118,29 +139,32 @@ impl BuildSession {
 fn render_page(
     session: &TypstSession,
     publication: &mut OutputPublication,
-    template: &VirtualPath,
-    output: &RoutePath,
+    job: &PlannedRoute,
     library: &LazyHash<Library>,
+    pretty: bool,
     processors: &mut [&mut dyn transform::Processor],
     warnings: &mut Vec<BuildWarning>,
 ) -> Result<()> {
-    let (mut document, compiled_warnings) = session.compile_page(template, library)?;
+    let (mut document, compiled_warnings) = session.compile_page(&job.template, library)?;
     warnings.extend(compiled_warnings);
 
-    let mut page = publication.page(template, output);
+    let mut page = publication.page(&job.template, &job.output);
     transform::process_document(&mut document, &mut page, processors)?;
-    let html = typst_html::html(&document, &typst_html::HtmlOptions::default())
+    let html = typst_html::html(&document, &typst_html::HtmlOptions { pretty })
         .map_err(|error| anyhow::anyhow!("HTML encoding failed: {error:?}"))?;
     page.add_html(html)
 }
 
-fn load_content(session: &TypstSession) -> Result<typst::foundations::Value> {
+fn load_content(
+    session: &TypstSession,
+    layout: &ProjectLayout,
+) -> Result<typst::foundations::Value> {
     let mut entries = Vec::new();
 
-    for path in session.content_files()? {
+    for path in session.content_files(layout)? {
         let content_relative = Path::new(path.get_without_slash())
-            .strip_prefix("content")
-            .context("content path is outside /content")?;
+            .strip_prefix(Path::new(layout.content().get_without_slash()))
+            .context("content path is outside configured content directory")?;
         if content_relative.components().count() < 2 {
             bail!(
                 "entry {} is not inside a collection; expected content/<collection>/.../<id>.typ",

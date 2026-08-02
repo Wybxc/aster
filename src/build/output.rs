@@ -6,7 +6,7 @@ use typst::ecow::EcoString;
 use typst::syntax::VirtualPath;
 
 use crate::engine::route::RoutePath;
-use crate::foundation::Project;
+use crate::foundation::{Project, ProjectLayout};
 
 /// Compute a compact 64-bit content fingerprint for generated asset URLs.
 fn content_hash(data: &[u8]) -> String {
@@ -78,16 +78,20 @@ impl OutputFile {
 pub(crate) struct OutputPublication {
     project_root: PathBuf,
     output_dir: PathBuf,
+    assets_dir: RoutePath,
     files: BTreeMap<RoutePath, OutputFile>,
 }
 
 impl OutputPublication {
-    pub fn new(project: &Project) -> Self {
-        Self {
+    pub fn new(project: &Project, layout: &ProjectLayout) -> Result<Self> {
+        let assets_dir = RoutePath::new(layout.assets().get_without_slash())
+            .context("invalid output assets directory")?;
+        Ok(Self {
             project_root: project.root().to_owned(),
-            output_dir: project.output_dir(),
+            output_dir: layout.output_dir(project),
+            assets_dir,
             files: BTreeMap::new(),
-        }
+        })
     }
 
     /// Register the generated highlight stylesheet.
@@ -98,7 +102,9 @@ impl OutputPublication {
     fn add_asset(&mut self, name: &str, extension: &str, content: Vec<u8>) -> Result<AssetPath> {
         let hash = content_hash(&content);
         let filename = format!("{name}.{hash}.{extension}");
-        let path = RoutePath::new(PathBuf::from("_assets").join(filename))?;
+        let path =
+            PathBuf::from(self.assets_dir.as_virtual_path().get_without_slash()).join(filename);
+        let path = RoutePath::new(path)?;
         self.insert(path.clone(), OutputFile::Asset(content))?;
         Ok(AssetPath(path))
     }
@@ -252,14 +258,16 @@ fn remove_if_exists(path: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::foundation::config::AsterConfig;
 
-    fn fixture() -> (tempfile::TempDir, Project) {
+    fn fixture() -> (tempfile::TempDir, Project, ProjectLayout) {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path();
         std::fs::create_dir_all(root.join("src/blog")).unwrap();
         std::fs::write(root.join("aster.toml"), "").unwrap();
         let project = Project::open(root.to_owned()).unwrap();
-        (temp, project)
+        let layout = ProjectLayout::new(&AsterConfig::default()).unwrap();
+        (temp, project, layout)
     }
 
     fn snapshot_tree(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
@@ -284,8 +292,8 @@ mod tests {
 
     #[test]
     fn nested_page_gets_relative_asset_url() {
-        let (_temp, project) = fixture();
-        let mut publication = OutputPublication::new(&project);
+        let (_temp, project, layout) = fixture();
+        let mut publication = OutputPublication::new(&project, &layout).unwrap();
         let asset = publication
             .add_highlight_stylesheet(b"body{}".to_vec())
             .unwrap();
@@ -302,10 +310,10 @@ mod tests {
 
     #[test]
     fn source_resolution_uses_template_directory_and_project_confinement() {
-        let (_temp, project) = fixture();
+        let (_temp, project, layout) = fixture();
         std::fs::write(project.root().join("style.css"), "body{}").unwrap();
         let template = VirtualPath::new("/src/blog/[slug].typ").unwrap();
-        let mut publication = OutputPublication::new(&project);
+        let mut publication = OutputPublication::new(&project, &layout).unwrap();
         let output = RoutePath::new("blog/post.html").unwrap();
         let page = publication.page(&template, &output);
 
@@ -321,11 +329,12 @@ mod tests {
 
     #[test]
     fn publication_is_idempotent_and_removes_stale_output() {
-        let (temp, project) = fixture();
-        std::fs::create_dir_all(project.output_dir()).unwrap();
-        std::fs::write(project.output_dir().join("stale.html"), "old").unwrap();
+        let (temp, project, layout) = fixture();
+        let output_dir = layout.output_dir(&project);
+        std::fs::create_dir_all(&output_dir).unwrap();
+        std::fs::write(output_dir.join("stale.html"), "old").unwrap();
 
-        let mut publication = OutputPublication::new(&project);
+        let mut publication = OutputPublication::new(&project, &layout).unwrap();
         let first = publication
             .add_highlight_stylesheet(b"body{}".to_vec())
             .unwrap();
@@ -342,15 +351,12 @@ mod tests {
             .unwrap();
         let published = publication.publish().unwrap();
 
-        assert_eq!(
-            published.pages,
-            vec![project.output_dir().join("index.html")]
-        );
+        assert_eq!(published.pages, vec![output_dir.join("index.html")]);
 
-        let expected = snapshot_tree(&project.output_dir());
-        std::fs::write(project.output_dir().join("stale.html"), "old").unwrap();
+        let expected = snapshot_tree(&output_dir);
+        std::fs::write(output_dir.join("stale.html"), "old").unwrap();
 
-        let mut repeated = OutputPublication::new(&project);
+        let mut repeated = OutputPublication::new(&project, &layout).unwrap();
         assert_eq!(
             repeated
                 .add_highlight_stylesheet(b"body{}".to_vec())
@@ -363,20 +369,24 @@ mod tests {
             .unwrap();
         repeated.publish().unwrap();
 
-        assert_eq!(snapshot_tree(&project.output_dir()), expected);
+        assert_eq!(snapshot_tree(&output_dir), expected);
         assert!(!temp.path().join(".dist.aster-lock").exists());
         assert_eq!(expected.len(), 2);
     }
 
     #[test]
     fn empty_publication_replaces_output_with_empty_directory() {
-        let (_temp, project) = fixture();
-        std::fs::create_dir_all(project.output_dir()).unwrap();
-        std::fs::write(project.output_dir().join("stale.html"), "old").unwrap();
+        let (_temp, project, layout) = fixture();
+        let output_dir = layout.output_dir(&project);
+        std::fs::create_dir_all(&output_dir).unwrap();
+        std::fs::write(output_dir.join("stale.html"), "old").unwrap();
 
-        OutputPublication::new(&project).publish().unwrap();
+        OutputPublication::new(&project, &layout)
+            .unwrap()
+            .publish()
+            .unwrap();
 
-        assert!(project.output_dir().is_dir());
-        assert_eq!(std::fs::read_dir(project.output_dir()).unwrap().count(), 0);
+        assert!(output_dir.is_dir());
+        assert_eq!(std::fs::read_dir(output_dir).unwrap().count(), 0);
     }
 }

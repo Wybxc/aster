@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{Result, ensure};
 use comemo::{Track, Tracked};
 use termcolor::NoColor;
 use typst::diag::{FileError, SourceDiagnostic, SourceResult, Warned};
@@ -16,8 +16,9 @@ use typst_kit::diagnostics::{self, DiagnosticFormat, DiagnosticWorld};
 use typst_kit::fonts::FontStore;
 
 use crate::build::BuildWarning;
-use crate::foundation::Project;
+use crate::foundation::config::FontConfig;
 use crate::foundation::files::{FileAccessError, ProjectFiles, list_typst_files};
+use crate::foundation::{Project, ProjectLayout};
 
 /// A project-bound Typst build session.
 ///
@@ -26,21 +27,18 @@ use crate::foundation::files::{FileAccessError, ProjectFiles, list_typst_files};
 /// never construct or track a Typst world themselves.
 pub struct TypstSession {
     project: Project,
+    font_config: Option<FontConfig>,
     fonts: FontStore,
     files: ProjectFiles,
 }
 
 impl TypstSession {
     pub fn new(project: Project) -> Self {
-        let fonts = {
-            let mut fonts = FontStore::new();
-            fonts.extend(typst_kit::fonts::system());
-            fonts
-        };
         let files = ProjectFiles::new(&project);
         Self {
             project,
-            fonts,
+            font_config: None,
+            fonts: FontStore::new(),
             files,
         }
     }
@@ -57,20 +55,38 @@ impl TypstSession {
         self.files.track()
     }
 
-    pub(crate) fn source_files(&self) -> Result<EcoVec<VirtualPath>, FileAccessError> {
-        list_typst_files(
-            self.project_files(),
-            &VirtualPath::new("/src").expect("src is a valid project path"),
-            true,
-        )
+    pub(crate) fn configure_fonts(
+        &mut self,
+        config: &FontConfig,
+        layout: &ProjectLayout,
+    ) -> Result<()> {
+        let directories = layout.font_dirs(&self.project).collect::<Vec<_>>();
+        for directory in &directories {
+            ensure!(
+                directory.is_dir(),
+                "configured font path {} is not a directory",
+                directory.display()
+            );
+        }
+        if self.font_config.as_ref() != Some(config) || !config.paths.is_empty() {
+            self.fonts = discover_fonts(config, directories.iter().map(PathBuf::as_path));
+            self.font_config = Some(config.clone());
+        }
+        Ok(())
     }
 
-    pub(crate) fn content_files(&self) -> Result<EcoVec<VirtualPath>, FileAccessError> {
-        list_typst_files(
-            self.project_files(),
-            &VirtualPath::new("/content").expect("content is a valid project path"),
-            false,
-        )
+    pub(crate) fn source_files(
+        &self,
+        layout: &ProjectLayout,
+    ) -> Result<EcoVec<VirtualPath>, FileAccessError> {
+        list_typst_files(self.project_files(), layout.source(), true)
+    }
+
+    pub(crate) fn content_files(
+        &self,
+        layout: &ProjectLayout,
+    ) -> Result<EcoVec<VirtualPath>, FileAccessError> {
+        list_typst_files(self.project_files(), layout.content(), false)
     }
 
     pub(crate) fn dependencies(&mut self) -> impl Iterator<Item = PathBuf> + '_ {
@@ -145,6 +161,20 @@ impl TypstSession {
             main,
         }
     }
+}
+
+fn discover_fonts<'a>(
+    config: &FontConfig,
+    directories: impl IntoIterator<Item = &'a std::path::Path>,
+) -> FontStore {
+    let mut fonts = FontStore::new();
+    if config.system {
+        fonts.extend(typst_kit::fonts::system());
+    }
+    for directory in directories {
+        fonts.extend(typst_kit::fonts::scan(directory));
+    }
+    fonts
 }
 
 #[comemo::memoize]
@@ -239,6 +269,7 @@ impl DiagnosticWorld for CompileWorld<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::foundation::config::AsterConfig;
 
     #[test]
     fn page_compilation_is_reused_and_invalidated_by_dependency_changes() {
@@ -249,7 +280,7 @@ mod tests {
         std::fs::write(root.join("aster.toml"), "").unwrap();
         let project = Project::open(root.to_owned()).unwrap();
         let entry = VirtualPath::new("/src/index.typ").unwrap();
-        let dependency = project.src_dir().join("data.typ");
+        let dependency = project.root().join("src/data.typ");
         std::fs::write(
             entry.realize(project.root()).unwrap(),
             "#import \"data.typ\": marker\n#let value = marker",
@@ -258,6 +289,10 @@ mod tests {
         std::fs::write(&dependency, format!("#let marker = \"first-{marker}\"")).unwrap();
 
         let mut session = TypstSession::new(project);
+        let layout = ProjectLayout::new(&AsterConfig::default()).unwrap();
+        session
+            .configure_fonts(&FontConfig::default(), &layout)
+            .unwrap();
         let library = session.library(Dict::new());
 
         session.compile_page(&entry, &library).unwrap();

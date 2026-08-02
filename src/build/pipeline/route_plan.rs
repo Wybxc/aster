@@ -11,6 +11,7 @@ use crate::build::BuildWarning;
 use crate::build::world::TypstSession;
 use crate::engine::content;
 use crate::engine::route::{self, ParamSet, RoutePath};
+use crate::foundation::ProjectLayout;
 
 /// A deterministic, collision-free page plan.
 pub(super) struct RoutePlan {
@@ -28,17 +29,18 @@ impl RoutePlan {
     /// Discover, parse, and probe every template exactly once.
     pub fn build(
         session: &TypstSession,
+        layout: &ProjectLayout,
         base_inputs: &Dict,
         base_library: &LazyHash<Library>,
     ) -> Result<Self> {
-        let templates = session.source_files()?;
+        let templates = session.source_files(layout)?;
         let mut jobs = Vec::new();
         let mut warnings = Vec::new();
 
         for template in templates {
             let relative = Path::new(template.get_without_slash())
-                .strip_prefix("src")
-                .context("source template is outside /src")?;
+                .strip_prefix(Path::new(layout.source().get_without_slash()))
+                .context("source template is outside configured source directory")?;
             let pattern = route::parse_template(relative)
                 .with_context(|| format!("invalid route template {}", relative.display()))?;
             if pattern.is_dynamic() {

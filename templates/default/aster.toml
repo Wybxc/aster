@@ -4,6 +4,3 @@ name = "aster-site"
 [site]
 title = "Aster Site"
 description = "A static site built with Aster and Typst."
-
-[highlight]
-themes = { light = "InspiredGitHub", dark = "base16-eighties.dark" }
