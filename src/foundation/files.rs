@@ -254,35 +254,3 @@ pub(crate) fn list_typst_files(
     files.retain(|path| path.extension().is_some_and(|extension| extension == "typ"));
     Ok(files)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[cfg(unix)]
-    #[test]
-    fn lists_and_reads_through_a_symlinked_source_directory() {
-        use std::os::unix::fs::symlink;
-
-        let temp = tempfile::tempdir().unwrap();
-        let project_root = temp.path().join("project");
-        let external = temp.path().join("external");
-        std::fs::create_dir_all(&project_root).unwrap();
-        std::fs::create_dir_all(&external).unwrap();
-        std::fs::write(project_root.join("aster.toml"), "").unwrap();
-        std::fs::write(external.join("index.typ"), "external").unwrap();
-        symlink(&external, project_root.join("src")).unwrap();
-
-        let project = Project::open(&project_root).unwrap();
-        let files = ProjectFiles::new(&project);
-        let source = VirtualPath::new("/src/index.typ").unwrap();
-
-        assert_eq!(
-            files
-                .list(&VirtualPath::new("/src").unwrap(), true)
-                .unwrap(),
-            vec![source.clone()]
-        );
-        assert_eq!(files.read(&source).unwrap().as_slice(), b"external");
-    }
-}

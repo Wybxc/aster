@@ -26,5 +26,4 @@ typst-svg = "0.15.1"
 walkdir = "2.5"
 
 [dev-dependencies]
-comemo = { version = "0.5", features = ["testing"] }
 tempfile = "3"

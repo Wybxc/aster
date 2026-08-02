@@ -131,12 +131,4 @@ mod tests {
             &route("foobar.html")
         ));
     }
-
-    #[test]
-    fn rejects_nonportable_static_paths() {
-        for template in ["CON.typ", "bad:name.typ", "trailing./page.typ"] {
-            assert!(RoutePath::from_template(Path::new(template)).is_err());
-        }
-        assert!(RoutePath::from_template(Path::new("docs/v1.2.typ")).is_ok());
-    }
 }

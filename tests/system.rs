@@ -12,7 +12,31 @@ fn init(destination: &Path) -> Output {
 }
 
 #[test]
-fn initializes_a_buildable_project_with_a_real_library_directory() {
+fn build_command_builds_the_selected_project() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::write(root.join("src/index.typ"), "#html.elem(\"p\")[Built]").unwrap();
+    std::fs::write(root.join("aster.toml"), "").unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_aster"))
+        .arg("build")
+        .arg("--project")
+        .arg(root)
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(root.join("dist/index.html").is_file());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("built 1 page"));
+}
+
+#[test]
+fn init_creates_a_buildable_project() {
     let temp = tempfile::tempdir().unwrap();
     let destination = temp.path().join("my-site");
 
@@ -35,23 +59,23 @@ fn initializes_a_buildable_project_with_a_real_library_directory() {
 }
 
 #[test]
-fn initializes_an_existing_empty_directory() {
+fn init_accepts_an_existing_empty_directory() {
     let temp = tempfile::tempdir().unwrap();
     let destination = temp.path().join("empty");
     std::fs::create_dir(&destination).unwrap();
 
     let output = init(&destination);
+
     assert!(
         output.status.success(),
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-
     assert!(destination.join("aster.toml").is_file());
 }
 
 #[test]
-fn refuses_to_overwrite_a_nonempty_directory() {
+fn init_refuses_to_overwrite_a_nonempty_directory() {
     let temp = tempfile::tempdir().unwrap();
     let destination = temp.path().join("existing");
     std::fs::create_dir(&destination).unwrap();

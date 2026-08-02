@@ -375,6 +375,14 @@ mod tests {
                 .generate(&ParamSet::from([("slug".into(), "../escape".into())]))
                 .is_err()
         );
+        assert!(
+            route
+                .generate(&ParamSet::from([
+                    ("slug".into(), "hello".into()),
+                    ("other".into(), "value".into()),
+                ]))
+                .is_err()
+        );
     }
 
     #[test]
@@ -415,16 +423,6 @@ mod tests {
                 "{invalid} must be rejected"
             );
         }
-    }
-
-    #[test]
-    fn rejects_extra_parameters() {
-        let route = parse("[slug].typ").unwrap();
-        let params = ParamSet::from([
-            ("slug".into(), "hello".into()),
-            ("other".into(), "value".into()),
-        ]);
-        assert!(route.generate(&params).is_err());
     }
 
     #[test]

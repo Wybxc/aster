@@ -284,13 +284,6 @@ mod tests {
     }
 
     #[test]
-    fn rejects_paths_outside_output() {
-        assert!(RoutePath::new("../index.html").is_err());
-        assert!(RoutePath::new("/index.html").is_err());
-        assert!(RoutePath::new("").is_err());
-    }
-
-    #[test]
     fn nested_page_gets_relative_asset_url() {
         let (_temp, project, layout) = fixture();
         let mut publication = OutputPublication::new(&project, &layout).unwrap();

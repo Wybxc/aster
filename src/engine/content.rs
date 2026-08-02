@@ -218,14 +218,11 @@ mod tests {
     }
 
     #[test]
-    fn rejects_reserved_config_input() {
+    fn rejects_reserved_inputs() {
         let mut config = Dict::new();
         config.insert(Str::from(INPUT_NAME), Value::Int(0));
         assert!(with_protocol(config, empty()).is_err());
-    }
 
-    #[test]
-    fn route_params_cannot_replace_internal_or_config_inputs() {
         let base = with_protocol(Dict::new(), empty()).unwrap();
         assert!(
             with_route_params(

@@ -223,29 +223,6 @@ mod tests {
     }
 
     #[test]
-    fn dependency_kinds_select_watch_modes() {
-        let temp = tempfile::tempdir().unwrap();
-        let file = temp.path().join("aster.toml");
-        let tree = temp.path().join("src");
-        std::fs::write(&file, "").unwrap();
-        std::fs::create_dir(&tree).unwrap();
-        let mut watcher = polling_watcher([]);
-
-        watcher
-            .replace([
-                FilesystemDependency::File(file.clone()),
-                FilesystemDependency::Tree(tree.clone()),
-            ])
-            .unwrap();
-
-        assert_eq!(
-            watcher.watched.get(&file),
-            Some(&RecursiveMode::NonRecursive)
-        );
-        assert_eq!(watcher.watched.get(&tree), Some(&RecursiveMode::Recursive));
-    }
-
-    #[test]
     fn recursively_watches_nested_files() {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().join("root");

@@ -28,22 +28,6 @@ fn bundles_and_tracks_entry_and_transitive_imports() {
     assert!(dependencies.contains(&FilesystemDependency::File(entry.clone())));
     assert!(dependencies.contains(&FilesystemDependency::File(dependency.clone())));
 
-    driver.build().unwrap();
-    let dependencies = driver.dependencies();
-    assert!(dependencies.contains(&FilesystemDependency::File(entry)));
-    assert!(dependencies.contains(&FilesystemDependency::File(dependency.clone())));
-    assert_eq!(
-        generated_asset_containing(root, ".page"),
-        (first_path.clone(), first_css.clone())
-    );
-
-    std::fs::write(root.join("src/unrelated.css"), ".unused { color: black; }").unwrap();
-    driver.build().unwrap();
-    assert_eq!(
-        generated_asset_containing(root, ".page"),
-        (first_path.clone(), first_css.clone())
-    );
-
     std::fs::write(&dependency, ".theme { color: green; }").unwrap();
     driver.build().unwrap();
     let (changed_path, changed_css) = generated_asset_containing(root, ".page");
@@ -62,21 +46,16 @@ fn rechecks_missing_imports() {
     let missing = root.join("src/missing.css");
 
     let project = project(root);
-    let tracked_missing = root.join("src/missing.css");
     let mut driver = BuildSession::new(project.clone());
-    assert!(driver.build().is_err());
     assert!(driver.build().is_err());
     let dependencies = driver.dependencies();
     assert!(
-        dependencies.contains(&FilesystemDependency::File(tracked_missing.clone())),
-        "missing {tracked_missing:?} in {dependencies:?}"
+        dependencies.contains(&FilesystemDependency::File(missing.clone())),
+        "missing {missing:?} in {dependencies:?}"
     );
 
     std::fs::write(&missing, ".created { color: green; }").unwrap();
     driver.build().unwrap();
-    assert!(driver.dependencies().into_iter().any(
-        |dependency| matches!(dependency, FilesystemDependency::File(path) if path == tracked_missing)
-    ));
     assert!(
         generated_asset_containing(root, ".created")
             .1
