@@ -102,16 +102,6 @@ pub enum RouteError {
     DuplicateParameter(EcoString),
 }
 
-#[derive(Clone, Debug, thiserror::Error)]
-pub(crate) enum RouteMetadataError {
-    #[error("route metadata must be an array of dictionaries")]
-    InvalidShape,
-    #[error("route parameter `{0}` must be a string")]
-    NonStringParameter(EcoString),
-    #[error("route metadata must not contain an empty parameter set")]
-    EmptyParameterSet,
-}
-
 pub fn parse_template(path: &Path) -> Result<RouteTemplate, RouteError> {
     use std::path::Component;
 
@@ -293,8 +283,7 @@ fn join_names(names: &[EcoString]) -> String {
         .join(", ")
 }
 
-#[comemo::memoize]
-pub(crate) fn extract(content: &Content) -> Result<EcoVec<ParamSet>, RouteMetadataError> {
+pub(crate) fn extract(content: &Content) -> Result<EcoVec<ParamSet>> {
     let mut declarations = Vec::new();
     let _ = content.traverse(&mut |element| {
         if element
@@ -310,19 +299,19 @@ pub(crate) fn extract(content: &Content) -> Result<EcoVec<ParamSet>, RouteMetada
     let mut result = EcoVec::new();
     for declaration in declarations {
         let Value::Array(items) = declaration else {
-            return Err(RouteMetadataError::InvalidShape);
+            bail!("route metadata must be an array of dictionaries");
         };
         for item in items {
             let Value::Dict(dict) = item else {
-                return Err(RouteMetadataError::InvalidShape);
+                bail!("route metadata must be an array of dictionaries");
             };
             if dict.is_empty() {
-                return Err(RouteMetadataError::EmptyParameterSet);
+                bail!("route metadata must not contain an empty parameter set");
             }
             let mut params = ParamSet::new();
             for (name, value) in dict.iter() {
                 let Value::Str(value) = value else {
-                    return Err(RouteMetadataError::NonStringParameter(name.as_str().into()));
+                    bail!("route parameter `{}` must be a string", name.as_str());
                 };
                 params.insert(name.as_str().into(), value.as_str().into());
             }

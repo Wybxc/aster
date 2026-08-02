@@ -13,92 +13,81 @@ use crate::engine::content;
 use crate::engine::route::{self, ParamSet, RoutePath};
 use crate::foundation::ProjectLayout;
 
-/// A deterministic, collision-free page plan.
-pub(super) struct RoutePlan {
-    jobs: Vec<PlannedRoute>,
-    warnings: Vec<BuildWarning>,
-}
-
 pub(super) struct PlannedRoute {
     pub template: VirtualPath,
     pub output: RoutePath,
     pub params: ParamSet,
 }
 
-impl RoutePlan {
-    /// Discover, parse, and probe every template exactly once.
-    pub fn build(
-        session: &TypstSession,
-        layout: &ProjectLayout,
-        base_inputs: &Dict,
-        base_library: &LazyHash<Library>,
-    ) -> Result<Self> {
-        let templates = session.source_files(layout)?;
-        let mut jobs = Vec::new();
-        let mut warnings = Vec::new();
+/// Discover, parse, and probe every template into a deterministic,
+/// collision-free page plan.
+pub(super) fn plan_routes(
+    session: &TypstSession,
+    layout: &ProjectLayout,
+    base_inputs: &Dict,
+    base_library: &LazyHash<Library>,
+) -> Result<(Vec<PlannedRoute>, Vec<BuildWarning>)> {
+    let templates = session.source_files(layout)?;
+    let mut jobs = Vec::new();
+    let mut warnings = Vec::new();
 
-        for template in templates {
-            let relative = Path::new(template.get_without_slash())
-                .strip_prefix(Path::new(layout.source().get_without_slash()))
-                .context("source template is outside configured source directory")?;
-            let pattern = route::parse_template(relative)
-                .with_context(|| format!("invalid route template {}", relative.display()))?;
-            if pattern.is_dynamic() {
-                let (evaluated, evaluated_warnings) = session
-                    .evaluate(&template, base_library)
-                    .with_context(|| format!("failed to probe {}", relative.display()))?;
-                warnings.extend(evaluated_warnings);
-                let routes = route::extract(&evaluated)
-                    .with_context(|| format!("invalid route metadata in {}", relative.display()))?;
-                if routes.is_empty() {
-                    warnings.push(BuildWarning::new(eco_format!(
-                        "{} has a dynamic route pattern but no <route> metadata",
-                        relative.display()
-                    )));
-                }
-                for params in routes {
-                    content::with_route_params(base_inputs, &params)?;
-                    jobs.push(PlannedRoute {
-                        template: template.clone(),
-                        output: pattern.generate(&params)?,
-                        params,
-                    });
-                }
-            } else {
+    for template in templates {
+        let relative = Path::new(template.get_without_slash())
+            .strip_prefix(Path::new(layout.source().get_without_slash()))
+            .context("source template is outside configured source directory")?;
+        let pattern = route::parse_template(relative)
+            .with_context(|| format!("invalid route template {}", relative.display()))?;
+        if pattern.is_dynamic() {
+            let (evaluated, evaluated_warnings) = session
+                .evaluate(&template, base_library)
+                .with_context(|| format!("failed to probe {}", relative.display()))?;
+            warnings.extend(evaluated_warnings);
+            let routes = route::extract(&evaluated)
+                .with_context(|| format!("invalid route metadata in {}", relative.display()))?;
+            if routes.is_empty() {
+                warnings.push(BuildWarning::new(eco_format!(
+                    "{} has a dynamic route pattern but no <route> metadata",
+                    relative.display()
+                )));
+            }
+            for params in routes {
+                content::with_route_params(base_inputs, &params)?;
                 jobs.push(PlannedRoute {
-                    output: RoutePath::from_template(relative)?,
-                    template,
-                    params: ParamSet::new(),
+                    template: template.clone(),
+                    output: pattern.generate(&params)?,
+                    params,
                 });
             }
+        } else {
+            jobs.push(PlannedRoute {
+                output: RoutePath::from_template(relative)?,
+                template,
+                params: ParamSet::new(),
+            });
         }
+    }
 
-        jobs.sort_by(|left, right| {
-            left.output.cmp(&right.output).then_with(|| {
-                left.template
-                    .get_with_slash()
-                    .cmp(right.template.get_with_slash())
-            })
-        });
-        for (index, left) in jobs.iter().enumerate() {
-            for right in &jobs[index + 1..] {
-                if output_paths_collide(&left.output, &right.output) {
-                    bail!(
-                        "templates {} and {} generate conflicting outputs {} and {}",
-                        left.template.get_with_slash(),
-                        right.template.get_with_slash(),
-                        left.output,
-                        right.output
-                    );
-                }
+    jobs.sort_by(|left, right| {
+        left.output.cmp(&right.output).then_with(|| {
+            left.template
+                .get_with_slash()
+                .cmp(right.template.get_with_slash())
+        })
+    });
+    for (index, left) in jobs.iter().enumerate() {
+        for right in &jobs[index + 1..] {
+            if output_paths_collide(&left.output, &right.output) {
+                bail!(
+                    "templates {} and {} generate conflicting outputs {} and {}",
+                    left.template.get_with_slash(),
+                    right.template.get_with_slash(),
+                    left.output,
+                    right.output
+                );
             }
         }
-        Ok(Self { jobs, warnings })
     }
-
-    pub fn into_parts(self) -> (Vec<PlannedRoute>, Vec<BuildWarning>) {
-        (self.jobs, self.warnings)
-    }
+    Ok((jobs, warnings))
 }
 
 fn portable_output_key(output: &RoutePath) -> impl Iterator<Item = String> + '_ {

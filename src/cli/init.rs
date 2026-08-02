@@ -10,7 +10,8 @@ static PROJECT_TEMPLATE: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/templates/d
 const DEFAULT_PROJECT_NAME: &str = "aster-site";
 
 pub fn run(destination: PathBuf) -> Result<()> {
-    let destination = absolute(destination)?;
+    let destination =
+        std::path::absolute(destination).context("failed to make destination path absolute")?;
     prepare_destination(&destination)?;
 
     PROJECT_TEMPLATE.extract(&destination).with_context(|| {
@@ -23,10 +24,6 @@ pub fn run(destination: PathBuf) -> Result<()> {
 
     diag::emit_initialized(&destination);
     Ok(())
-}
-
-fn absolute(path: PathBuf) -> Result<PathBuf> {
-    std::path::absolute(path).context("failed to make destination path absolute")
 }
 
 fn prepare_destination(destination: &Path) -> Result<()> {

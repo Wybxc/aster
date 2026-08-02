@@ -52,25 +52,26 @@ impl HighlightProcessor {
         config: &HighlightConfig,
         project_files: Tracked<ProjectFiles>,
         publication: &mut OutputPublication,
-    ) -> Result<(Self, Vec<BuildWarning>)> {
+    ) -> Result<(Self, Option<BuildWarning>)> {
         if !config.enabled {
             return Ok((
                 Self {
                     enabled: false,
                     stylesheet: None,
                 },
-                Vec::new(),
+                None,
             ));
         }
-        let mut warnings = Vec::new();
-        let stylesheet = match compute_highlight_css(config, project_files) {
-            Ok(Some(css)) => Some(publication.add_highlight_stylesheet(css.into_bytes())?),
-            Ok(None) => None,
+        let (stylesheet, warning) = match compute_highlight_css(config, project_files) {
+            Ok(Some(css)) => (
+                Some(publication.add_highlight_stylesheet(css.into_bytes())?),
+                None,
+            ),
+            Ok(None) => (None, None),
             Err(error) => {
-                warnings.push(BuildWarning::new(eco_format!(
-                    "failed to resolve highlight CSS: {error:#}"
-                )));
-                None
+                let warning =
+                    BuildWarning::new(eco_format!("failed to resolve highlight CSS: {error:#}"));
+                (None, Some(warning))
             }
         };
         Ok((
@@ -78,7 +79,7 @@ impl HighlightProcessor {
                 enabled: true,
                 stylesheet,
             },
-            warnings,
+            warning,
         ))
     }
 }

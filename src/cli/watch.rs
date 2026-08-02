@@ -7,11 +7,10 @@ use anyhow::{Context, Result, bail};
 use aster::{BuildSession, FilesystemDependency};
 use notify_debouncer_full::notify::{
     Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher as NotifyWatcher,
-    event::{ModifyKind, RenameMode},
+    event::ModifyKind,
 };
 use notify_debouncer_full::{
-    DebounceEventResult, DebouncedEvent, Debouncer, FileIdCache, RecommendedCache,
-    new_debouncer_opt,
+    DebounceEventResult, Debouncer, FileIdCache, RecommendedCache, new_debouncer_opt,
 };
 
 use crate::cli::{diag, resolve_project};
@@ -100,22 +99,12 @@ impl<T: NotifyWatcher, C: FileIdCache> Watcher<T, C> {
         }
         self.missing = missing;
 
-        let obsolete = self
-            .watched
-            .iter()
-            .filter(|&(path, mode)| desired.get(path) != Some(mode))
-            .map(|(path, _)| path.clone())
-            .collect::<Vec<_>>();
-        for path in obsolete {
+        for path in std::mem::take(&mut self.watched).into_keys() {
             // Backends may implicitly remove a watch when its path is deleted.
             self.debouncer.unwatch(&path).ok();
-            self.watched.remove(&path);
         }
 
         for (path, mode) in desired {
-            if self.watched.get(&path) == Some(&mode) {
-                continue;
-            }
             self.debouncer
                 .watch(&path, mode)
                 .with_context(|| format!("failed to watch {}", path.display()))?;
@@ -158,7 +147,6 @@ impl<T: NotifyWatcher, C: FileIdCache> Watcher<T, C> {
 
             match received {
                 Ok(Ok(events)) => {
-                    self.forget_removed_watches(&events);
                     if events.iter().any(|event| relevant(event.kind)) {
                         return Ok(());
                     }
@@ -182,25 +170,6 @@ impl<T: NotifyWatcher, C: FileIdCache> Watcher<T, C> {
                 Err(RecvTimeoutError::Timeout) => {}
                 Err(RecvTimeoutError::Disconnected) => {
                     bail!("file watcher event channel disconnected");
-                }
-            }
-        }
-    }
-
-    fn forget_removed_watches(&mut self, events: &[DebouncedEvent]) {
-        for event in events {
-            let removed = match event.kind {
-                EventKind::Remove(_) | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
-                    event.paths.as_slice()
-                }
-                EventKind::Modify(ModifyKind::Name(RenameMode::Both)) => {
-                    event.paths.first().map(std::slice::from_ref).unwrap_or(&[])
-                }
-                _ => continue,
-            };
-            for path in removed {
-                if self.watched.remove(path).is_some() {
-                    self.debouncer.unwatch(path).ok();
                 }
             }
         }
@@ -299,6 +268,28 @@ mod tests {
         let mut watcher = polling_watcher([FilesystemDependency::File(file.clone())]);
         let writer = change_repeatedly(file);
 
+        watcher
+            .wait_until(Some(Instant::now() + Duration::from_secs(5)))
+            .unwrap();
+        writer.join().unwrap();
+    }
+
+    #[test]
+    fn replaces_the_complete_watch_set() {
+        let temp = tempfile::tempdir().unwrap();
+        let old = temp.path().join("old.typ");
+        let new = temp.path().join("new.typ");
+        std::fs::write(&old, "old").unwrap();
+        std::fs::write(&new, "new").unwrap();
+        let mut watcher = polling_watcher([FilesystemDependency::File(old.clone())]);
+
+        watcher
+            .replace([FilesystemDependency::File(new.clone())])
+            .unwrap();
+        assert!(!watcher.watched.contains_key(&old));
+        assert!(watcher.watched.contains_key(&new));
+
+        let writer = change_repeatedly(new);
         watcher
             .wait_until(Some(Instant::now() + Duration::from_secs(5)))
             .unwrap();

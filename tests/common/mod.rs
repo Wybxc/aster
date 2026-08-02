@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use aster::{BuildSession, Project};
+use aster::Project;
 
 pub fn project(root: &Path) -> Project {
     let config = root.join("aster.toml");
@@ -8,10 +8,6 @@ pub fn project(root: &Path) -> Project {
         std::fs::write(config, "").unwrap();
     }
     Project::open(root.to_owned()).unwrap()
-}
-
-pub fn build(session: &mut BuildSession) {
-    session.build().unwrap();
 }
 
 pub fn install_content_adapter(root: &Path) {

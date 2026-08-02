@@ -2,7 +2,7 @@ use std::path::Path;
 
 use aster::BuildSession;
 
-use crate::common::{build, generated_asset_containing, project};
+use crate::common::{generated_asset_containing, project};
 
 fn write_theme(path: &Path, color: &str) {
     let theme = format!(
@@ -58,7 +58,7 @@ fn custom_theme_changes_replace_the_highlight_stylesheet() {
 
     let project = project(root);
     let mut driver = BuildSession::new(project.clone());
-    build(&mut driver);
+    driver.build().unwrap();
     let (first_path, first_css) = generated_asset_containing(root, "#112233");
     assert!(
         first_css.contains("#112233"),
@@ -67,14 +67,14 @@ fn custom_theme_changes_replace_the_highlight_stylesheet() {
     let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     assert_eq!(html.matches("<head>").count(), 1);
 
-    build(&mut driver);
+    driver.build().unwrap();
     assert_eq!(
         generated_asset_containing(root, "#112233"),
         (first_path.clone(), first_css.clone())
     );
 
     write_theme(&theme, "#445566");
-    build(&mut driver);
+    driver.build().unwrap();
     let (changed_path, changed_css) = generated_asset_containing(root, "#445566");
     assert_ne!(changed_path, first_path);
     assert_ne!(changed_css, first_css);
@@ -96,7 +96,7 @@ fn creates_head_before_body_for_highlight_stylesheet() {
 
     let project = project(root);
     let mut session = BuildSession::new(project.clone());
-    build(&mut session);
+    session.build().unwrap();
 
     let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     let head = html.find("<head>").expect("generated head");
@@ -177,7 +177,7 @@ fn allows_symlinked_theme_outside_project_root() {
 
     let project = project(root);
     let mut session = BuildSession::new(project.clone());
-    build(&mut session);
+    session.build().unwrap();
 
     assert!(
         generated_asset_containing(root, "#123456")

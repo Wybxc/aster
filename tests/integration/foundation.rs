@@ -16,21 +16,24 @@ fn dependencies_include_accessed_trees_even_when_missing() {
     assert!(
         !session
             .dependencies()
+            .into_iter()
             .any(|dependency| dependency == FilesystemDependency::File(project.config_file()))
     );
     assert!(
         !session
             .dependencies()
+            .into_iter()
             .any(|dependency| dependency == FilesystemDependency::Tree(root.join("pages")))
     );
     assert!(
         !session
             .dependencies()
+            .into_iter()
             .any(|dependency| dependency == FilesystemDependency::Tree(root.join("entries")))
     );
 
     session.build().unwrap();
-    let dependencies = session.dependencies().collect::<Vec<_>>();
+    let dependencies = session.dependencies();
 
     assert!(dependencies.contains(&FilesystemDependency::File(project.config_file())));
     assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("pages"))));
@@ -42,6 +45,7 @@ fn dependencies_include_accessed_trees_even_when_missing() {
     assert!(
         session
             .dependencies()
+            .into_iter()
             .any(|dependency| dependency == FilesystemDependency::Tree(root.join("entries")))
     );
 }
@@ -68,7 +72,7 @@ fn dependencies_include_observed_inputs_but_not_generated_outputs() {
 
     let mut session = BuildSession::new(project);
     session.build().unwrap();
-    let dependencies = session.dependencies().collect::<Vec<_>>();
+    let dependencies = session.dependencies();
 
     assert!(dependencies.contains(&FilesystemDependency::File(theme)));
     assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("src"))));
@@ -83,6 +87,7 @@ fn dependencies_include_observed_inputs_but_not_generated_outputs() {
     assert!(
         session
             .dependencies()
+            .into_iter()
             .any(|dependency| dependency == FilesystemDependency::Tree(root.join("src"))),
         "a cached build must still record its directory access"
     );
@@ -101,6 +106,7 @@ fn dependency_snapshot_follows_reloaded_layout() {
     assert!(
         session
             .dependencies()
+            .into_iter()
             .any(|dependency| dependency == FilesystemDependency::Tree(root.join("src")))
     );
 
@@ -110,7 +116,7 @@ fn dependency_snapshot_follows_reloaded_layout() {
     )
     .unwrap();
     assert!(session.build().is_err());
-    let dependencies = session.dependencies().collect::<Vec<_>>();
+    let dependencies = session.dependencies();
 
     assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("pages"))));
     assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("entries"))));

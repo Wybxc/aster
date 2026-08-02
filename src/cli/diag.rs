@@ -19,7 +19,7 @@ pub fn emit_summary(count: usize, elapsed: Duration) {
     let _ = writeln!(writer, " in {:.1}s", elapsed.as_secs_f64());
 }
 
-fn styled_warning(message: &str) {
+pub fn emit_warning(message: &str) {
     let mut writer = writer();
     let _ = writer.set_color(
         ColorSpec::new()
@@ -29,10 +29,6 @@ fn styled_warning(message: &str) {
     let _ = write!(writer, "warning");
     let _ = writer.reset();
     let _ = writeln!(writer, ": {message}");
-}
-
-pub fn emit_warning(message: &str) {
-    styled_warning(message);
 }
 
 pub fn emit_error(message: &str) {

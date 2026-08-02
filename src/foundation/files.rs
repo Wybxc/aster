@@ -49,15 +49,6 @@ impl FilesystemDependency {
     }
 }
 
-/// A configured project directory whose access has been recorded.
-pub(crate) struct ProjectDirectory(PathBuf);
-
-impl ProjectDirectory {
-    pub(crate) fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
 /// A cheaply cloneable filesystem access error at the memoization seam.
 ///
 /// This mirrors how Typst models file errors: a small set of structural
@@ -148,10 +139,7 @@ impl ProjectFiles {
         self.store.file(id)
     }
 
-    pub(crate) fn directory(
-        &self,
-        path: &VirtualPath,
-    ) -> Result<ProjectDirectory, FileAccessError> {
+    pub(crate) fn directory(&self, path: &VirtualPath) -> Result<PathBuf, FileAccessError> {
         let directory = path.realize(&self.root).map_err(|error| {
             FileAccessError::Other(eco_format!(
                 "invalid project directory {}: {error}",
@@ -162,7 +150,7 @@ impl ProjectFiles {
         let result = std::fs::metadata(&directory);
 
         match result {
-            Ok(metadata) if metadata.is_dir() => Ok(ProjectDirectory(directory)),
+            Ok(metadata) if metadata.is_dir() => Ok(directory),
             Ok(_) => Err(FileAccessError::Other(eco_format!(
                 "{} is not a directory",
                 directory.display()
@@ -195,14 +183,14 @@ impl ProjectFiles {
         };
 
         let mut files = EcoVec::new();
-        for entry in WalkDir::new(directory.path()).follow_links(true) {
+        for entry in WalkDir::new(&directory).follow_links(true) {
             let entry = entry.map_err(|error| {
                 let kind = error
                     .io_error()
                     .map(std::io::Error::kind)
                     .unwrap_or(std::io::ErrorKind::Other);
                 FileAccessError::Inspect {
-                    path: directory.path().into(),
+                    path: directory.as_path().into(),
                     kind,
                     message: eco_format!("{error}"),
                 }

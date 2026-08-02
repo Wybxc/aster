@@ -1,4 +1,5 @@
 use std::io::Write;
+use std::path::PathBuf;
 
 use anyhow::Result;
 use comemo::{Track, Tracked};
@@ -16,7 +17,7 @@ use typst_kit::fonts::FontStore;
 
 use crate::build::BuildWarning;
 use crate::foundation::config::FontConfig;
-use crate::foundation::files::{FileAccessError, ProjectDirectory, ProjectFiles, list_typst_files};
+use crate::foundation::files::{FileAccessError, ProjectFiles, list_typst_files};
 use crate::foundation::{FilesystemDependency, Project, ProjectLayout};
 
 /// A project-bound Typst build session.
@@ -64,7 +65,7 @@ impl TypstSession {
             .map(|path| self.files.directory(path))
             .collect::<Result<Vec<_>, _>>()?;
         if self.font_config.as_ref() != Some(config) || !config.paths.is_empty() {
-            self.fonts = discover_fonts(config, directories.iter().map(ProjectDirectory::path));
+            self.fonts = discover_fonts(config, directories.iter().map(PathBuf::as_path));
             self.font_config = Some(config.clone());
         }
         Ok(())

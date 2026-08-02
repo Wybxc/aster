@@ -6,19 +6,36 @@ use std::fmt;
 
 use typst::ecow::EcoString;
 
-use crate::foundation::FilesystemDependency;
+use crate::foundation::{FilesystemDependency, Project};
 
 mod output;
 mod pipeline;
 mod transform;
 mod world;
 
-pub use pipeline::{BuildOutcome, BuildSession};
+pub use pipeline::BuildOutcome;
+
+/// A reusable build session bound to one Aster project.
+pub struct BuildSession {
+    session: world::TypstSession,
+}
 
 impl BuildSession {
-    /// Iterate over the inputs observed by the latest build attempt.
-    pub fn dependencies(&mut self) -> impl Iterator<Item = FilesystemDependency> + use<> {
-        self.session.dependencies().into_iter()
+    /// Create a reusable session bound to a validated project.
+    pub fn new(project: Project) -> Self {
+        Self {
+            session: world::TypstSession::new(project),
+        }
+    }
+
+    /// Return the inputs observed by the latest build attempt.
+    pub fn dependencies(&mut self) -> Vec<FilesystemDependency> {
+        self.session.dependencies()
+    }
+
+    /// Return the project bound to this session.
+    pub fn project(&self) -> &Project {
+        self.session.project()
     }
 }
 

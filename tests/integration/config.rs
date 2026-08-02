@@ -83,7 +83,7 @@ fn build_honors_configured_layout_and_processing_options() {
         .unwrap();
     assert!(css.contains('\n'), "CSS should not be minified: {css}");
 
-    let dependencies = session.dependencies().collect::<Vec<_>>();
+    let dependencies = session.dependencies();
     assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("pages"))));
     assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("entries"))));
     assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("fonts"))));
@@ -130,6 +130,7 @@ fn session_recovers_after_manifest_is_fixed() {
     assert!(
         session
             .dependencies()
+            .into_iter()
             .any(|dependency| dependency == FilesystemDependency::File(project.config_file()))
     );
 
@@ -138,6 +139,7 @@ fn session_recovers_after_manifest_is_fixed() {
     assert!(
         session
             .dependencies()
+            .into_iter()
             .any(|dependency| dependency == FilesystemDependency::File(project.config_file()))
     );
 

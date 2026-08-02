@@ -1,6 +1,6 @@
 use aster::{BuildSession, Project};
 
-use crate::common::{build, install_content_adapter, project};
+use crate::common::{install_content_adapter, project};
 
 #[test]
 fn build_reuses_the_session_and_observes_source_changes() {
@@ -12,15 +12,15 @@ fn build_reuses_the_session_and_observes_source_changes() {
 
     let project = project(root);
     let mut driver = BuildSession::new(project.clone());
-    build(&mut driver);
+    driver.build().unwrap();
     let first = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
 
-    build(&mut driver);
+    driver.build().unwrap();
     let repeated = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     assert_eq!(repeated, first);
 
     std::fs::write(&entry, "#html.elem(\"p\")[second]").unwrap();
-    build(&mut driver);
+    driver.build().unwrap();
     let changed = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     assert_ne!(changed, first);
     assert!(changed.contains("second"));
@@ -55,7 +55,7 @@ fn build_loads_content_and_frontmatter_through_entry_module() {
 
     let project = project(root);
     let mut driver = BuildSession::new(project.clone());
-    build(&mut driver);
+    driver.build().unwrap();
     let first = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     assert!(first.contains("First"));
     assert!(first.contains("First body"));
@@ -65,7 +65,7 @@ fn build_loads_content_and_frontmatter_through_entry_module() {
         "#metadata((title: \"Second\",)) <frontmatter>\n\nSecond body",
     )
     .unwrap();
-    build(&mut driver);
+    driver.build().unwrap();
     let second = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     assert!(second.contains("Second"));
     assert!(second.contains("Second body"));
@@ -83,16 +83,16 @@ fn reentrant_build_discovers_added_and_removed_pages() {
 
     let project = project(root);
     let mut driver = BuildSession::new(project.clone());
-    build(&mut driver);
+    driver.build().unwrap();
     assert!(root.join("dist/index.html").is_file());
 
     std::fs::write(&about, "#html.elem(\"p\")[About]").unwrap();
-    build(&mut driver);
+    driver.build().unwrap();
     assert!(root.join("dist/index.html").is_file());
     assert!(root.join("dist/about.html").is_file());
 
     std::fs::remove_file(index).unwrap();
-    build(&mut driver);
+    driver.build().unwrap();
     assert!(!root.join("dist/index.html").exists());
     assert!(root.join("dist/about.html").is_file());
 }
@@ -107,13 +107,13 @@ fn reentrant_build_recovers_after_compilation_failure() {
 
     let project = project(root);
     let mut driver = BuildSession::new(project.clone());
-    build(&mut driver);
+    driver.build().unwrap();
 
     std::fs::write(&entry, "#let broken =").unwrap();
     assert!(driver.build().is_err());
 
     std::fs::write(&entry, "#html.elem(\"p\")[Recovered]").unwrap();
-    build(&mut driver);
+    driver.build().unwrap();
     let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     assert!(html.contains("Recovered"));
 }

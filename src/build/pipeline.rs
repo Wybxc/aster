@@ -11,14 +11,13 @@ use crate::build::output::OutputPublication;
 use crate::build::transform;
 use crate::build::world::TypstSession;
 use crate::engine::content::{self, ContentEntry};
-use crate::foundation::Project;
 use crate::foundation::ProjectLayout;
 use crate::foundation::config::ProjectManifest;
 
 mod route_plan;
 
-use self::route_plan::{PlannedRoute, RoutePlan};
-use super::BuildWarning;
+use self::route_plan::{PlannedRoute, plan_routes};
+use super::{BuildSession, BuildWarning};
 
 /// The complete build outcome. No build stage decides terminal formatting or
 /// exit status; the CLI renders this value after the pipeline finishes.
@@ -31,19 +30,7 @@ pub struct BuildOutcome {
     pub elapsed: Duration,
 }
 
-/// A reusable build session bound to one Aster project.
-pub struct BuildSession {
-    pub(super) session: TypstSession,
-}
-
 impl BuildSession {
-    /// Create a reusable session bound to a validated project.
-    pub fn new(project: Project) -> Self {
-        Self {
-            session: TypstSession::new(project),
-        }
-    }
-
     /// Build and publish the complete project output tree.
     pub fn build(&mut self) -> Result<BuildOutcome> {
         self.session.reset();
@@ -73,12 +60,12 @@ impl BuildSession {
             );
             let mut image =
                 transform::ImageProcessor::new(manifest.config.assets.image_inline_threshold);
-            let (mut highlight, highlight_warnings) = transform::HighlightProcessor::new(
+            let (mut highlight, highlight_warning) = transform::HighlightProcessor::new(
                 &manifest.config.highlight,
                 session.project_files(),
                 &mut publication,
             )?;
-            warnings.extend(highlight_warnings);
+            warnings.extend(highlight_warning);
             let mut processors: [&mut dyn transform::Processor; 3] =
                 [&mut css, &mut image, &mut highlight];
 
@@ -86,8 +73,8 @@ impl BuildSession {
                 load_content(session, &layout).context("failed to load content collections")?;
             let base_inputs = content::with_protocol(manifest.inputs, protocol)?;
             let base_library = session.library(base_inputs.clone());
-            let plan = RoutePlan::build(session, &layout, &base_inputs, &base_library)?;
-            let (jobs, route_warnings) = plan.into_parts();
+            let (jobs, route_warnings) =
+                plan_routes(session, &layout, &base_inputs, &base_library)?;
             warnings.extend(route_warnings);
 
             for job in jobs {
@@ -117,11 +104,6 @@ impl BuildSession {
         })();
         comemo::evict(10);
         outcome
-    }
-
-    /// Return the project bound to this session.
-    pub fn project(&self) -> &Project {
-        self.session.project()
     }
 }
 
