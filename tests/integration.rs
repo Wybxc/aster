@@ -10,5 +10,7 @@ mod dependencies;
 mod highlight;
 #[path = "integration/pipeline.rs"]
 mod pipeline;
+#[path = "integration/public.rs"]
+mod public;
 #[path = "integration/route_plan.rs"]
 mod route_plan;

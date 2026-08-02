@@ -7,7 +7,13 @@ fn includes_accessed_trees_even_when_missing() {
     std::fs::create_dir_all(root.join("pages/blog/nested")).unwrap();
     std::fs::write(
         root.join("aster.toml"),
-        "[paths]\nsource = \"pages\"\ncontent = \"entries\"\noutput = \"public\"\n",
+        concat!(
+            "[paths]\n",
+            "source = \"pages\"\n",
+            "content = \"entries\"\n",
+            "public = \"files\"\n",
+            "output = \"public\"\n",
+        ),
     )
     .unwrap();
     let project = Project::open(root.to_owned()).unwrap();
@@ -19,6 +25,7 @@ fn includes_accessed_trees_even_when_missing() {
     assert!(dependencies.contains(&FilesystemDependency::File(project.config_file())));
     assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("pages"))));
     assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("entries"))));
+    assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("files"))));
     assert!(!dependencies.contains(&FilesystemDependency::Tree(root.join("src"))));
 }
 

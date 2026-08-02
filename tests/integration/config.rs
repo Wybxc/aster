@@ -16,6 +16,7 @@ fn build_honors_configured_layout_and_processing_options() {
             "[paths]\n",
             "source = \"pages\"\n",
             "content = \"entries\"\n",
+            "public = \"files\"\n",
             "output = \"public\"\n",
             "[output]\n",
             "assets = \"static/generated\"\n",
@@ -87,6 +88,7 @@ fn build_honors_configured_layout_and_processing_options() {
     assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("pages"))));
     assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("entries"))));
     assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("fonts"))));
+    assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("files"))));
     assert!(
         !dependencies
             .iter()

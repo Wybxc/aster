@@ -62,6 +62,7 @@ impl Project {
 pub(crate) struct ProjectLayout {
     source: VirtualPath,
     content: VirtualPath,
+    public: VirtualPath,
     output: VirtualPath,
     assets: VirtualPath,
     fonts: Vec<VirtualPath>,
@@ -71,10 +72,14 @@ impl ProjectLayout {
     pub(crate) fn new(config: &AsterConfig) -> Result<Self> {
         let source = project_directory(&config.paths.source, "source")?;
         let content = project_directory(&config.paths.content, "content")?;
+        let public = project_directory(&config.paths.public, "public")?;
         let output = project_directory(&config.paths.output, "output")?;
         ensure_disjoint(&source, "source", &content, "content")?;
+        ensure_disjoint(&source, "source", &public, "public")?;
         ensure_disjoint(&source, "source", &output, "output")?;
+        ensure_disjoint(&content, "content", &public, "public")?;
         ensure_disjoint(&content, "content", &output, "output")?;
+        ensure_disjoint(&public, "public", &output, "output")?;
 
         let assets = project_directory(&config.output.assets, "assets")?;
         let fonts = config
@@ -91,6 +96,7 @@ impl ProjectLayout {
         Ok(Self {
             source,
             content,
+            public,
             output,
             assets,
             fonts,
@@ -103,6 +109,10 @@ impl ProjectLayout {
 
     pub(crate) fn content(&self) -> &VirtualPath {
         &self.content
+    }
+
+    pub(crate) fn public(&self) -> &VirtualPath {
+        &self.public
     }
 
     pub(crate) fn assets(&self) -> &VirtualPath {

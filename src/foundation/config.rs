@@ -51,6 +51,7 @@ impl Default for Themes {
 pub(crate) struct PathsConfig {
     pub source: EcoString,
     pub content: EcoString,
+    pub public: EcoString,
     pub output: EcoString,
 }
 
@@ -59,6 +60,7 @@ impl Default for PathsConfig {
         Self {
             source: "src".into(),
             content: "content".into(),
+            public: "public".into(),
             output: "dist".into(),
         }
     }
@@ -229,6 +231,7 @@ mod tests {
             concat!(
                 "[paths]\n",
                 "source = \"pages\"\n",
+                "public = \"files\"\n",
                 "output = \"public\"\n",
                 "[output]\n",
                 "assets = \"static/generated\"\n",
@@ -249,6 +252,7 @@ mod tests {
 
         assert_eq!(config.paths.source, "pages");
         assert_eq!(config.paths.content, "content");
+        assert_eq!(config.paths.public, "files");
         assert_eq!(config.paths.output, "public");
         assert_eq!(config.output.assets, "static/generated");
         assert!(config.output.pretty);

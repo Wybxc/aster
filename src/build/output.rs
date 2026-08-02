@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, ensure};
 use typst::ecow::EcoString;
+use typst::foundations::Bytes;
 use typst::syntax::VirtualPath;
 
 use crate::engine::route::RoutePath;
@@ -57,12 +58,14 @@ pub(crate) struct PublishedOutput {
 enum OutputFile {
     Page(Vec<u8>),
     Asset(Vec<u8>),
+    Public(Bytes),
 }
 
 impl OutputFile {
     fn content(&self) -> &[u8] {
         match self {
             Self::Page(content) | Self::Asset(content) => content,
+            Self::Public(content) => content.as_slice(),
         }
     }
 
@@ -97,6 +100,12 @@ impl OutputPublication {
     /// Register the generated highlight stylesheet.
     pub fn add_highlight_stylesheet(&mut self, content: Vec<u8>) -> Result<AssetPath> {
         self.add_asset("highlight", "css", content)
+    }
+
+    /// Register a file from the project's public directory at the output root.
+    pub(crate) fn add_public_file(&mut self, path: &Path, content: Bytes) -> Result<()> {
+        let path = RoutePath::new(path).context("invalid public file path")?;
+        self.insert(path, OutputFile::Public(content))
     }
 
     fn add_asset(&mut self, name: &str, extension: &str, content: Vec<u8>) -> Result<AssetPath> {
@@ -148,7 +157,7 @@ impl OutputPublication {
         if let Some(existing) = self.files.get(&path) {
             ensure!(
                 existing == &file,
-                "two generated files selected the same output path {}",
+                "two published files selected the same output path {}",
                 path
             );
             return Ok(());

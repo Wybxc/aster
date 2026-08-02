@@ -53,6 +53,8 @@ impl BuildSession {
             let project = session.project().clone();
             let mut warnings = Vec::new();
             let mut publication = OutputPublication::new(&project, &layout)?;
+            add_public_files(session, &layout, &mut publication)
+                .context("failed to collect public files")?;
 
             let mut css = transform::CssProcessor::new(
                 session.project_files(),
@@ -105,6 +107,26 @@ impl BuildSession {
         comemo::evict(10);
         outcome
     }
+}
+
+fn add_public_files(
+    session: &TypstSession,
+    layout: &ProjectLayout,
+    publication: &mut OutputPublication,
+) -> Result<()> {
+    let files = session.project_files();
+    let public_root = Path::new(layout.public().get_without_slash());
+
+    for path in files.list(layout.public(), false)? {
+        let relative = Path::new(path.get_without_slash())
+            .strip_prefix(public_root)
+            .context("public file is outside configured public directory")?;
+        let content = files
+            .read(&path)
+            .with_context(|| format!("failed to read public file {}", path.get_with_slash()))?;
+        publication.add_public_file(relative, content)?;
+    }
+    Ok(())
 }
 
 fn render_page(
