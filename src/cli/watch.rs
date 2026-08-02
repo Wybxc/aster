@@ -9,24 +9,22 @@ pub fn run(project: Project) -> Result<()> {
         .map_err(anyhow::Error::msg)
         .context("failed to initialize file watcher")?;
     let mut session = BuildSession::new(project.clone());
-    let mut dependencies = Vec::new();
 
     watcher
-        .update(project.watch_paths(&dependencies))
+        .update(project.watch_paths(std::iter::empty()))
         .map_err(anyhow::Error::msg)
         .context("failed to watch project inputs")?;
     diag::emit_watching(project.root());
 
     loop {
         let result = session.build();
-        dependencies = session.dependencies();
         match result {
             Ok(outcome) => diag::report_build(&outcome),
             Err(error) => diag::emit_error(&format!("{error:#}")),
         }
 
         watcher
-            .update(project.watch_paths(&dependencies))
+            .update(project.watch_paths(session.dependencies()))
             .map_err(anyhow::Error::msg)
             .context("failed to update watched inputs")?;
         watcher

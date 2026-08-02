@@ -63,14 +63,16 @@ impl Project {
 
     /// Return every structural and tracked build input that watch mode should
     /// observe, excluding the generated output tree.
-    pub fn watch_paths(&self, dependencies: &[PathBuf]) -> Vec<PathBuf> {
+    pub fn watch_paths<I>(&self, dependencies: I) -> Vec<PathBuf>
+    where
+        I: IntoIterator<Item = PathBuf>,
+    {
         let output = self.output_dir();
         let mut paths = self.structural_watch_paths();
         paths.extend(
             dependencies
-                .iter()
-                .filter(|path| VirtualPath::virtualize(&output, path).is_err())
-                .cloned(),
+                .into_iter()
+                .filter(|path| VirtualPath::virtualize(&output, path).is_err()),
         );
         paths.sort();
         paths.dedup();
@@ -96,8 +98,6 @@ impl Project {
                     .map(|entry| entry.into_path()),
             );
         }
-        paths.sort();
-        paths.dedup();
         paths
     }
 }

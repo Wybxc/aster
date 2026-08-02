@@ -5,6 +5,7 @@ use anyhow::Result;
 use comemo::{Track, Tracked};
 use termcolor::NoColor;
 use typst::diag::{FileError, SourceDiagnostic, SourceResult, Warned};
+use typst::ecow::EcoVec;
 use typst::engine::{Route, Sink, Traced};
 use typst::foundations::{Bytes, Content, Datetime, Dict, Duration};
 use typst::syntax::{FileId, RootedPath, VirtualPath, VirtualRoot};
@@ -56,7 +57,7 @@ impl TypstSession {
         self.files.track()
     }
 
-    pub(crate) fn source_files(&self) -> Result<Vec<VirtualPath>, FileAccessError> {
+    pub(crate) fn source_files(&self) -> Result<EcoVec<VirtualPath>, FileAccessError> {
         list_typst_files(
             self.project_files(),
             &VirtualPath::new("/src").expect("src is a valid project path"),
@@ -64,7 +65,7 @@ impl TypstSession {
         )
     }
 
-    pub(crate) fn content_files(&self) -> Result<Vec<VirtualPath>, FileAccessError> {
+    pub(crate) fn content_files(&self) -> Result<EcoVec<VirtualPath>, FileAccessError> {
         list_typst_files(
             self.project_files(),
             &VirtualPath::new("/content").expect("content is a valid project path"),
@@ -72,7 +73,7 @@ impl TypstSession {
         )
     }
 
-    pub(crate) fn dependencies(&mut self) -> Vec<PathBuf> {
+    pub(crate) fn dependencies(&mut self) -> impl Iterator<Item = PathBuf> + '_ {
         self.files.dependencies()
     }
 

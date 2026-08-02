@@ -24,7 +24,7 @@ fn bundles_and_tracks_entry_and_transitive_imports() {
     );
     assert!(first_css.contains(".theme"));
     assert!(first_css.contains(".page"));
-    let dependencies = driver.dependencies();
+    let dependencies = driver.dependencies().collect::<Vec<_>>();
     assert!(dependencies.contains(&entry));
     assert!(dependencies.contains(&dependency));
 
@@ -63,7 +63,7 @@ fn rechecks_missing_imports() {
     let mut driver = BuildSession::new(project.clone());
     assert!(driver.build().is_err());
     assert!(driver.build().is_err());
-    let dependencies = driver.dependencies();
+    let dependencies = driver.dependencies().collect::<Vec<_>>();
     assert!(
         dependencies.contains(&tracked_missing),
         "missing {tracked_missing:?} in {dependencies:?}"
@@ -96,7 +96,11 @@ fn allows_transitive_import_outside_source_directory() {
             .1
             .contains(".secret")
     );
-    assert!(session.dependencies().contains(&root.join("secret.css")));
+    assert!(
+        session
+            .dependencies()
+            .any(|path| path == root.join("secret.css"))
+    );
 }
 
 #[test]
@@ -145,5 +149,5 @@ fn allows_symlinked_css_outside_project_root() {
             .1
             .contains(".shared")
     );
-    assert!(session.dependencies().contains(&linked));
+    assert!(session.dependencies().any(|path| path == linked));
 }

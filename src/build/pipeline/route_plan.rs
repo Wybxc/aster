@@ -80,9 +80,7 @@ impl RoutePlan {
         });
         for (index, left) in jobs.iter().enumerate() {
             for right in &jobs[index + 1..] {
-                let left_key = portable_output_key(&left.output);
-                let right_key = portable_output_key(&right.output);
-                if output_paths_collide(&left_key, &right_key) {
+                if output_paths_collide(&left.output, &right.output) {
                     bail!(
                         "templates {} and {} generate conflicting outputs {} and {}",
                         left.template.get_with_slash(),
@@ -101,21 +99,24 @@ impl RoutePlan {
     }
 }
 
-fn portable_output_key(output: &RoutePath) -> Vec<String> {
+fn portable_output_key(output: &RoutePath) -> impl Iterator<Item = String> + '_ {
     output
         .as_virtual_path()
         .get_without_slash()
         .split('/')
         .map(str::to_lowercase)
-        .collect()
 }
 
-fn is_component_prefix(left: &[String], right: &[String]) -> bool {
-    left.len() < right.len() && right.starts_with(left)
-}
-
-fn output_paths_collide(left: &[String], right: &[String]) -> bool {
-    left == right || is_component_prefix(left, right) || is_component_prefix(right, left)
+fn output_paths_collide(left: &RoutePath, right: &RoutePath) -> bool {
+    let mut left = portable_output_key(left);
+    let mut right = portable_output_key(right);
+    loop {
+        match (left.next(), right.next()) {
+            (Some(left), Some(right)) if left == right => {}
+            (Some(_), Some(_)) => return false,
+            _ => return true,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -124,14 +125,20 @@ mod tests {
 
     #[test]
     fn detects_portable_and_ancestor_output_collisions() {
-        let key = |path| portable_output_key(&RoutePath::new(path).unwrap());
+        let route = |path| RoutePath::new(path).unwrap();
 
-        assert!(output_paths_collide(&key("Case.html"), &key("case.html")));
         assert!(output_paths_collide(
-            &key("foo.html"),
-            &key("foo.html/bar.html")
+            &route("Case.html"),
+            &route("case.html")
         ));
-        assert!(!output_paths_collide(&key("foo.html"), &key("foobar.html")));
+        assert!(output_paths_collide(
+            &route("foo.html"),
+            &route("foo.html/bar.html")
+        ));
+        assert!(!output_paths_collide(
+            &route("foo.html"),
+            &route("foobar.html")
+        ));
     }
 
     #[test]

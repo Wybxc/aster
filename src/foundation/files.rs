@@ -10,7 +10,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use comemo::Tracked;
 use typst::diag::FileError;
-use typst::ecow::{EcoString, eco_format};
+use typst::ecow::{EcoString, EcoVec, eco_format};
 use typst::foundations::Bytes;
 use typst::syntax::{FileId, RootedPath, VirtualPath, VirtualRoot};
 use typst_kit::downloader::SystemDownloader;
@@ -87,14 +87,9 @@ impl ProjectFiles {
         self.store.reset();
     }
 
-    pub(crate) fn dependencies(&mut self) -> Vec<PathBuf> {
+    pub(crate) fn dependencies(&mut self) -> impl Iterator<Item = PathBuf> + '_ {
         let (loader, dependencies) = self.store.dependencies();
-        let mut paths = dependencies
-            .filter_map(|id| loader.resolve(id).ok())
-            .collect::<Vec<_>>();
-        paths.sort();
-        paths.dedup();
-        paths
+        dependencies.filter_map(move |id| loader.resolve(id).ok())
     }
 
     pub(crate) fn source(&self, id: FileId) -> Result<typst::syntax::Source, FileError> {
@@ -112,7 +107,7 @@ impl ProjectFiles {
         &self,
         directory: &VirtualPath,
         required: bool,
-    ) -> Result<Vec<VirtualPath>, FileAccessError> {
+    ) -> Result<EcoVec<VirtualPath>, FileAccessError> {
         let directory = directory.realize(&self.root).map_err(|error| {
             FileAccessError::Other(eco_format!(
                 "invalid project directory {}: {error}",
@@ -128,7 +123,7 @@ impl ProjectFiles {
             }
             Ok(_) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound && !required => {
-                return Ok(Vec::new());
+                return Ok(EcoVec::new());
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 return Err(FileAccessError::Other(eco_format!(
@@ -145,7 +140,7 @@ impl ProjectFiles {
             }
         }
 
-        let mut files = Vec::new();
+        let mut files = EcoVec::new();
         for entry in WalkDir::new(&directory).follow_links(true) {
             let entry = entry.map_err(|error| {
                 let kind = error
@@ -174,7 +169,9 @@ impl ProjectFiles {
                 files.push(virtual_path);
             }
         }
-        files.sort_by(|left, right| left.get_with_slash().cmp(right.get_with_slash()));
+        files
+            .make_mut()
+            .sort_by(|left, right| left.get_with_slash().cmp(right.get_with_slash()));
         Ok(files)
     }
 
@@ -210,12 +207,10 @@ pub(crate) fn list_typst_files(
     project_files: Tracked<ProjectFiles>,
     directory: &VirtualPath,
     required: bool,
-) -> Result<Vec<VirtualPath>, FileAccessError> {
-    Ok(project_files
-        .list(directory, required)?
-        .into_iter()
-        .filter(|path| path.extension().is_some_and(|extension| extension == "typ"))
-        .collect())
+) -> Result<EcoVec<VirtualPath>, FileAccessError> {
+    let mut files = project_files.list(directory, required)?;
+    files.retain(|path| path.extension().is_some_and(|extension| extension == "typ"));
+    Ok(files)
 }
 
 #[cfg(test)]

@@ -4,7 +4,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail, ensure};
-use typst::ecow::EcoString;
+use typst::ecow::{EcoString, EcoVec};
 use typst::foundations::{Content, Value};
 use typst::introspection::MetadataElem;
 use typst::syntax::VirtualPath;
@@ -294,7 +294,7 @@ fn join_names(names: &[EcoString]) -> String {
 }
 
 #[comemo::memoize]
-pub(crate) fn extract(content: &Content) -> Result<Vec<ParamSet>, RouteMetadataError> {
+pub(crate) fn extract(content: &Content) -> Result<EcoVec<ParamSet>, RouteMetadataError> {
     let mut declarations = Vec::new();
     let _ = content.traverse(&mut |element| {
         if element
@@ -307,7 +307,7 @@ pub(crate) fn extract(content: &Content) -> Result<Vec<ParamSet>, RouteMetadataE
         std::ops::ControlFlow::<()>::Continue(())
     });
 
-    let mut result = Vec::new();
+    let mut result = EcoVec::new();
     for declaration in declarations {
         let Value::Array(items) = declaration else {
             return Err(RouteMetadataError::InvalidShape);

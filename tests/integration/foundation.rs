@@ -9,7 +9,7 @@ fn structural_watch_paths_include_nested_and_missing_layout_directories() {
     std::fs::write(root.join("aster.toml"), "").unwrap();
     let project = Project::open(root.to_owned()).unwrap();
 
-    let paths = project.watch_paths(&[]);
+    let paths = project.watch_paths(std::iter::empty());
 
     assert!(paths.contains(&project.config_file()));
     assert!(paths.contains(&project.src_dir()));
@@ -29,7 +29,7 @@ fn watch_paths_merge_dependencies_and_exclude_output() {
     let theme = root.join("theme.tmTheme");
     let generated = project.output_dir().join("index.html");
 
-    let paths = project.watch_paths(&[theme.clone(), generated.clone()]);
+    let paths = project.watch_paths([theme.clone(), generated.clone()]);
 
     assert!(paths.contains(&theme));
     assert!(paths.contains(&project.src_dir().join("blog")));

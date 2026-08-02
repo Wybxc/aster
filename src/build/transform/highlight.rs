@@ -164,7 +164,7 @@ fn scope_class(scopes: &[Scope]) -> Option<EcoString> {
 }
 
 #[comemo::memoize]
-fn highlight_tokens(code: &str, lang: &str) -> Vec<HighlightToken> {
+fn highlight_tokens(code: &str, lang: &str) -> EcoVec<HighlightToken> {
     if TYPST_LANGS.contains(&lang) {
         do_typst_highlight(code, lang)
     } else {
@@ -177,7 +177,7 @@ fn highlight_tokens(code: &str, lang: &str) -> Vec<HighlightToken> {
 /// This is **theme-independent** — it only derives CSS class names from
 /// the scope stack produced by the syntax parser.  All colour / font
 /// decisions live in the generated CSS.
-fn do_syntect_highlight(code: &str, lang: &str) -> Vec<HighlightToken> {
+fn do_syntect_highlight(code: &str, lang: &str) -> EcoVec<HighlightToken> {
     let syntax = SS
         .find_syntax_by_token(lang)
         .or_else(|| SS.find_syntax_by_extension(lang))
@@ -185,7 +185,7 @@ fn do_syntect_highlight(code: &str, lang: &str) -> Vec<HighlightToken> {
 
     let mut parse_state = ParseState::new(syntax);
     let mut scope_stack = ScopeStack::new();
-    let mut out = Vec::new();
+    let mut out = EcoVec::new();
 
     for line in code.lines() {
         let Ok(ops) = parse_state.parse_line(line, &SS) else {
@@ -210,15 +210,15 @@ fn do_syntect_highlight(code: &str, lang: &str) -> Vec<HighlightToken> {
 /// Highlight code using Typst's native AST (languages: typ, typst, typc, typm).
 ///
 /// Theme-independent — scope-based class names only, no colour resolution.
-fn do_typst_highlight(code: &str, lang: &str) -> Vec<HighlightToken> {
+fn do_typst_highlight(code: &str, lang: &str) -> EcoVec<HighlightToken> {
     let root: SyntaxNode = match lang {
         "typc" => parse_code(code),
         "typm" => parse_math(code),
         _ => typst::syntax::parse(code),
     };
 
-    let mut native_tokens = Vec::new();
-    let mut scopes: Vec<Scope> = Vec::new();
+    let mut native_tokens = EcoVec::new();
+    let mut scopes = EcoVec::new();
 
     walk_typst_node(
         code,
@@ -227,7 +227,7 @@ fn do_typst_highlight(code: &str, lang: &str) -> Vec<HighlightToken> {
         &mut native_tokens,
     );
 
-    let mut out = Vec::new();
+    let mut out = EcoVec::new();
     for (class, text) in native_tokens {
         for (i, segment) in text.split('\n').enumerate() {
             if i > 0 {
@@ -245,8 +245,8 @@ fn do_typst_highlight(code: &str, lang: &str) -> Vec<HighlightToken> {
 fn walk_typst_node<'a>(
     code: &str,
     node: &LinkedNode<'a>,
-    scopes: &mut Vec<Scope>,
-    tokens: &mut Vec<HighlightToken>,
+    scopes: &mut EcoVec<Scope>,
+    tokens: &mut EcoVec<HighlightToken>,
 ) {
     if node.children().len() == 0 {
         let text = &code[node.range()];
@@ -416,10 +416,9 @@ fn compute_highlight_css_impl(
 mod tests {
     use super::*;
 
-    /// Helper: return the concatenated text of all non-whitespace tokens
-    /// so we can check source-code ordering.
-    fn token_texts(tokens: &[HighlightToken]) -> Vec<String> {
-        tokens.iter().map(|(_, t)| t.as_str().to_string()).collect()
+    /// Iterate over token text so tests can check source-code ordering.
+    fn token_texts(tokens: &[HighlightToken]) -> impl Iterator<Item = &str> {
+        tokens.iter().map(|(_, text)| text.as_str())
     }
 
     #[test]
@@ -443,12 +442,9 @@ mod tests {
         let code = "let x = 1\nlet y = \"hi\"\n";
         let tokens = do_typst_highlight(code, "typc");
 
-        let texts = token_texts(&tokens);
         // The first meaningful token should be "let", not "x".
-        let non_ws: Vec<&str> = texts
-            .iter()
+        let non_ws: Vec<&str> = token_texts(&tokens)
             .filter(|s| !s.trim().is_empty())
-            .map(|s| s.as_str())
             .collect();
         assert_eq!(
             non_ws,
@@ -494,11 +490,8 @@ mod tests {
         // cause string values to be pushed to the end of output.
         let code = concat!("let x = (\n", "  hello-world: \"value\",\n", ")\n",);
         let tokens = do_typst_highlight(code, "typc");
-        let texts = token_texts(&tokens);
-        let non_ws: Vec<&str> = texts
-            .iter()
+        let non_ws: Vec<&str> = token_texts(&tokens)
             .filter(|s| !s.trim().is_empty())
-            .map(|s| s.as_str())
             .collect();
         assert_eq!(
             non_ws,
@@ -537,11 +530,8 @@ mod tests {
             ")\n",
         );
         let tokens = do_typst_highlight(code, "typc");
-        let texts = token_texts(&tokens);
-        let non_ws: Vec<&str> = texts
-            .iter()
+        let non_ws: Vec<&str> = token_texts(&tokens)
             .filter(|s| !s.trim().is_empty())
-            .map(|s| s.as_str())
             .collect();
 
         let first_let = non_ws.iter().position(|&s| s == "let");
@@ -569,11 +559,8 @@ mod tests {
         let code = "let x = (\n  a: \"hello\",\n  b: \"world\",\n)\n";
         let tokens = do_typst_highlight(code, "typc");
 
-        let texts = token_texts(&tokens);
-        let non_ws: Vec<&str> = texts
-            .iter()
+        let non_ws: Vec<&str> = token_texts(&tokens)
             .filter(|s| !s.trim().is_empty())
-            .map(|s| s.as_str())
             .collect();
         assert_eq!(
             non_ws,
@@ -604,11 +591,8 @@ mod tests {
         let code = "(a: 1, b: 2)\n";
         let tokens = do_typst_highlight(code, "typc");
 
-        let texts = token_texts(&tokens);
-        let non_ws: Vec<&str> = texts
-            .iter()
+        let non_ws: Vec<&str> = token_texts(&tokens)
             .filter(|s| !s.trim().is_empty())
-            .map(|s| s.as_str())
             .collect();
         assert_eq!(
             non_ws,
@@ -624,11 +608,8 @@ mod tests {
         let code = "{\n  \"a\": 1,\n  \"b\": 2\n}\n";
         let tokens = do_syntect_highlight(code, "json");
 
-        let texts = token_texts(&tokens);
-        let non_ws: Vec<&str> = texts
-            .iter()
+        let non_ws: Vec<&str> = token_texts(&tokens)
             .filter(|s| !s.trim().is_empty())
-            .map(|s| s.as_str())
             .collect();
         assert_eq!(
             non_ws,

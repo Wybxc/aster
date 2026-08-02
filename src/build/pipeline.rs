@@ -104,8 +104,8 @@ impl BuildSession {
         outcome
     }
 
-    /// Return the dependencies observed by the latest build attempt.
-    pub fn dependencies(&mut self) -> Vec<PathBuf> {
+    /// Iterate over the dependencies observed by the latest build attempt.
+    pub fn dependencies(&mut self) -> impl Iterator<Item = PathBuf> + '_ {
         self.session.dependencies()
     }
 
