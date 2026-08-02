@@ -67,10 +67,11 @@ impl Default for PathsConfig {
 }
 
 #[derive(Clone, Deserialize)]
-#[serde(default)]
+#[serde(default, rename_all = "kebab-case")]
 pub(crate) struct OutputConfig {
     pub assets: EcoString,
     pub pretty: bool,
+    pub clean_urls: bool,
 }
 
 impl Default for OutputConfig {
@@ -78,6 +79,7 @@ impl Default for OutputConfig {
         Self {
             assets: "_assets".into(),
             pretty: false,
+            clean_urls: true,
         }
     }
 }
@@ -220,6 +222,7 @@ mod tests {
             manifest.config.highlight.themes.dark,
             "base16-eighties.dark"
         );
+        assert!(manifest.config.output.clean_urls);
     }
 
     #[test]
@@ -236,6 +239,7 @@ mod tests {
                 "[output]\n",
                 "assets = \"static/generated\"\n",
                 "pretty = true\n",
+                "clean-urls = false\n",
                 "[assets]\n",
                 "image-inline-threshold = 2048\n",
                 "minify-css = false\n",
@@ -256,6 +260,7 @@ mod tests {
         assert_eq!(config.paths.output, "public");
         assert_eq!(config.output.assets, "static/generated");
         assert!(config.output.pretty);
+        assert!(!config.output.clean_urls);
         assert_eq!(config.assets.image_inline_threshold, 2048);
         assert!(!config.assets.minify_css);
         assert_eq!(config.typst.fonts.paths, ["fonts"]);

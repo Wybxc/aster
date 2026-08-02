@@ -38,7 +38,8 @@ pub fn run(project_dir: Option<PathBuf>) -> Result<()> {
     }
 }
 
-struct Watcher<T: NotifyWatcher = RecommendedWatcher, C: FileIdCache = RecommendedCache> {
+pub(crate) struct Watcher<T: NotifyWatcher = RecommendedWatcher, C: FileIdCache = RecommendedCache>
+{
     debouncer: Debouncer<T, C>,
     events: Receiver<DebounceEventResult>,
     watched: BTreeMap<PathBuf, RecursiveMode>,
@@ -49,7 +50,7 @@ const DEBOUNCE_TIMEOUT: Duration = Duration::from_millis(100);
 const POLL_INTERVAL: Duration = Duration::from_millis(300);
 
 impl Watcher<RecommendedWatcher, RecommendedCache> {
-    fn new() -> Result<Self> {
+    pub(crate) fn new() -> Result<Self> {
         let (sender, events) = std::sync::mpsc::channel();
         let config = Config::default().with_poll_interval(POLL_INTERVAL);
         let debouncer = new_debouncer_opt::<_, RecommendedWatcher, RecommendedCache>(
@@ -73,7 +74,7 @@ impl<T: NotifyWatcher, C: FileIdCache> Watcher<T, C> {
         }
     }
 
-    fn replace(
+    pub(crate) fn replace(
         &mut self,
         dependencies: impl IntoIterator<Item = FilesystemDependency>,
     ) -> Result<()> {
@@ -114,7 +115,7 @@ impl<T: NotifyWatcher, C: FileIdCache> Watcher<T, C> {
         Ok(())
     }
 
-    fn wait(&mut self) -> Result<()> {
+    pub(crate) fn wait(&mut self) -> Result<()> {
         self.wait_until(None)
     }
 

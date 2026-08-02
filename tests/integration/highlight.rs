@@ -129,7 +129,7 @@ fn invalid_theme_warns_once_for_the_whole_build() {
         1
     );
     assert!(root.join("dist/index.html").is_file());
-    assert!(root.join("dist/about.html").is_file());
+    assert!(root.join("dist/about/index.html").is_file());
 }
 
 #[cfg(unix)]

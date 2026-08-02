@@ -44,10 +44,20 @@ impl RoutePath {
         Ok(Self(path))
     }
 
-    pub(crate) fn from_template(relative_template: &Path) -> Result<Self> {
+    pub(crate) fn from_template(relative_template: &Path, clean_urls: bool) -> Result<Self> {
         let mut output = relative_template.to_path_buf();
-        output.set_extension("html");
-        Self::new(output)
+        output.set_extension("");
+        let is_index = output.file_name().is_some_and(|name| name == "index");
+        Self::from_route(output, is_index, clean_urls)
+    }
+
+    fn from_route(mut route: PathBuf, is_index: bool, clean_urls: bool) -> Result<Self> {
+        if !clean_urls || is_index {
+            route.set_extension("html");
+        } else {
+            route.push("index.html");
+        }
+        Self::new(route)
     }
 
     /// Return the normalized path within the virtual output root.
@@ -193,7 +203,7 @@ impl RouteTemplate {
         !self.parameters.is_empty()
     }
 
-    pub fn generate(&self, params: &ParamSet) -> Result<RoutePath> {
+    pub fn generate(&self, params: &ParamSet, clean_urls: bool) -> Result<RoutePath> {
         let supplied: BTreeSet<_> = params.keys().cloned().collect();
         let missing: Vec<_> = self.parameters.difference(&supplied).cloned().collect();
         let extra: Vec<_> = supplied.difference(&self.parameters).cloned().collect();
@@ -209,7 +219,7 @@ impl RouteTemplate {
         );
 
         let mut output = PathBuf::new();
-        for (index, segment) in self.segments.iter().enumerate() {
+        for segment in &self.segments {
             if let [Part::Spread(name)] = segment.as_slice() {
                 let value = params.get(name).expect("validated parameter exists");
                 ensure!(
@@ -217,13 +227,9 @@ impl RouteTemplate {
                     "spread parameter `{name}` cannot be empty"
                 );
                 let pieces = value.split('/').collect::<Vec<_>>();
-                for (piece_index, piece) in pieces.iter().enumerate() {
+                for piece in pieces {
                     ensure!(valid_segment(piece), "invalid route segment `{piece}`");
-                    if index + 1 == self.segments.len() && piece_index + 1 == pieces.len() {
-                        output.push(format!("{piece}.html"));
-                    } else {
-                        output.push(piece);
-                    }
+                    output.push(piece);
                 }
                 continue;
             }
@@ -244,12 +250,12 @@ impl RouteTemplate {
                 }
             }
             ensure!(valid_segment(&text), "invalid route segment `{text}`");
-            if index + 1 == self.segments.len() {
-                text.push_str(".html");
-            }
             output.push(text);
         }
-        RoutePath::new(output)
+        let is_index = self.segments.last().is_some_and(
+            |segment| matches!(segment.as_slice(), [Part::Static(value)] if value == "index"),
+        );
+        RoutePath::from_route(output, is_index, clean_urls)
     }
 }
 
@@ -363,24 +369,27 @@ mod tests {
         let params = ParamSet::from([("slug".into(), "hello".into())]);
         assert_eq!(
             route
-                .generate(&params)
+                .generate(&params, true)
                 .unwrap()
                 .as_virtual_path()
                 .get_with_slash(),
-            "/blog/hello.html"
+            "/blog/hello/index.html"
         );
-        assert!(route.generate(&ParamSet::new()).is_err());
+        assert!(route.generate(&ParamSet::new(), true).is_err());
         assert!(
             route
-                .generate(&ParamSet::from([("slug".into(), "../escape".into())]))
+                .generate(&ParamSet::from([("slug".into(), "../escape".into())]), true,)
                 .is_err()
         );
         assert!(
             route
-                .generate(&ParamSet::from([
-                    ("slug".into(), "hello".into()),
-                    ("other".into(), "value".into()),
-                ]))
+                .generate(
+                    &ParamSet::from([
+                        ("slug".into(), "hello".into()),
+                        ("other".into(), "value".into()),
+                    ]),
+                    true,
+                )
                 .is_err()
         );
     }
@@ -390,16 +399,16 @@ mod tests {
         let spread = parse("docs/[...path].typ").unwrap();
         assert_eq!(
             spread
-                .generate(&ParamSet::from([("path".into(), "a/b".into())]))
+                .generate(&ParamSet::from([("path".into(), "a/b".into())]), true)
                 .unwrap()
                 .as_virtual_path()
                 .get_with_slash(),
-            "/docs/a/b.html"
+            "/docs/a/b/index.html"
         );
         let plain = parse("docs/[path].typ").unwrap();
         assert!(
             plain
-                .generate(&ParamSet::from([("path".into(), "a/b".into())]))
+                .generate(&ParamSet::from([("path".into(), "a/b".into())]), true)
                 .is_err()
         );
     }
@@ -409,20 +418,66 @@ mod tests {
         let route = parse("[slug].typ").unwrap();
         assert_eq!(
             route
-                .generate(&ParamSet::from([("slug".into(), "v1.2".into())]))
+                .generate(&ParamSet::from([("slug".into(), "v1.2".into())]), true)
                 .unwrap()
                 .as_virtual_path()
                 .get_with_slash(),
-            "/v1.2.html"
+            "/v1.2/index.html"
         );
         for invalid in ["CON", "bad?name", "fragment#name", "trail."] {
             assert!(
                 route
-                    .generate(&ParamSet::from([("slug".into(), invalid.into())]))
+                    .generate(&ParamSet::from([("slug".into(), invalid.into())]), true)
                     .is_err(),
                 "{invalid} must be rejected"
             );
         }
+    }
+
+    #[test]
+    fn index_templates_map_to_their_parent_route() {
+        assert_eq!(
+            RoutePath::from_template(Path::new("index.typ"), true)
+                .unwrap()
+                .as_virtual_path()
+                .get_with_slash(),
+            "/index.html"
+        );
+        assert_eq!(
+            RoutePath::from_template(Path::new("about.typ"), true)
+                .unwrap()
+                .as_virtual_path()
+                .get_with_slash(),
+            "/about/index.html"
+        );
+
+        let route = parse("blog/[slug]/index.typ").unwrap();
+        assert_eq!(
+            route
+                .generate(&ParamSet::from([("slug".into(), "hello".into())]), true)
+                .unwrap()
+                .as_virtual_path()
+                .get_with_slash(),
+            "/blog/hello/index.html"
+        );
+
+        let route = parse("[slug].typ").unwrap();
+        assert_eq!(
+            route
+                .generate(&ParamSet::from([("slug".into(), "index".into())]), true)
+                .unwrap()
+                .as_virtual_path()
+                .get_with_slash(),
+            "/index/index.html"
+        );
+
+        assert_eq!(
+            RoutePath::from_template(Path::new("about.typ"), false)
+                .unwrap()
+                .as_virtual_path()
+                .get_with_slash(),
+            "/about.html"
+        );
     }
 
     #[test]

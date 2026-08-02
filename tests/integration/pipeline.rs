@@ -89,12 +89,12 @@ fn reentrant_build_discovers_added_and_removed_pages() {
     std::fs::write(&about, "#html.elem(\"p\")[About]").unwrap();
     driver.build().unwrap();
     assert!(root.join("dist/index.html").is_file());
-    assert!(root.join("dist/about.html").is_file());
+    assert!(root.join("dist/about/index.html").is_file());
 
     std::fs::remove_file(index).unwrap();
     driver.build().unwrap();
     assert!(!root.join("dist/index.html").exists());
-    assert!(root.join("dist/about.html").is_file());
+    assert!(root.join("dist/about/index.html").is_file());
 }
 
 #[test]

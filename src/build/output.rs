@@ -50,6 +50,8 @@ impl ImageFormat {
 /// part of the build outcome. Keeping that distinction here prevents the
 /// pipeline from depending on the publication's internal file representation.
 pub(crate) struct PublishedOutput {
+    /// Root directory containing the complete published site.
+    pub output_dir: PathBuf,
     /// Published page paths in deterministic route order; generated assets are omitted.
     pub pages: Vec<PathBuf>,
 }
@@ -150,7 +152,10 @@ impl OutputPublication {
             .filter_map(|(path, file)| file.is_page().then_some(path))
             .map(|path| realize_output_path(&self.output_dir, &path))
             .collect::<Result<Vec<_>>>()?;
-        Ok(PublishedOutput { pages })
+        Ok(PublishedOutput {
+            output_dir: self.output_dir,
+            pages,
+        })
     }
 
     fn insert(&mut self, path: RoutePath, file: OutputFile) -> Result<()> {
@@ -293,16 +298,24 @@ mod tests {
     }
 
     #[test]
-    fn nested_page_gets_relative_asset_url() {
+    fn asset_urls_follow_the_page_output_layout() {
         let (_temp, project, layout) = fixture();
         let mut publication = OutputPublication::new(&project, &layout).unwrap();
         let asset = publication
             .add_highlight_stylesheet(b"body{}".to_vec())
             .unwrap();
-        let output = RoutePath::new("blog/post.html").unwrap();
         let template = VirtualPath::new("/src/blog/[slug].typ").unwrap();
-        let page = publication.page(&template, &output);
+        let directory_output = RoutePath::new("blog/post/index.html").unwrap();
+        let page = publication.page(&template, &directory_output);
 
+        assert!(
+            page.reference(&asset)
+                .unwrap()
+                .starts_with("../../_assets/highlight.")
+        );
+
+        let file_output = RoutePath::new("blog/post.html").unwrap();
+        let page = publication.page(&template, &file_output);
         assert!(
             page.reference(&asset)
                 .unwrap()
@@ -316,7 +329,7 @@ mod tests {
         std::fs::write(project.root().join("style.css"), "body{}").unwrap();
         let template = VirtualPath::new("/src/blog/[slug].typ").unwrap();
         let mut publication = OutputPublication::new(&project, &layout).unwrap();
-        let output = RoutePath::new("blog/post.html").unwrap();
+        let output = RoutePath::new("blog/post/index.html").unwrap();
         let page = publication.page(&template, &output);
 
         assert_eq!(

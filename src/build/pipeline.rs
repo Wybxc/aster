@@ -22,6 +22,8 @@ use super::{BuildSession, BuildWarning};
 /// The complete build outcome. No build stage decides terminal formatting or
 /// exit status; the CLI renders this value after the pipeline finishes.
 pub struct BuildOutcome {
+    /// Root directory containing the complete published site.
+    pub output_dir: PathBuf,
     /// Published page paths, in deterministic route order.
     pub outputs: Vec<PathBuf>,
     /// Non-fatal diagnostics collected during the build.
@@ -75,8 +77,13 @@ impl BuildSession {
                 load_content(session, &layout).context("failed to load content collections")?;
             let base_inputs = content::with_protocol(manifest.inputs, protocol)?;
             let base_library = session.library(base_inputs.clone());
-            let (jobs, route_warnings) =
-                plan_routes(session, &layout, &base_inputs, &base_library)?;
+            let (jobs, route_warnings) = plan_routes(
+                session,
+                &layout,
+                &base_inputs,
+                &base_library,
+                manifest.config.output.clean_urls,
+            )?;
             warnings.extend(route_warnings);
 
             for job in jobs {
@@ -99,6 +106,7 @@ impl BuildSession {
 
             let published = publication.publish()?;
             Ok(BuildOutcome {
+                output_dir: published.output_dir,
                 outputs: published.pages,
                 warnings,
                 elapsed: started.elapsed(),

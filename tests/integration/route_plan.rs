@@ -44,10 +44,33 @@ fn route_plan_is_sorted_and_probes_dynamic_templates() {
     assert_eq!(
         outputs,
         vec![
-            Path::new("a.html"),
-            Path::new("blog/post.html"),
-            Path::new("z.html"),
+            Path::new("a/index.html"),
+            Path::new("blog/post/index.html"),
+            Path::new("z/index.html"),
         ]
+    );
+}
+
+#[test]
+fn route_plan_supports_file_outputs_when_clean_urls_are_disabled() {
+    let (_temp, project) = fixture(&["a.typ", "blog/[slug].typ"]);
+    std::fs::write(project.config_file(), "[output]\nclean-urls = false\n").unwrap();
+    write_routes(&project, "blog/[slug].typ", "((slug: \"post\"),)");
+
+    let outcome = BuildSession::new(project.clone()).build().unwrap();
+    let output_dir = project.root().join("dist");
+    let outputs = outcome
+        .outputs
+        .iter()
+        .map(|path| {
+            let path = VirtualPath::virtualize(&output_dir, path).unwrap();
+            PathBuf::from(path.get_without_slash())
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        outputs,
+        vec![Path::new("a.html"), Path::new("blog/post.html")]
     );
 }
 

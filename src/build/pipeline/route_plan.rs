@@ -26,6 +26,7 @@ pub(super) fn plan_routes(
     layout: &ProjectLayout,
     base_inputs: &Dict,
     base_library: &LazyHash<Library>,
+    clean_urls: bool,
 ) -> Result<(Vec<PlannedRoute>, Vec<BuildWarning>)> {
     let templates = session.source_files(layout)?;
     let mut jobs = Vec::new();
@@ -54,13 +55,13 @@ pub(super) fn plan_routes(
                 content::with_route_params(base_inputs, &params)?;
                 jobs.push(PlannedRoute {
                     template: template.clone(),
-                    output: pattern.generate(&params)?,
+                    output: pattern.generate(&params, clean_urls)?,
                     params,
                 });
             }
         } else {
             jobs.push(PlannedRoute {
-                output: RoutePath::from_template(relative)?,
+                output: RoutePath::from_template(relative, clean_urls)?,
                 template,
                 params: ParamSet::new(),
             });
@@ -119,16 +120,16 @@ mod tests {
         let route = |path| RoutePath::new(path).unwrap();
 
         assert!(output_paths_collide(
-            &route("Case.html"),
-            &route("case.html")
+            &route("Case/index.html"),
+            &route("case/index.html")
         ));
         assert!(output_paths_collide(
-            &route("foo.html"),
-            &route("foo.html/bar.html")
+            &route("foo/index.html"),
+            &route("foo/index.html/bar/index.html")
         ));
         assert!(!output_paths_collide(
-            &route("foo.html"),
-            &route("foobar.html")
+            &route("foo/index.html"),
+            &route("foobar/index.html")
         ));
     }
 }

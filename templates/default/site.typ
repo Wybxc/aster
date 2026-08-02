@@ -14,7 +14,7 @@
   ]
   html.body[
     #html.elem("header")[
-      #html.elem("nav")[#link("index.html")[*#settings.site.title*]]
+      #html.elem("nav")[#link("/")[*#settings.site.title*]]
     ]
     #html.elem("main")[#body]
     #html.elem("footer")[Built with Aster and Typst.]

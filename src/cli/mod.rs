@@ -9,6 +9,7 @@ use anyhow::{Context, Result};
 use aster::Project;
 
 pub(crate) mod build;
+pub(crate) mod dev;
 pub(crate) mod diag;
 pub(crate) mod init;
 pub(crate) mod watch;

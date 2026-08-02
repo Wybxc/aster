@@ -1,4 +1,5 @@
 use std::io::Write;
+use std::net::SocketAddr;
 use std::path::Path;
 use std::time::Duration;
 
@@ -65,6 +66,18 @@ pub fn emit_rebuilding() {
     let _ = write!(writer, "rebuild");
     let _ = writer.reset();
     let _ = writeln!(writer, "  change detected");
+}
+
+pub fn emit_serving(address: SocketAddr) {
+    let mut writer = writer();
+    let _ = writer.set_color(
+        ColorSpec::new()
+            .set_fg(Some(termcolor::Color::Cyan))
+            .set_bold(true),
+    );
+    let _ = write!(writer, "server");
+    let _ = writer.reset();
+    let _ = writeln!(writer, "  http://{address}/");
 }
 
 pub fn emit_initialized(project: &Path) {
