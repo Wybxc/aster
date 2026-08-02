@@ -32,11 +32,6 @@ pub(crate) fn protocol(entries: impl IntoIterator<Item = ContentEntry>) -> Value
     protocol_value(collections)
 }
 
-#[cfg(test)]
-pub fn empty() -> Value {
-    protocol(std::iter::empty())
-}
-
 pub fn with_protocol(config: Dict, protocol: Value) -> Result<Dict> {
     if config.contains(INPUT_NAME) {
         bail!("`{INPUT_NAME}` is reserved for Aster's content protocol");
@@ -166,6 +161,10 @@ fn render_closure(source: RootedPath) -> Func {
 mod tests {
     use super::*;
     use typst::syntax::{VirtualPath, VirtualRoot};
+
+    fn empty() -> Value {
+        protocol(std::iter::empty())
+    }
 
     #[test]
     fn protocol_contains_lazy_entry_modules() {
