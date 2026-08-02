@@ -138,6 +138,7 @@ dependencies = [
  "include_dir",
  "lightningcss",
  "seahash",
+ "serde",
  "syntect",
  "tempfile",
  "termcolor",

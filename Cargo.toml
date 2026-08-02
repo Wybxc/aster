@@ -11,6 +11,7 @@ data-url = "0.3"
 include_dir = "0.7"
 lightningcss = "=1.0.0-alpha.72"
 seahash = "4.1.0"
+serde = { version = "1", features = ["derive"] }
 syntect = { version = "5.3", features = ["default-syntaxes", "default-themes", "dump-load"] }
 termcolor = "1"
 thiserror = "2"

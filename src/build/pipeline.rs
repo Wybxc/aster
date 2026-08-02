@@ -13,7 +13,7 @@ use crate::build::world::TypstSession;
 use crate::engine::content::{self, ContentEntry};
 use crate::engine::route::RoutePath;
 use crate::foundation::Project;
-use crate::foundation::config::AsterConfig;
+use crate::foundation::config::ProjectManifest;
 
 mod route_plan;
 
@@ -46,7 +46,7 @@ impl BuildSession {
 
     /// Build and publish the complete project output tree.
     pub fn build(&mut self) -> Result<BuildOutcome> {
-        let config = AsterConfig::load(&self.session.project().config_file())
+        let manifest = ProjectManifest::load(&self.session.project().config_file())
             .context("failed to parse aster.toml")?;
         self.session.reset();
 
@@ -60,7 +60,7 @@ impl BuildSession {
             let mut css = transform::CssProcessor::new(session.project_files());
             let mut image = transform::ImageProcessor::new();
             let (mut highlight, highlight_warnings) = transform::HighlightProcessor::new(
-                &config.highlight,
+                &manifest.config.highlight,
                 session.project_files(),
                 &mut publication,
             )?;
@@ -69,7 +69,7 @@ impl BuildSession {
                 [&mut css, &mut image, &mut highlight];
 
             let protocol = load_content(session).context("failed to load content collections")?;
-            let base_inputs = content::with_protocol(config.dict, protocol)?;
+            let base_inputs = content::with_protocol(manifest.inputs, protocol)?;
             let base_library = session.library(base_inputs.clone());
             let plan = RoutePlan::build(session, &base_inputs, &base_library)?;
             let (jobs, route_warnings) = plan.into_parts();

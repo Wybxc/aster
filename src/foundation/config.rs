@@ -1,74 +1,70 @@
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
+use serde::Deserialize;
 use typst::ecow::EcoString;
 use typst::foundations::{Dict, Value};
 
 const DEFAULT_LIGHT: &str = "InspiredGitHub";
 const DEFAULT_DARK: &str = "base16-eighties.dark";
 
+/// Complete `aster.toml` manifest, represented for both Typst and Aster.
+pub(crate) struct ProjectManifest {
+    /// Complete Typst-friendly manifest dictionary for `sys.inputs`.
+    pub inputs: Dict,
+    /// Strongly typed fields interpreted by Aster itself.
+    pub config: AsterConfig,
+}
+
 /// Highlight theme configuration from `aster.toml`.
+#[derive(Default, Deserialize)]
+#[serde(default)]
 pub(crate) struct HighlightConfig {
     pub themes: Themes,
 }
 
+#[derive(Deserialize)]
+#[serde(default)]
 pub(crate) struct Themes {
     pub light: EcoString,
     pub dark: EcoString,
 }
 
-/// Complete parsed configuration from `aster.toml`.
-///
-/// Build once, share everywhere — no repeat file I/O.
+impl Default for Themes {
+    fn default() -> Self {
+        Self {
+            light: DEFAULT_LIGHT.into(),
+            dark: DEFAULT_DARK.into(),
+        }
+    }
+}
+
+/// Aster-owned configuration extracted from the project manifest.
+#[derive(Default, Deserialize)]
+#[serde(default)]
 pub(crate) struct AsterConfig {
-    /// Typst-friendly config dict for `sys.inputs`.
-    pub dict: Dict,
-    /// Highlight theme settings (filled with defaults when absent).
     pub highlight: HighlightConfig,
 }
 
-impl AsterConfig {
-    /// Read `aster.toml` and parse both `sys.inputs` dict and
-    /// `[highlight]` section in a single pass.
+impl ProjectManifest {
+    /// Read `aster.toml` and create its Typst and typed Aster views.
     pub(crate) fn load(path: &Path) -> Result<Self> {
         let content = std::fs::read_to_string(path)
             .with_context(|| format!("failed to read {}", path.display()))?;
         let table: toml::Table = content
             .parse()
             .with_context(|| format!("failed to parse {}", path.display()))?;
-        let highlight = parse_highlight_inner(&table);
-        let value: Value = toml::Value::Table(table)
-            .try_into()
+        let value = toml::Value::Table(table);
+        let config = AsterConfig::deserialize(value.clone())
+            .with_context(|| format!("failed to extract Aster config from {}", path.display()))?;
+        let value = Value::deserialize(value)
             .with_context(|| format!("failed to convert {} to Typst inputs", path.display()))?;
 
-        let dict = match value {
+        let inputs = match value {
             Value::Dict(d) => d,
             _ => bail!("unexpected value type from toml conversion"),
         };
-        Ok(Self { dict, highlight })
-    }
-}
-
-/// Extract `[highlight]` config from an already-parsed TOML table.
-fn parse_highlight_inner(table: &toml::Table) -> HighlightConfig {
-    let light = table
-        .get("highlight")
-        .and_then(|h| h.get("themes"))
-        .and_then(|t| t.get("light"))
-        .and_then(|v| v.as_str())
-        .map(EcoString::from)
-        .unwrap_or_else(|| DEFAULT_LIGHT.into());
-
-    let dark = table
-        .get("highlight")
-        .and_then(|h| h.get("themes"))
-        .and_then(|t| t.get("dark"))
-        .and_then(|v| v.as_str())
-        .map(EcoString::from)
-        .unwrap_or_else(|| DEFAULT_DARK.into());
-
-    HighlightConfig {
-        themes: Themes { light, dark },
+        Ok(Self { inputs, config })
     }
 }
 
@@ -95,21 +91,58 @@ mod tests {
         )
         .unwrap();
 
-        let config = AsterConfig::load(&config_file).unwrap();
+        let manifest = ProjectManifest::load(&config_file).unwrap();
 
         assert_eq!(
-            config.dict.get("title").unwrap(),
+            manifest.inputs.get("title").unwrap(),
             &Value::Str(Str::from("Aster"))
         );
         assert_eq!(
-            config.dict.get("published").unwrap(),
+            manifest.inputs.get("published").unwrap(),
             &Value::Str(Str::from("1979-05-27T07:32:00Z"))
         );
-        let Value::Dict(site) = config.dict.get("site").unwrap() else {
+        let Value::Dict(site) = manifest.inputs.get("site").unwrap() else {
             panic!("site must be a dictionary");
         };
         assert_eq!(site.get("enabled").unwrap(), &Value::Bool(true));
-        assert_eq!(config.highlight.themes.light, "Solarized (light)");
-        assert_eq!(config.highlight.themes.dark, "Solarized (dark)");
+        assert!(matches!(
+            manifest.inputs.get("highlight"),
+            Ok(Value::Dict(_))
+        ));
+        assert_eq!(manifest.config.highlight.themes.light, "Solarized (light)");
+        assert_eq!(manifest.config.highlight.themes.dark, "Solarized (dark)");
+    }
+
+    #[test]
+    fn fills_missing_highlight_settings_with_defaults() {
+        let temp = tempfile::tempdir().unwrap();
+        let config_file = temp.path().join("aster.toml");
+        std::fs::write(
+            &config_file,
+            "[highlight.themes]\nlight = \"Solarized (light)\"\n",
+        )
+        .unwrap();
+
+        let manifest = ProjectManifest::load(&config_file).unwrap();
+
+        assert_eq!(manifest.config.highlight.themes.light, "Solarized (light)");
+        assert_eq!(manifest.config.highlight.themes.dark, DEFAULT_DARK);
+    }
+
+    #[test]
+    fn rejects_invalid_highlight_settings() {
+        let temp = tempfile::tempdir().unwrap();
+        let config_file = temp.path().join("aster.toml");
+        std::fs::write(&config_file, "[highlight]\nthemes = \"InspiredGitHub\"\n").unwrap();
+
+        let error = match ProjectManifest::load(&config_file) {
+            Ok(_) => panic!("invalid highlight settings must be rejected"),
+            Err(error) => error,
+        };
+
+        assert!(
+            format!("{error:#}").contains("invalid type"),
+            "unexpected error: {error:#}"
+        );
     }
 }
