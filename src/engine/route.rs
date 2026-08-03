@@ -44,13 +44,6 @@ impl RoutePath {
         Ok(Self(path))
     }
 
-    pub(crate) fn from_template(relative_template: &Path, clean_urls: bool) -> Result<Self> {
-        let mut output = relative_template.to_path_buf();
-        output.set_extension("");
-        let is_index = output.file_name().is_some_and(|name| name == "index");
-        Self::from_route(output, is_index, clean_urls)
-    }
-
     fn from_route(mut route: PathBuf, is_index: bool, clean_urls: bool) -> Result<Self> {
         if !clean_urls || is_index {
             route.set_extension("html");
@@ -63,6 +56,28 @@ impl RoutePath {
     /// Return the normalized path within the virtual output root.
     pub fn as_virtual_path(&self) -> &VirtualPath {
         &self.0
+    }
+
+    /// Whether two output paths cannot coexist on a portable filesystem.
+    pub(crate) fn conflicts_with(&self, other: &Self) -> bool {
+        let mut left = self
+            .as_virtual_path()
+            .get_without_slash()
+            .split('/')
+            .map(str::to_lowercase);
+        let mut right = other
+            .as_virtual_path()
+            .get_without_slash()
+            .split('/')
+            .map(str::to_lowercase);
+
+        loop {
+            match (left.next(), right.next()) {
+                (Some(left), Some(right)) if left == right => {}
+                (Some(_), Some(_)) => return false,
+                _ => return true,
+            }
+        }
     }
 }
 
@@ -204,6 +219,18 @@ impl RouteTemplate {
     }
 
     pub fn generate(&self, params: &ParamSet, clean_urls: bool) -> Result<RoutePath> {
+        let output = self.generate_path(params)?;
+        let is_index = self.segments.last().is_some_and(
+            |segment| matches!(segment.as_slice(), [Part::Static(value)] if value == "index"),
+        );
+        RoutePath::from_route(output, is_index, clean_urls)
+    }
+
+    pub(crate) fn generate_endpoint(&self, params: &ParamSet) -> Result<RoutePath> {
+        RoutePath::new(self.generate_path(params)?)
+    }
+
+    fn generate_path(&self, params: &ParamSet) -> Result<PathBuf> {
         let supplied: BTreeSet<_> = params.keys().cloned().collect();
         let missing: Vec<_> = self.parameters.difference(&supplied).cloned().collect();
         let extra: Vec<_> = supplied.difference(&self.parameters).cloned().collect();
@@ -252,10 +279,7 @@ impl RouteTemplate {
             ensure!(valid_segment(&text), "invalid route segment `{text}`");
             output.push(text);
         }
-        let is_index = self.segments.last().is_some_and(
-            |segment| matches!(segment.as_slice(), [Part::Static(value)] if value == "index"),
-        );
-        RoutePath::from_route(output, is_index, clean_urls)
+        Ok(output)
     }
 }
 
@@ -437,14 +461,18 @@ mod tests {
     #[test]
     fn index_templates_map_to_their_parent_route() {
         assert_eq!(
-            RoutePath::from_template(Path::new("index.typ"), true)
+            parse("index.typ")
+                .unwrap()
+                .generate(&ParamSet::new(), true)
                 .unwrap()
                 .as_virtual_path()
                 .get_with_slash(),
             "/index.html"
         );
         assert_eq!(
-            RoutePath::from_template(Path::new("about.typ"), true)
+            parse("about.typ")
+                .unwrap()
+                .generate(&ParamSet::new(), true)
                 .unwrap()
                 .as_virtual_path()
                 .get_with_slash(),
@@ -472,12 +500,33 @@ mod tests {
         );
 
         assert_eq!(
-            RoutePath::from_template(Path::new("about.typ"), false)
+            parse("about.typ")
+                .unwrap()
+                .generate(&ParamSet::new(), false)
                 .unwrap()
                 .as_virtual_path()
                 .get_with_slash(),
             "/about.html"
         );
+
+        assert_eq!(
+            parse("feed/[slug].xml.typ")
+                .unwrap()
+                .generate_endpoint(&ParamSet::from([("slug".into(), "latest".into())]))
+                .unwrap()
+                .as_virtual_path()
+                .get_with_slash(),
+            "/feed/latest.xml"
+        );
+    }
+
+    #[test]
+    fn detects_portable_and_ancestor_output_collisions() {
+        let route = |path| RoutePath::new(path).unwrap();
+
+        assert!(route("Case/index.html").conflicts_with(&route("case/index.html")));
+        assert!(route("foo/index.html").conflicts_with(&route("foo/index.html/bar/index.html")));
+        assert!(!route("foo/index.html").conflicts_with(&route("foobar/index.html")));
     }
 
     #[test]

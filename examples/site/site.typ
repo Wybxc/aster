@@ -27,6 +27,12 @@
       #html.meta(name: "viewport", content: "width=device-width, initial-scale=1")
       #html.meta(name: "description", content: description)
       #html.title(document-title)
+      #html.elem("link", attrs: (
+        rel: "alternate",
+        type: "application/rss+xml",
+        title: settings.site.title,
+        href: settings.site.url + "rss.xml",
+      ))
       #html.elem("link", attrs: (rel: "css", href: stylesheet))
     ]
     html.body[

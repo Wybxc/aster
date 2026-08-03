@@ -9,12 +9,18 @@ fn writer() -> StandardStream {
     StandardStream::stderr(ColorChoice::Auto)
 }
 
-pub fn emit_summary(count: usize, elapsed: Duration) {
+pub fn emit_summary(page_count: usize, endpoint_count: usize, elapsed: Duration) {
     let mut writer = writer();
     let _ = writer.set_color(ColorSpec::new().set_bold(true));
-    let _ = write!(writer, "built {count} page");
-    if count != 1 {
+    let _ = write!(writer, "built {page_count} page");
+    if page_count != 1 {
         let _ = write!(writer, "s");
+    }
+    if endpoint_count > 0 {
+        let _ = write!(writer, " and {endpoint_count} endpoint");
+        if endpoint_count != 1 {
+            let _ = write!(writer, "s");
+        }
     }
     let _ = writer.reset();
     let _ = writeln!(writer, " in {:.1}s", elapsed.as_secs_f64());
@@ -96,5 +102,9 @@ pub fn report_build(outcome: &BuildOutcome) {
     for warning in &outcome.warnings {
         emit_warning(warning.as_str());
     }
-    emit_summary(outcome.outputs.len(), outcome.elapsed);
+    emit_summary(
+        outcome.outputs.len(),
+        outcome.endpoints.len(),
+        outcome.elapsed,
+    );
 }

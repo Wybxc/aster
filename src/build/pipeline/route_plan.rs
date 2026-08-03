@@ -9,18 +9,24 @@ use typst::utils::LazyHash;
 
 use crate::build::BuildWarning;
 use crate::build::world::TypstSession;
-use crate::engine::content;
 use crate::engine::route::{self, ParamSet, RoutePath};
+use crate::engine::{content, endpoint};
 use crate::foundation::ProjectLayout;
 
 pub(super) struct PlannedRoute {
+    pub kind: PlannedRouteKind,
     pub template: VirtualPath,
     pub output: RoutePath,
     pub params: ParamSet,
 }
 
-/// Discover, parse, and probe every template into a deterministic,
-/// collision-free page plan.
+#[derive(Clone, Copy)]
+pub(super) enum PlannedRouteKind {
+    Page,
+    Endpoint,
+}
+
+/// Discover, classify, and validate every source route before rendering.
 pub(super) fn plan_routes(
     session: &TypstSession,
     layout: &ProjectLayout,
@@ -29,7 +35,7 @@ pub(super) fn plan_routes(
     clean_urls: bool,
 ) -> Result<(Vec<PlannedRoute>, Vec<BuildWarning>)> {
     let templates = session.source_files(layout)?;
-    let mut jobs = Vec::new();
+    let mut routes = Vec::new();
     let mut warnings = Vec::new();
 
     for template in templates {
@@ -38,46 +44,58 @@ pub(super) fn plan_routes(
             .context("source template is outside configured source directory")?;
         let pattern = route::parse_template(relative)
             .with_context(|| format!("invalid route template {}", relative.display()))?;
-        if pattern.is_dynamic() {
-            let (evaluated, evaluated_warnings) = session
-                .evaluate(&template, base_library)
-                .with_context(|| format!("failed to probe {}", relative.display()))?;
+        let (evaluated, evaluated_warnings) = session
+            .evaluate(&template, base_library)
+            .with_context(|| format!("failed to probe {}", relative.display()))?;
+        let is_endpoint = endpoint::is_declared(&evaluated)
+            .with_context(|| format!("invalid endpoint declaration in {}", relative.display()))?;
+        let kind = if is_endpoint {
+            PlannedRouteKind::Endpoint
+        } else {
+            PlannedRouteKind::Page
+        };
+        let param_sets = if pattern.is_dynamic() {
             warnings.extend(evaluated_warnings);
-            let routes = route::extract(&evaluated)
+            let params = route::extract(&evaluated)
                 .with_context(|| format!("invalid route metadata in {}", relative.display()))?;
-            if routes.is_empty() {
+            if params.is_empty() {
                 warnings.push(BuildWarning::new(eco_format!(
                     "{} has a dynamic route pattern but no <route> metadata",
                     relative.display()
                 )));
             }
-            for params in routes {
-                content::with_route_params(base_inputs, &params)?;
-                jobs.push(PlannedRoute {
-                    template: template.clone(),
-                    output: pattern.generate(&params, clean_urls)?,
-                    params,
-                });
-            }
+            params.into_iter().collect::<Vec<_>>()
         } else {
-            jobs.push(PlannedRoute {
-                output: RoutePath::from_template(relative, clean_urls)?,
-                template,
-                params: ParamSet::new(),
+            vec![ParamSet::new()]
+        };
+
+        for params in param_sets {
+            if !params.is_empty() {
+                content::with_route_params(base_inputs, &params)?;
+            }
+            let output = match kind {
+                PlannedRouteKind::Page => pattern.generate(&params, clean_urls)?,
+                PlannedRouteKind::Endpoint => pattern.generate_endpoint(&params)?,
+            };
+            routes.push(PlannedRoute {
+                kind,
+                template: template.clone(),
+                output,
+                params,
             });
         }
     }
 
-    jobs.sort_by(|left, right| {
+    routes.sort_by(|left, right| {
         left.output.cmp(&right.output).then_with(|| {
             left.template
                 .get_with_slash()
                 .cmp(right.template.get_with_slash())
         })
     });
-    for (index, left) in jobs.iter().enumerate() {
-        for right in &jobs[index + 1..] {
-            if output_paths_collide(&left.output, &right.output) {
+    for (index, left) in routes.iter().enumerate() {
+        for right in &routes[index + 1..] {
+            if left.output.conflicts_with(&right.output) {
                 bail!(
                     "templates {} and {} generate conflicting outputs {} and {}",
                     left.template.get_with_slash(),
@@ -88,48 +106,5 @@ pub(super) fn plan_routes(
             }
         }
     }
-    Ok((jobs, warnings))
-}
-
-fn portable_output_key(output: &RoutePath) -> impl Iterator<Item = String> + '_ {
-    output
-        .as_virtual_path()
-        .get_without_slash()
-        .split('/')
-        .map(str::to_lowercase)
-}
-
-fn output_paths_collide(left: &RoutePath, right: &RoutePath) -> bool {
-    let mut left = portable_output_key(left);
-    let mut right = portable_output_key(right);
-    loop {
-        match (left.next(), right.next()) {
-            (Some(left), Some(right)) if left == right => {}
-            (Some(_), Some(_)) => return false,
-            _ => return true,
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn detects_portable_and_ancestor_output_collisions() {
-        let route = |path| RoutePath::new(path).unwrap();
-
-        assert!(output_paths_collide(
-            &route("Case/index.html"),
-            &route("case/index.html")
-        ));
-        assert!(output_paths_collide(
-            &route("foo/index.html"),
-            &route("foo/index.html/bar/index.html")
-        ));
-        assert!(!output_paths_collide(
-            &route("foo/index.html"),
-            &route("foobar/index.html")
-        ));
-    }
+    Ok((routes, warnings))
 }

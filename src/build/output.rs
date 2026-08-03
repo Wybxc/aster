@@ -46,19 +46,21 @@ impl ImageFormat {
 
 /// The publication-layer result returned to the build pipeline.
 ///
-/// Publication writes both pages and generated assets, but only page paths are
-/// part of the build outcome. Keeping that distinction here prevents the
-/// pipeline from depending on the publication's internal file representation.
+/// Publication writes pages, endpoints, and internal assets. Only the two
+/// user-authored route kinds are surfaced as build results.
 pub(crate) struct PublishedOutput {
     /// Root directory containing the complete published site.
     pub output_dir: PathBuf,
     /// Published page paths in deterministic route order; generated assets are omitted.
     pub pages: Vec<PathBuf>,
+    /// Published endpoint paths in deterministic route order.
+    pub endpoints: Vec<PathBuf>,
 }
 
 #[derive(Eq, PartialEq)]
 enum OutputFile {
     Page(Vec<u8>),
+    Generated(Bytes),
     Asset(Bytes),
     Public(Bytes),
 }
@@ -67,12 +69,18 @@ impl OutputFile {
     fn content(&self) -> &[u8] {
         match self {
             Self::Page(content) => content,
-            Self::Asset(content) | Self::Public(content) => content.as_slice(),
+            Self::Generated(content) | Self::Asset(content) | Self::Public(content) => {
+                content.as_slice()
+            }
         }
     }
 
     fn is_page(&self) -> bool {
         matches!(self, Self::Page(_))
+    }
+
+    fn is_endpoint(&self) -> bool {
+        matches!(self, Self::Generated(_))
     }
 }
 
@@ -108,6 +116,11 @@ impl OutputPublication {
     pub(crate) fn add_public_file(&mut self, path: &Path, content: Bytes) -> Result<()> {
         let path = RoutePath::new(path).context("invalid public file path")?;
         self.insert(path, OutputFile::Public(content))
+    }
+
+    /// Register a generated endpoint at its exact output route.
+    pub(crate) fn add_generated_file(&mut self, path: RoutePath, content: Bytes) -> Result<()> {
+        self.insert(path, OutputFile::Generated(content))
     }
 
     fn add_asset(
@@ -154,15 +167,20 @@ impl OutputPublication {
             write_file(&path, file.content())?;
         }
 
-        let pages = self
-            .files
-            .into_iter()
-            .filter_map(|(path, file)| file.is_page().then_some(path))
-            .map(|path| realize_output_path(&self.output_dir, &path))
-            .collect::<Result<Vec<_>>>()?;
+        let mut pages = Vec::new();
+        let mut endpoints = Vec::new();
+        for (path, file) in self.files {
+            let path = realize_output_path(&self.output_dir, &path)?;
+            if file.is_page() {
+                pages.push(path);
+            } else if file.is_endpoint() {
+                endpoints.push(path);
+            }
+        }
         Ok(PublishedOutput {
             output_dir: self.output_dir,
             pages,
+            endpoints,
         })
     }
 
@@ -174,6 +192,17 @@ impl OutputPublication {
                 path
             );
             return Ok(());
+        }
+        if let Some(existing) = self
+            .files
+            .keys()
+            .find(|existing| existing.conflicts_with(&path))
+        {
+            anyhow::bail!(
+                "published files selected conflicting output paths {} and {}",
+                existing,
+                path
+            );
         }
         self.files.insert(path, file);
         Ok(())
@@ -389,6 +418,7 @@ mod tests {
         let published = publication.publish().unwrap();
 
         assert_eq!(published.pages, vec![output_dir.join("index.html")]);
+        assert!(published.endpoints.is_empty());
 
         let expected = snapshot_tree(&output_dir);
         std::fs::write(output_dir.join("stale.html"), "old").unwrap();

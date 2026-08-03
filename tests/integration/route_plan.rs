@@ -83,6 +83,23 @@ fn route_plan_rejects_static_dynamic_collision() {
 }
 
 #[test]
+fn route_plan_rejects_page_endpoint_collision() {
+    let (_temp, project) = fixture(&["feed.typ", "feed.html.typ"]);
+    std::fs::write(project.config_file(), "[output]\nclean-urls = false\n").unwrap();
+    std::fs::write(
+        project.root().join("src/feed.html.typ"),
+        "#metadata(\"feed\") <endpoint>",
+    )
+    .unwrap();
+
+    let error = BuildSession::new(project)
+        .build()
+        .err()
+        .expect("page and endpoint collision must fail");
+    assert!(format!("{error:#}").contains("conflicting outputs feed.html and feed.html"));
+}
+
+#[test]
 fn route_plan_reports_missing_dynamic_metadata() {
     let (_temp, project) = fixture(&["[slug].typ"]);
 

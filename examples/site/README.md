@@ -6,7 +6,9 @@ include nested content ids. The templates use native Typst `#show` rules,
 markup, scripting, mathematics, tables, frames, images, and packages, while
 Aster handles recursive CSS imports, syntax highlighting, and
 content-addressed asset publication without requiring business classes in the
-source templates.
+source templates. The `src/rss.xml.typ` endpoint uses the Universe `exemel`
+package to publish an RSS feed from the journal collection; RSS policy remains
+ordinary project-owned Typst code.
 
 The following command builds the site once:
 

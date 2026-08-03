@@ -24,9 +24,9 @@ The Typst adapter in `templates/default/lib/aster/content.typ` exposes the proto
 
 ## Route plan
 
-A **page template** is a `.typ` file under `src/`. A template without bracket parameters defines one static route. A template with `[name]` or `[...name]` parameters is a **dynamic route** and declares parameter sets through `<route>` metadata.
+A `.typ` file under `src/` is evaluated while planning the output tree. A template containing one `<endpoint>` metadata declaration is a generated endpoint; every other source is a page template. A static endpoint declaration must contain its final string or bytes. A dynamic endpoint uses the same `<route>` metadata as a dynamic page: the first evaluation discovers its parameter sets, then Aster evaluates the template again with each parameter set and extracts that route's string or bytes from `<endpoint>`. The probe declaration may contain `none` because its value is discarded. An endpoint's exact output path substitutes its route parameters and removes only the final `.typ` extension; clean URL rewriting does not apply. A page template without bracket parameters defines one static route. A page template with `[name]` or `[...name]` parameters is a **dynamic route** and declares parameter sets through `<route>` metadata.
 
-A **route plan** is the deterministic, collision-free set of pages produced before rendering. It owns template discovery, parsing, dynamic-template probing through the Typst build session, route metadata validation, parameter matching, output confinement, warnings, ordering, and collisions.
+A **route plan** is the deterministic, collision-free set of pages and generated endpoints produced before rendering. It owns template discovery, evaluation and classification, route and endpoint metadata validation, parameter matching, output confinement, warnings, ordering, and collisions.
 
 A normal parameter fills one path segment and cannot contain separators. A spread parameter is a standalone segment and may expand into multiple validated segments. Generated output paths are always relative to `dist/` and cannot contain `.` or `..` components.
 
@@ -54,10 +54,10 @@ An **output publication** is the complete candidate output tree for one successf
 - deterministic replacement of `dist/`
 - removal of stale pages and assets
 
-Rendering and document transformation accumulate a publication in memory. Once every page succeeds, publication clears `dist/` and writes the complete output tree directly.
+Rendering, endpoint evaluation, and document transformation accumulate a publication in memory. Once every route succeeds, publication clears `dist/` and writes the complete output tree directly.
 
 ## Build outcome
 
-A **build outcome** records published pages, collected warnings, and elapsed time. Build modules decide whether an operation succeeds and preserve diagnostic context. Successful init and build commands return outcomes; the terminal adapter renders them and the CLI maps command results to process exit status in one place.
+A **build outcome** records published pages and generated endpoints separately, together with collected warnings and elapsed time. Internal assets and copied public files are not reported as authored routes. Build modules decide whether an operation succeeds and preserve diagnostic context. Successful init and build commands return outcomes; the terminal adapter renders them and the CLI maps command results to process exit status in one place.
 
 Aster warnings are non-fatal by explicit policy. Page compilation, route planning, transformation, and output publication failures are fatal. Failures before publication leave the prior `dist/` untouched; an output write failure may leave a partial output tree.

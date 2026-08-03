@@ -4,6 +4,7 @@ name = "aster-field-notes"
 [site]
 title = "Aster Field Notes"
 description = "This complete example shows how Aster builds a static site from Typst templates, content collections, and file-based routes."
+url = "https://example.com/"
 language = "en"
 edition = "2026"
 

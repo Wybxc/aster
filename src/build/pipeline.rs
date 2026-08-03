@@ -10,13 +10,14 @@ use typst::utils::LazyHash;
 use crate::build::output::OutputPublication;
 use crate::build::transform;
 use crate::build::world::TypstSession;
-use crate::engine::content::{self, ContentEntry};
+use crate::engine::content::ContentEntry;
+use crate::engine::{content, endpoint};
 use crate::foundation::ProjectLayout;
 use crate::foundation::config::ProjectManifest;
 
 mod route_plan;
 
-use self::route_plan::{PlannedRoute, plan_routes};
+use self::route_plan::{PlannedRoute, PlannedRouteKind, plan_routes};
 use super::{BuildSession, BuildWarning};
 
 /// The complete build outcome. No build stage decides terminal formatting or
@@ -26,6 +27,8 @@ pub struct BuildOutcome {
     pub output_dir: PathBuf,
     /// Published page paths, in deterministic route order.
     pub outputs: Vec<PathBuf>,
+    /// Published generated endpoint paths, in deterministic route order.
+    pub endpoints: Vec<PathBuf>,
     /// Non-fatal diagnostics collected during the build.
     pub warnings: Vec<BuildWarning>,
     /// Total build and publication time.
@@ -75,7 +78,7 @@ impl BuildSession {
                 load_content(session, &layout).context("failed to load content collections")?;
             let base_inputs = content::with_protocol(manifest.inputs, protocol)?;
             let base_library = session.library(base_inputs.clone());
-            let (jobs, route_warnings) = plan_routes(
+            let (routes, route_warnings) = plan_routes(
                 session,
                 &layout,
                 &base_inputs,
@@ -84,21 +87,26 @@ impl BuildSession {
             )?;
             warnings.extend(route_warnings);
 
-            for job in jobs {
+            for job in routes {
                 let library = if job.params.is_empty() {
                     base_library.clone()
                 } else {
                     session.library(content::with_route_params(&base_inputs, &job.params)?)
                 };
-                render_page(
-                    session,
-                    &mut publication,
-                    &job,
-                    &library,
-                    manifest.config.output.pretty,
-                    &mut processors,
-                    &mut warnings,
-                )
+                match job.kind {
+                    PlannedRouteKind::Page => render_page(
+                        session,
+                        &mut publication,
+                        &job,
+                        &library,
+                        manifest.config.output.pretty,
+                        &mut processors,
+                        &mut warnings,
+                    ),
+                    PlannedRouteKind::Endpoint => {
+                        render_endpoint(session, &mut publication, &job, &library, &mut warnings)
+                    }
+                }
                 .with_context(|| format!("failed to build {}", job.output))?;
             }
 
@@ -106,6 +114,7 @@ impl BuildSession {
             Ok(BuildOutcome {
                 output_dir: published.output_dir,
                 outputs: published.pages,
+                endpoints: published.endpoints,
                 warnings,
                 elapsed: started.elapsed(),
             })
@@ -152,6 +161,21 @@ fn render_page(
     let html = typst_html::html(&document, &typst_html::HtmlOptions { pretty })
         .map_err(|error| anyhow::anyhow!("HTML encoding failed: {error:?}"))?;
     page.add_html(html)
+}
+
+fn render_endpoint(
+    session: &TypstSession,
+    publication: &mut OutputPublication,
+    job: &PlannedRoute,
+    library: &LazyHash<Library>,
+    warnings: &mut Vec<BuildWarning>,
+) -> Result<()> {
+    let (evaluated, evaluated_warnings) = session.evaluate(&job.template, library)?;
+    warnings.extend(evaluated_warnings);
+    let content = endpoint::extract(&evaluated)
+        .context("invalid endpoint declaration")?
+        .context("endpoint route did not produce <endpoint>")?;
+    publication.add_generated_file(job.output.clone(), content)
 }
 
 fn load_content(
