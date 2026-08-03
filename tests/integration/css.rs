@@ -6,10 +6,10 @@ use crate::common::{generated_asset_containing, project, write_css_page};
 fn bundles_and_tracks_entry_and_transitive_imports() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::create_dir_all(root.join("styles")).unwrap();
     write_css_page(root);
-    let entry = root.join("src/style.css");
-    let dependency = root.join("src/theme.css");
+    let entry = root.join("styles/style.css");
+    let dependency = root.join("styles/theme.css");
     std::fs::write(&entry, "@import \"theme.css\"; .page { color: red; }").unwrap();
     std::fs::write(&dependency, ".theme { color: blue; }").unwrap();
 
@@ -40,12 +40,12 @@ fn bundles_and_tracks_entry_and_transitive_imports() {
 fn publishes_and_tracks_assets_from_transitive_stylesheets() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src/theme")).unwrap();
-    std::fs::create_dir_all(root.join("src/fonts")).unwrap();
+    std::fs::create_dir_all(root.join("styles/theme")).unwrap();
+    std::fs::create_dir_all(root.join("styles/fonts")).unwrap();
     write_css_page(root);
-    let entry = root.join("src/style.css");
-    let imported = root.join("src/theme/fonts.css");
-    let font = root.join("src/fonts/site.woff2");
+    let entry = root.join("styles/style.css");
+    let imported = root.join("styles/theme/fonts.css");
+    let font = root.join("styles/fonts/site.woff2");
     std::fs::write(&entry, "@import \"theme/fonts.css\";").unwrap();
     std::fs::write(
         &imported,
@@ -95,10 +95,10 @@ fn publishes_and_tracks_assets_from_transitive_stylesheets() {
 fn preserves_browser_managed_urls() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::create_dir_all(root.join("styles")).unwrap();
     write_css_page(root);
     std::fs::write(
-        root.join("src/style.css"),
+        root.join("styles/style.css"),
         concat!(
             "@import \"https://example.com/theme.css\";",
             ".remote { background: url(\"https://example.com/image.png\"); }",
@@ -112,6 +112,11 @@ fn preserves_browser_managed_urls() {
     BuildSession::new(project(root)).build().unwrap();
 
     let css = generated_asset_containing(root, ".remote").1;
+    let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
+    assert!(
+        html.contains("<link rel=\"stylesheet\" href=\"/site.css\">"),
+        "{html}"
+    );
     assert!(css.contains("https://example.com/theme.css"), "{css}");
     assert!(css.contains("https://example.com/image.png"), "{css}");
     assert!(css.contains("/images/site.svg"), "{css}");
@@ -123,14 +128,14 @@ fn preserves_browser_managed_urls() {
 fn rechecks_missing_css_assets() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::create_dir_all(root.join("styles")).unwrap();
     write_css_page(root);
     std::fs::write(
-        root.join("src/style.css"),
+        root.join("styles/style.css"),
         ".asset-rule { background: url(\"assets/missing.bin\"); }",
     )
     .unwrap();
-    let missing = root.join("src/assets/missing.bin");
+    let missing = root.join("styles/assets/missing.bin");
 
     let mut session = BuildSession::new(project(root));
     assert!(session.build().is_err());
@@ -153,10 +158,10 @@ fn rechecks_missing_css_assets() {
 fn rejects_css_assets_outside_project_root() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::create_dir_all(root.join("styles")).unwrap();
     write_css_page(root);
     std::fs::write(
-        root.join("src/style.css"),
+        root.join("styles/style.css"),
         ".asset-rule { background: url(\"../../outside.bin\"); }",
     )
     .unwrap();
@@ -172,7 +177,7 @@ fn rejects_css_assets_outside_project_root() {
 fn transforms_for_configured_targets_without_minifying() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::create_dir_all(root.join("styles")).unwrap();
     write_css_page(root);
     std::fs::write(
         root.join("aster.toml"),
@@ -185,7 +190,7 @@ fn transforms_for_configured_targets_without_minifying() {
     )
     .unwrap();
     std::fs::write(
-        root.join("src/style.css"),
+        root.join("styles/style.css"),
         concat!(
             "@custom-media --narrow (max-width: 30rem);\n",
             "@media (--narrow) {\n",
@@ -208,8 +213,8 @@ fn transforms_for_configured_targets_without_minifying() {
 fn rejects_invalid_browser_targets() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src")).unwrap();
-    std::fs::write(root.join("src/index.typ"), "#html.body[Page]").unwrap();
+    std::fs::create_dir_all(root.join("pages")).unwrap();
+    std::fs::write(root.join("pages/index.typ"), "#html.body[Page]").unwrap();
     std::fs::write(
         root.join("aster.toml"),
         "[css]\ntargets = [\"not-a-browser 1\"]\n",
@@ -230,10 +235,10 @@ fn rejects_invalid_browser_targets() {
 fn rechecks_missing_imports() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::create_dir_all(root.join("styles")).unwrap();
     write_css_page(root);
-    std::fs::write(root.join("src/style.css"), "@import \"missing.css\";").unwrap();
-    let missing = root.join("src/missing.css");
+    std::fs::write(root.join("styles/style.css"), "@import \"missing.css\";").unwrap();
+    let missing = root.join("styles/missing.css");
 
     let project = project(root);
     let mut driver = BuildSession::new(project.clone());
@@ -254,12 +259,12 @@ fn rechecks_missing_imports() {
 }
 
 #[test]
-fn allows_transitive_import_outside_source_directory() {
+fn allows_imports_across_project_directories() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::create_dir_all(root.join("styles")).unwrap();
     write_css_page(root);
-    std::fs::write(root.join("src/style.css"), "@import \"../secret.css\";").unwrap();
+    std::fs::write(root.join("styles/style.css"), "@import \"../secret.css\";").unwrap();
     std::fs::write(root.join("secret.css"), ".secret { color: red; }").unwrap();
 
     let project = project(root);
@@ -283,10 +288,14 @@ fn allows_transitive_import_outside_source_directory() {
 fn records_inputs_inside_output_directory() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::create_dir_all(root.join("styles")).unwrap();
     std::fs::create_dir(root.join("dist")).unwrap();
     write_css_page(root);
-    std::fs::write(root.join("src/style.css"), "@import \"../dist/input.css\";").unwrap();
+    std::fs::write(
+        root.join("styles/style.css"),
+        "@import \"../dist/input.css\";",
+    )
+    .unwrap();
     let input = root.join("dist/input.css");
     std::fs::write(&input, ".from-output { color: red; }").unwrap();
 
@@ -304,9 +313,13 @@ fn records_inputs_inside_output_directory() {
 fn rejects_transitive_import_outside_project_root() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::create_dir_all(root.join("styles")).unwrap();
     write_css_page(root);
-    std::fs::write(root.join("src/style.css"), "@import \"../../secret.css\";").unwrap();
+    std::fs::write(
+        root.join("styles/style.css"),
+        "@import \"../../secret.css\";",
+    )
+    .unwrap();
 
     let project = project(root);
     let error = BuildSession::new(project)
@@ -325,19 +338,19 @@ fn allows_symlinked_css_outside_project_root() {
     let temp = tempfile::tempdir().unwrap();
     let external = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::create_dir_all(root.join("styles")).unwrap();
     write_css_page(root);
-    std::fs::write(root.join("src/style.css"), "@import \"shared.css\";").unwrap();
+    std::fs::write(root.join("styles/style.css"), "@import \"shared.css\";").unwrap();
     std::fs::write(
         external.path().join("shared.css"),
         ".shared { color: green; }",
     )
     .unwrap();
-    let linked = root.join("src/shared.css");
+    let linked = root.join("styles/shared.css");
     symlink(external.path().join("shared.css"), &linked).unwrap();
 
     let project = project(root);
-    let linked = root.join("src/shared.css");
+    let linked = root.join("styles/shared.css");
     let mut session = BuildSession::new(project.clone());
     session.build().unwrap();
 

@@ -20,12 +20,14 @@ pub fn install_content_adapter(root: &Path) {
 }
 
 pub fn write_css_page(root: &Path) {
+    std::fs::create_dir_all(root.join("pages")).unwrap();
     std::fs::write(
-        root.join("src/index.typ"),
+        root.join("pages/index.typ"),
         concat!(
             "#html.html({\n",
             "  html.head[\n",
-            "    #html.elem(\"link\", attrs: (\"rel\": \"css\", \"href\": \"style.css\"))\n",
+            "    #html.elem(\"link\", attrs: (\"rel\": \"css\", \"href\": \"/styles/style.css\"))\n",
+            "    #html.elem(\"link\", attrs: (\"rel\": \"stylesheet\", \"href\": \"/site.css\"))\n",
             "  ]\n",
             "  html.body[Page]\n",
             "})\n",

@@ -1,0 +1,4 @@
+@import "index.css";
+
+/* Aster selects this entry through a project-root source reference, bundles
+   its relative imports, minifies the result, and publishes one hashed asset. */

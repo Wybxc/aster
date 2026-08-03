@@ -4,7 +4,7 @@
 
 = Aster is ready.
 
-Edit `src/index.typ`, then run `aster build` to generate this page.
+Edit `pages/index.typ`, then run `aster build` to generate this page.
 
 == Typst remains available.
 

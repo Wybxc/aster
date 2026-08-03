@@ -6,13 +6,16 @@ Aster builds Typst-authored sites into a complete static output tree.
 
 An **Aster project** is a directory containing `aster.toml`. Its conventional directories are:
 
-- `src/` — page templates
+- `pages/` — page and generated-endpoint route templates
 - `content/` — content entries grouped into collections
+- `styles/` — project CSS sources processed through Aster
+- `assets/` — project resources read by Typst or referenced from CSS
+- `public/` — files copied unchanged to the output root
 - `dist/` — the published output tree
 
-Project discovery selects the nearest ancestor containing an `aster.toml` file. A build requires `src/`; `content/` is optional. The project owns watch-path policy: configuration, structural directories, and tracked build dependencies are watched while `dist/` is always excluded.
+Project discovery selects the nearest ancestor containing an `aster.toml` file. A build requires `pages/`; `content/`, `styles/`, `assets/`, and `public/` are optional. The project owns watch-path policy: configuration, structural directories, and tracked build dependencies are watched while `dist/` is always excluded.
 
-Like Typst's standard filesystem loader, project paths retain their absolute lexical form instead of being canonicalized. Absolute references and `..` paths that escape the project root are rejected, while filesystem access follows symbolic links even when their targets are outside the project root. Relative paths within the project namespace are computed through Typst's `VirtualPath` model.
+Like Typst's standard filesystem loader, project paths retain their absolute lexical form instead of being canonicalized. Operating-system absolute paths and `..` paths that escape the project root are rejected, while filesystem access follows symbolic links even when their targets are outside the project root. A leading `/` in a project-source interface denotes the project virtual root; paths within that namespace are computed through Typst's `VirtualPath` model.
 
 ## Content protocol
 
@@ -24,7 +27,7 @@ The Typst adapter in `templates/default/lib/aster/content.typ` exposes the proto
 
 ## Route plan
 
-A `.typ` file under `src/` is evaluated while planning the output tree. A template containing one `<endpoint>` metadata declaration is a generated endpoint; every other source is a page template. A static endpoint declaration must contain its final string or bytes. A dynamic endpoint uses the same `<route>` metadata as a dynamic page: the first evaluation discovers its parameter sets, then Aster evaluates the template again with each parameter set and extracts that route's string or bytes from `<endpoint>`. The probe declaration may contain `none` because its value is discarded. An endpoint's exact output path substitutes its route parameters and removes only the final `.typ` extension; clean URL rewriting does not apply. A page template without bracket parameters defines one static route. A page template with `[name]` or `[...name]` parameters is a **dynamic route** and declares parameter sets through `<route>` metadata.
+A `.typ` file under `pages/` is evaluated while planning the output tree. A template containing one `<endpoint>` metadata declaration is a generated endpoint; every other source is a page template. A static endpoint declaration must contain its final string or bytes. A dynamic endpoint uses the same `<route>` metadata as a dynamic page: the first evaluation discovers its parameter sets, then Aster evaluates the template again with each parameter set and extracts that route's string or bytes from `<endpoint>`. The probe declaration may contain `none` because its value is discarded. An endpoint's exact output path substitutes its route parameters and removes only the final `.typ` extension; clean URL rewriting does not apply. A page template without bracket parameters defines one static route. A page template with `[name]` or `[...name]` parameters is a **dynamic route** and declares parameter sets through `<route>` metadata.
 
 A **route plan** is the deterministic, collision-free set of pages and generated endpoints produced before rendering. It owns template discovery, evaluation and classification, route and endpoint metadata validation, parameter matching, output confinement, warnings, ordering, and collisions.
 
@@ -47,7 +50,7 @@ A **document transform** is the single ordered traversal from a compiled Typst H
 An **output publication** is the complete candidate output tree for one successful build. It owns:
 
 - output-path confinement
-- lexical source-reference resolution relative to the actual page template
+- lexical source-reference resolution relative to the actual page template or project virtual root
 - generated-asset identity and content-addressed naming
 - browser-facing references relative to each output page
 - deduplication

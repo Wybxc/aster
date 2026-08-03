@@ -122,7 +122,7 @@ impl Processor for CssProcessor<'_> {
         let href = element.get_attr("href").ok_or_else(|| {
             anyhow::anyhow!("link element of type \"css\" is missing href attribute")
         })?;
-        let source = page.resolve_source(Path::new(href.as_str()))?;
+        let source = page.resolve_source(&href)?;
         let bundle = bundle_file(
             self.project_files,
             &source,

@@ -406,10 +406,10 @@ mod tests {
     fn server_publishes_successful_builds_over_http() {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path();
-        std::fs::create_dir(root.join("src")).unwrap();
+        std::fs::create_dir(root.join("pages")).unwrap();
         std::fs::write(root.join("aster.toml"), "").unwrap();
-        let source = root.join("src/index.typ");
-        std::fs::write(&source, "#html.elem(\"p\")[First]").unwrap();
+        let page = root.join("pages/index.typ");
+        std::fs::write(&page, "#html.elem(\"p\")[First]").unwrap();
         let mut session = BuildSession::new(Project::open(root.to_owned()).unwrap());
         let server = DevServer::start("127.0.0.1:0".parse().unwrap()).unwrap();
 
@@ -420,13 +420,13 @@ mod tests {
         assert!(response.contains("First"));
         assert!(response.contains("/_aster/live-reload.js?v=1"));
 
-        std::fs::write(&source, "#let broken =").unwrap();
+        std::fs::write(&page, "#let broken =").unwrap();
         assert!(server.build(&mut session).is_err());
         let response = get(&server, "/");
         assert!(response.contains("First"));
         assert!(response.contains("/_aster/live-reload.js?v=1"));
 
-        std::fs::write(&source, "#html.elem(\"p\")[Second]").unwrap();
+        std::fs::write(&page, "#html.elem(\"p\")[Second]").unwrap();
         server.build(&mut session).unwrap();
         let response = get(&server, "/");
         assert!(response.starts_with("HTTP/1.1 200"), "{response}");

@@ -6,10 +6,10 @@ use typst::syntax::VirtualPath;
 fn fixture(files: &[&str]) -> (tempfile::TempDir, Project) {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::create_dir_all(root.join("pages")).unwrap();
     std::fs::write(root.join("aster.toml"), "").unwrap();
     for file in files {
-        let path = root.join("src").join(file);
+        let path = root.join("pages").join(file);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, "#html.elem(\"p\")[Page]").unwrap();
     }
@@ -19,7 +19,7 @@ fn fixture(files: &[&str]) -> (tempfile::TempDir, Project) {
 
 fn write_routes(project: &Project, template: &str, routes: &str) {
     std::fs::write(
-        project.root().join("src").join(template),
+        project.root().join("pages").join(template),
         format!("#metadata({routes}) <route>\n#html.elem(\"p\")[Page]"),
     )
     .unwrap();
@@ -87,7 +87,7 @@ fn route_plan_rejects_page_endpoint_collision() {
     let (_temp, project) = fixture(&["feed.typ", "feed.html.typ"]);
     std::fs::write(project.config_file(), "[output]\nclean-urls = false\n").unwrap();
     std::fs::write(
-        project.root().join("src/feed.html.typ"),
+        project.root().join("pages/feed.html.typ"),
         "#metadata(\"feed\") <endpoint>",
     )
     .unwrap();

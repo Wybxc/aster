@@ -5,7 +5,7 @@
 #let site(
   title: settings.site.title,
   root: "",
-  stylesheet: "style.css",
+  stylesheet: "/styles/site.css",
   description: settings.site.description,
   body,
 ) = {

@@ -6,7 +6,8 @@ use crate::common::{install_content_adapter, project};
 fn build_honors_configured_layout_and_processing_options() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("pages")).unwrap();
+    std::fs::create_dir_all(root.join("routes")).unwrap();
+    std::fs::create_dir_all(root.join("styles")).unwrap();
     std::fs::create_dir_all(root.join("entries/blog")).unwrap();
     std::fs::create_dir_all(root.join("fonts/nested")).unwrap();
     install_content_adapter(root);
@@ -14,7 +15,7 @@ fn build_honors_configured_layout_and_processing_options() {
         root.join("aster.toml"),
         concat!(
             "[paths]\n",
-            "source = \"pages\"\n",
+            "pages = \"routes\"\n",
             "content = \"entries\"\n",
             "public = \"files\"\n",
             "output = \"public\"\n",
@@ -38,15 +39,15 @@ fn build_honors_configured_layout_and_processing_options() {
         "#metadata((title: \"Configured\",)) <frontmatter>\n\nEntry body",
     )
     .unwrap();
-    std::fs::write(root.join("pages/style.css"), ".page { color: red; }").unwrap();
+    std::fs::write(root.join("styles/style.css"), ".page { color: red; }").unwrap();
     std::fs::write(
-        root.join("pages/index.typ"),
+        root.join("routes/index.typ"),
         concat!(
             "#import \"/lib/aster/content.typ\": get-entry\n",
             "#let post = get-entry(\"blog\", \"post\").render()\n",
             "#html.html({\n",
             "  html.head[\n",
-            "    #html.elem(\"link\", attrs: (\"rel\": \"css\", \"href\": \"style.css\"))\n",
+            "    #html.elem(\"link\", attrs: (\"rel\": \"css\", \"href\": \"/styles/style.css\"))\n",
             "  ]\n",
             "  html.body[\n",
             "    #html.elem(\"p\", attrs: (class: \"page\"))[#post.metadata.title #post.content]\n",
@@ -86,7 +87,7 @@ fn build_honors_configured_layout_and_processing_options() {
     assert!(css.contains('\n'), "CSS should not be minified: {css}");
 
     let dependencies = session.dependencies();
-    assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("pages"))));
+    assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("routes"))));
     assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("entries"))));
     assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("fonts"))));
     assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("files"))));
@@ -98,15 +99,15 @@ fn build_honors_configured_layout_and_processing_options() {
 }
 
 #[test]
-fn rejects_output_that_overlaps_source_without_deleting_files() {
+fn rejects_output_that_overlaps_pages_without_deleting_files() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src")).unwrap();
-    let source = root.join("src/index.typ");
-    std::fs::write(&source, "#html.elem(\"p\")[Keep]").unwrap();
+    std::fs::create_dir_all(root.join("pages")).unwrap();
+    let page = root.join("pages/index.typ");
+    std::fs::write(&page, "#html.elem(\"p\")[Keep]").unwrap();
     std::fs::write(
         root.join("aster.toml"),
-        "[paths]\noutput = \"src/generated\"\n",
+        "[paths]\noutput = \"pages/generated\"\n",
     )
     .unwrap();
 
@@ -115,16 +116,16 @@ fn rejects_output_that_overlaps_source_without_deleting_files() {
         .err()
         .expect("overlapping output must fail");
 
-    assert!(format!("{error:#}").contains("source and output directories must not overlap"));
-    assert!(source.is_file());
+    assert!(format!("{error:#}").contains("pages and output directories must not overlap"));
+    assert!(page.is_file());
 }
 
 #[test]
 fn session_recovers_after_manifest_is_fixed() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir(root.join("src")).unwrap();
-    std::fs::write(root.join("src/index.typ"), "#html.elem(\"p\")[Page]").unwrap();
+    std::fs::create_dir(root.join("pages")).unwrap();
+    std::fs::write(root.join("pages/index.typ"), "#html.elem(\"p\")[Page]").unwrap();
     let project = project(root);
 
     std::fs::write(root.join("aster.toml"), "[paths\n").unwrap();

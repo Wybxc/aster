@@ -26,7 +26,7 @@ pub(super) enum PlannedRouteKind {
     Endpoint,
 }
 
-/// Discover, classify, and validate every source route before rendering.
+/// Discover, classify, and validate every route template before rendering.
 pub(super) fn plan_routes(
     session: &TypstSession,
     layout: &ProjectLayout,
@@ -34,14 +34,14 @@ pub(super) fn plan_routes(
     base_library: &LazyHash<Library>,
     clean_urls: bool,
 ) -> Result<(Vec<PlannedRoute>, Vec<BuildWarning>)> {
-    let templates = session.source_files(layout)?;
+    let templates = session.route_templates(layout)?;
     let mut routes = Vec::new();
     let mut warnings = Vec::new();
 
     for template in templates {
         let relative = Path::new(template.get_without_slash())
-            .strip_prefix(Path::new(layout.source().get_without_slash()))
-            .context("source template is outside configured source directory")?;
+            .strip_prefix(Path::new(layout.pages().get_without_slash()))
+            .context("route template is outside configured pages directory")?;
         let pattern = route::parse_template(relative)
             .with_context(|| format!("invalid route template {}", relative.display()))?;
         let (evaluated, evaluated_warnings) = session

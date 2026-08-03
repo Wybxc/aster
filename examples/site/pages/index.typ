@@ -36,7 +36,7 @@
 
 #figure(
   image(
-    "assets/pipeline.svg",
+    "/assets/pipeline.svg",
     width: 100%,
     alt: "The diagram shows how Aster turns Typst sources into a deterministic static output tree.",
   ),

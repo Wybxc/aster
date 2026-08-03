@@ -15,7 +15,6 @@
   #show: site.with(
     title: meta.title,
     root: "../",
-    stylesheet: "../style.css",
     description: meta.summary,
   )
   #show heading.where(level: 1): it => html.elem("header")[

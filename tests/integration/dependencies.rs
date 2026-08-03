@@ -4,12 +4,12 @@ use aster::{BuildSession, FilesystemDependency, Project};
 fn includes_accessed_trees_even_when_missing() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("pages/blog/nested")).unwrap();
+    std::fs::create_dir_all(root.join("routes/blog/nested")).unwrap();
     std::fs::write(
         root.join("aster.toml"),
         concat!(
             "[paths]\n",
-            "source = \"pages\"\n",
+            "pages = \"routes\"\n",
             "content = \"entries\"\n",
             "public = \"files\"\n",
             "output = \"public\"\n",
@@ -23,17 +23,17 @@ fn includes_accessed_trees_even_when_missing() {
     let dependencies = session.dependencies();
 
     assert!(dependencies.contains(&FilesystemDependency::File(project.config_file())));
-    assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("pages"))));
+    assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("routes"))));
     assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("entries"))));
     assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("files"))));
-    assert!(!dependencies.contains(&FilesystemDependency::Tree(root.join("src"))));
+    assert!(!dependencies.contains(&FilesystemDependency::Tree(root.join("pages"))));
 }
 
 #[test]
 fn includes_observed_inputs_but_not_generated_outputs() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src/blog")).unwrap();
+    std::fs::create_dir_all(root.join("pages/blog")).unwrap();
     std::fs::create_dir_all(root.join("dist")).unwrap();
     std::fs::write(
         root.join("aster.toml"),
@@ -44,7 +44,7 @@ fn includes_observed_inputs_but_not_generated_outputs() {
         ),
     )
     .unwrap();
-    std::fs::write(root.join("src/index.typ"), "#html.elem(\"p\")[Page]").unwrap();
+    std::fs::write(root.join("pages/index.typ"), "#html.elem(\"p\")[Page]").unwrap();
     let project = Project::open(root.to_owned()).unwrap();
     let theme = root.join("theme.tmTheme");
     let generated = root.join("dist/index.html");
@@ -54,7 +54,7 @@ fn includes_observed_inputs_but_not_generated_outputs() {
     let dependencies = session.dependencies();
 
     assert!(dependencies.contains(&FilesystemDependency::File(theme)));
-    assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("src"))));
+    assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("pages"))));
     assert!(!dependencies.contains(&FilesystemDependency::File(generated)));
     assert!(
         !dependencies
@@ -67,7 +67,7 @@ fn includes_observed_inputs_but_not_generated_outputs() {
         session
             .dependencies()
             .into_iter()
-            .any(|dependency| dependency == FilesystemDependency::Tree(root.join("src"))),
+            .any(|dependency| dependency == FilesystemDependency::Tree(root.join("pages"))),
         "a cached build must still record its directory access"
     );
 }
@@ -76,7 +76,7 @@ fn includes_observed_inputs_but_not_generated_outputs() {
 fn snapshot_follows_reloaded_layout() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir(root.join("src")).unwrap();
+    std::fs::create_dir(root.join("pages")).unwrap();
     std::fs::write(root.join("aster.toml"), "").unwrap();
     let project = Project::open(root.to_owned()).unwrap();
     let mut session = BuildSession::new(project);
@@ -86,18 +86,18 @@ fn snapshot_follows_reloaded_layout() {
         session
             .dependencies()
             .into_iter()
-            .any(|dependency| dependency == FilesystemDependency::Tree(root.join("src")))
+            .any(|dependency| dependency == FilesystemDependency::Tree(root.join("pages")))
     );
 
     std::fs::write(
         root.join("aster.toml"),
-        "[paths]\nsource = \"pages\"\ncontent = \"entries\"\n",
+        "[paths]\npages = \"routes\"\ncontent = \"entries\"\n",
     )
     .unwrap();
     assert!(session.build().is_err());
     let dependencies = session.dependencies();
 
-    assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("pages"))));
+    assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("routes"))));
     assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("entries"))));
-    assert!(!dependencies.contains(&FilesystemDependency::Tree(root.join("src"))));
+    assert!(!dependencies.contains(&FilesystemDependency::Tree(root.join("pages"))));
 }

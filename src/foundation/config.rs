@@ -47,9 +47,9 @@ impl Default for Themes {
 }
 
 #[derive(Clone, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub(crate) struct PathsConfig {
-    pub source: EcoString,
+    pub pages: EcoString,
     pub content: EcoString,
     pub public: EcoString,
     pub output: EcoString,
@@ -58,7 +58,7 @@ pub(crate) struct PathsConfig {
 impl Default for PathsConfig {
     fn default() -> Self {
         Self {
-            source: "src".into(),
+            pages: "pages".into(),
             content: "content".into(),
             public: "public".into(),
             output: "dist".into(),
@@ -254,7 +254,7 @@ mod tests {
             &config_file,
             concat!(
                 "[paths]\n",
-                "source = \"pages\"\n",
+                "pages = \"routes\"\n",
                 "public = \"files\"\n",
                 "output = \"public\"\n",
                 "[output]\n",
@@ -278,7 +278,7 @@ mod tests {
 
         let config = load(&config_file).unwrap().config;
 
-        assert_eq!(config.paths.source, "pages");
+        assert_eq!(config.paths.pages, "routes");
         assert_eq!(config.paths.content, "content");
         assert_eq!(config.paths.public, "files");
         assert_eq!(config.paths.output, "public");

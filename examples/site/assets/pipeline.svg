@@ -16,8 +16,8 @@
   <path d="M628 215 l-14 -9 v18 z" fill="#4b5b53"/>
   <path d="M908 215 l-14 -9 v18 z" fill="#4b5b53"/>
   <g font-family="Inter, system-ui, sans-serif" fill="#17201c">
-    <text x="76" y="112" font-size="18" font-weight="700">Templates define pages.</text>
-    <text x="76" y="146" font-size="16" fill="#5b6761">They live under src/.</text>
+    <text x="76" y="112" font-size="18" font-weight="700">Templates define routes.</text>
+    <text x="76" y="146" font-size="16" fill="#5b6761">They live under pages/.</text>
     <text x="76" y="284" font-size="17" font-weight="700">Collections provide</text>
     <text x="76" y="312" font-size="17" font-weight="700">entries.</text>
     <text x="76" y="344" font-size="16" fill="#5b6761">They live under content/.</text>

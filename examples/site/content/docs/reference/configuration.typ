@@ -33,14 +33,17 @@ The `[highlight.themes]` table selects built-in Syntect themes or project-local
 
 == Build configuration
 
-The Aster-owned tables control project layout and output processing. All paths
-are relative to the project root. Source, content, output, and configured font
-directories must not overlap the output tree.
+The Aster-owned tables control project layout and output processing. Paths in
+`[paths]` and configured font paths are relative to the project root. Pages,
+content, public, and configured font directories must not overlap the output
+tree. `[output].assets` is relative to that output tree and names Aster's
+generated asset directory, not the project's optional `assets/` source folder.
 
 ```toml
 [paths]
-source = "src"
+pages = "pages"
 content = "content"
+public = "public"
 output = "dist"
 
 [output]
@@ -73,4 +76,7 @@ accepts Browserslist queries and controls syntax lowering and vendor prefixes.
 When it is omitted, Aster preserves modern syntax rather than assuming a
 browser support policy. `custom-media` enables the draft `@custom-media`
 syntax; `minify` only controls output compression and does not disable target
-transforms.
+transforms. A leading `/` in a `rel=\"css\"` link resolves from the project
+virtual root, so `/styles/site.css` selects that project file. Inside CSS,
+`@import` and `url()` keep standard URL semantics: relative references are
+bundled from the current stylesheet, while `/...` remains a website-root URL.

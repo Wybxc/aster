@@ -15,8 +15,8 @@ fn init(destination: &Path) -> Output {
 fn build_command_builds_the_selected_project() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src")).unwrap();
-    std::fs::write(root.join("src/index.typ"), "#html.elem(\"p\")[Built]").unwrap();
+    std::fs::create_dir_all(root.join("pages")).unwrap();
+    std::fs::write(root.join("pages/index.typ"), "#html.elem(\"p\")[Built]").unwrap();
     std::fs::write(root.join("aster.toml"), "").unwrap();
 
     let output = Command::new(env!("CARGO_BIN_EXE_aster"))
@@ -47,7 +47,8 @@ fn init_creates_a_buildable_project() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    assert!(destination.join("src/index.typ").is_file());
+    assert!(destination.join("pages/index.typ").is_file());
+    assert!(destination.join("styles/site.css").is_file());
     assert!(destination.join("lib/aster/content.typ").is_file());
     assert!(!destination.join("lib").is_symlink());
     let config = std::fs::read_to_string(destination.join("aster.toml")).unwrap();

@@ -6,10 +6,10 @@ use crate::common::project;
 fn build_publishes_endpoint_metadata_at_the_exact_template_path() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src/feed")).unwrap();
-    std::fs::write(root.join("src/index.typ"), "#html.elem(\"p\")[Page]").unwrap();
+    std::fs::create_dir_all(root.join("pages/feed")).unwrap();
+    std::fs::write(root.join("pages/index.typ"), "#html.elem(\"p\")[Page]").unwrap();
     std::fs::write(
-        root.join("src/feed/rss.xml.typ"),
+        root.join("pages/feed/rss.xml.typ"),
         "#metadata(\"<?xml version=\\\"1.0\\\"?><rss/>\") <endpoint>",
     )
     .unwrap();
@@ -29,11 +29,11 @@ fn build_publishes_endpoint_metadata_at_the_exact_template_path() {
 fn endpoint_bytes_are_tracked_and_refreshed_by_a_reused_session() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir(root.join("src")).unwrap();
+    std::fs::create_dir(root.join("pages")).unwrap();
     let payload = root.join("payload.bin");
     std::fs::write(&payload, [0, 1, 2]).unwrap();
     std::fs::write(
-        root.join("src/archive.bin.typ"),
+        root.join("pages/archive.bin.typ"),
         "#metadata(read(\"/payload.bin\", encoding: none)) <endpoint>",
     )
     .unwrap();
@@ -62,9 +62,9 @@ fn endpoint_bytes_are_tracked_and_refreshed_by_a_reused_session() {
 fn dynamic_endpoints_are_evaluated_for_each_declared_route() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src/feed")).unwrap();
+    std::fs::create_dir_all(root.join("pages/feed")).unwrap();
     std::fs::write(
-        root.join("src/feed/[slug].xml.typ"),
+        root.join("pages/feed/[slug].xml.typ"),
         concat!(
             "#let slug = sys.inputs.at(\"slug\", default: none)\n",
             "#metadata(((slug: \"alpha\"), (slug: \"beta\"))) <route>\n",
@@ -107,8 +107,8 @@ fn endpoint_metadata_requires_one_string_or_byte_payload() {
     ] {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path();
-        std::fs::create_dir(root.join("src")).unwrap();
-        std::fs::write(root.join("src/feed.xml.typ"), source).unwrap();
+        std::fs::create_dir(root.join("pages")).unwrap();
+        std::fs::write(root.join("pages/feed.xml.typ"), source).unwrap();
 
         let error = BuildSession::new(project(root))
             .build()

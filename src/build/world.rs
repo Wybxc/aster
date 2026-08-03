@@ -75,11 +75,11 @@ impl TypstSession {
         Ok(())
     }
 
-    pub(crate) fn source_files(
+    pub(crate) fn route_templates(
         &self,
         layout: &ProjectLayout,
     ) -> Result<EcoVec<VirtualPath>, FileAccessError> {
-        list_typst_files(self.project_files(), layout.source(), true)
+        list_typst_files(self.project_files(), layout.pages(), true)
     }
 
     pub(crate) fn content_files(

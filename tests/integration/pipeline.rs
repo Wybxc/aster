@@ -6,8 +6,8 @@ use crate::common::{install_content_adapter, project};
 fn build_reuses_the_session_and_observes_source_changes() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src")).unwrap();
-    let entry = root.join("src/index.typ");
+    std::fs::create_dir_all(root.join("pages")).unwrap();
+    let entry = root.join("pages/index.typ");
     std::fs::write(&entry, "#html.elem(\"p\")[first]").unwrap();
 
     let project = project(root);
@@ -30,9 +30,9 @@ fn build_reuses_the_session_and_observes_source_changes() {
 fn build_provides_current_date_with_local_and_explicit_offsets() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::create_dir_all(root.join("pages")).unwrap();
     std::fs::write(
-        root.join("src/index.typ"),
+        root.join("pages/index.typ"),
         concat!(
             "#html.elem(\"p\")[#datetime.today().display()]\n",
             "#html.elem(\"p\")[#datetime.today(offset: 0).display()]\n",
@@ -55,7 +55,7 @@ fn build_loads_content_and_frontmatter_through_entry_module() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
     std::fs::create_dir_all(root.join("content/blog")).unwrap();
-    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::create_dir_all(root.join("pages")).unwrap();
     install_content_adapter(root);
     let content_entry = root.join("content/blog/post.typ");
     std::fs::write(
@@ -64,7 +64,7 @@ fn build_loads_content_and_frontmatter_through_entry_module() {
     )
     .unwrap();
     std::fs::write(
-        root.join("src/index.typ"),
+        root.join("pages/index.typ"),
         concat!(
             "#import \"/lib/aster/content.typ\": get-entry\n",
             "#let post = get-entry(\"blog\", \"post\")\n",
@@ -100,9 +100,9 @@ fn build_loads_content_and_frontmatter_through_entry_module() {
 fn reentrant_build_discovers_added_and_removed_pages() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src")).unwrap();
-    let index = root.join("src/index.typ");
-    let about = root.join("src/about.typ");
+    std::fs::create_dir_all(root.join("pages")).unwrap();
+    let index = root.join("pages/index.typ");
+    let about = root.join("pages/about.typ");
     std::fs::write(&index, "#html.elem(\"p\")[Index]").unwrap();
 
     let project = project(root);
@@ -125,8 +125,8 @@ fn reentrant_build_discovers_added_and_removed_pages() {
 fn reentrant_build_recovers_after_compilation_failure() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src")).unwrap();
-    let entry = root.join("src/index.typ");
+    std::fs::create_dir_all(root.join("pages")).unwrap();
+    let entry = root.join("pages/index.typ");
     std::fs::write(&entry, "#html.elem(\"p\")[First]").unwrap();
 
     let project = project(root);
@@ -144,7 +144,7 @@ fn reentrant_build_recovers_after_compilation_failure() {
 
 #[cfg(unix)]
 #[test]
-fn build_follows_a_source_directory_symlink_outside_the_project() {
+fn build_follows_a_pages_directory_symlink_outside_the_project() {
     use std::os::unix::fs::symlink;
 
     let temp = tempfile::tempdir().unwrap();
@@ -156,7 +156,7 @@ fn build_follows_a_source_directory_symlink_outside_the_project() {
         "#html.elem(\"p\")[External]",
     )
     .unwrap();
-    symlink(external.path(), root.join("src")).unwrap();
+    symlink(external.path(), root.join("pages")).unwrap();
 
     let project = project(root);
     let outcome = BuildSession::new(project.clone()).build().unwrap();
@@ -177,10 +177,10 @@ fn build_preserves_a_symlinked_project_root() {
     let temp = tempfile::tempdir().unwrap();
     let actual = temp.path().join("actual");
     let linked = temp.path().join("linked");
-    std::fs::create_dir_all(actual.join("src")).unwrap();
+    std::fs::create_dir_all(actual.join("pages")).unwrap();
     std::fs::write(actual.join("aster.toml"), "").unwrap();
     std::fs::write(
-        actual.join("src/index.typ"),
+        actual.join("pages/index.typ"),
         "#html.elem(\"p\")[Linked root]",
     )
     .unwrap();

@@ -6,9 +6,9 @@ use crate::common::project;
 fn copies_public_tree_and_removes_stale_files() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::create_dir_all(root.join("pages")).unwrap();
     std::fs::create_dir_all(root.join("public/images")).unwrap();
-    std::fs::write(root.join("src/index.typ"), "#html.elem(\"p\")[Page]").unwrap();
+    std::fs::write(root.join("pages/index.typ"), "#html.elem(\"p\")[Page]").unwrap();
     std::fs::write(root.join("public/CNAME"), "example.com\n").unwrap();
     std::fs::write(root.join("public/images/logo.bin"), [0, 1, 2, 255]).unwrap();
 
@@ -46,9 +46,9 @@ fn copies_public_tree_and_removes_stale_files() {
 fn rejects_public_file_that_collides_with_generated_page() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::create_dir_all(root.join("pages")).unwrap();
     std::fs::create_dir_all(root.join("public")).unwrap();
-    std::fs::write(root.join("src/index.typ"), "#html.elem(\"p\")[Generated]").unwrap();
+    std::fs::write(root.join("pages/index.typ"), "#html.elem(\"p\")[Generated]").unwrap();
     std::fs::write(root.join("public/index.html"), "Public").unwrap();
 
     let error = BuildSession::new(project(root))
@@ -66,9 +66,9 @@ fn rejects_public_file_that_collides_with_generated_page() {
 fn rejects_output_that_overlaps_public_without_deleting_files() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::create_dir_all(root.join("pages")).unwrap();
     std::fs::create_dir_all(root.join("public")).unwrap();
-    std::fs::write(root.join("src/index.typ"), "#html.elem(\"p\")[Page]").unwrap();
+    std::fs::write(root.join("pages/index.typ"), "#html.elem(\"p\")[Page]").unwrap();
     let public_file = root.join("public/keep.txt");
     std::fs::write(&public_file, "Keep").unwrap();
     std::fs::write(root.join("aster.toml"), "[paths]\noutput = \"public\"\n").unwrap();

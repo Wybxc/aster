@@ -7,19 +7,23 @@
 
 = An Aster project needs only a few files.
 
-An Aster project contains `aster.toml`, page templates under `src/`, and
-optional content collections under `content/`.
+An Aster project contains `aster.toml`, route templates under `pages/`, and
+optional content, styles, assets, and public files in separate directories.
 
 ```text
 site/
 ├── aster.toml
 ├── site.typ
+├── assets/
 ├── content/
 │   ├── journal/
 │   ├── projects/
 │   └── docs/
-└── src/
+├── styles/
+│   └── site.css
+└── pages/
     ├── index.typ
+    ├── rss.xml.typ
     ├── journal/[slug].typ
     └── docs/[...path].typ
 ```

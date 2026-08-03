@@ -60,28 +60,28 @@ impl Project {
 /// Validated project-relative paths used by one build configuration.
 #[derive(Clone)]
 pub(crate) struct ProjectLayout {
-    source: VirtualPath,
+    pages: VirtualPath,
     content: VirtualPath,
     public: VirtualPath,
     output: VirtualPath,
-    assets: VirtualPath,
+    generated_assets: VirtualPath,
     fonts: Vec<VirtualPath>,
 }
 
 impl ProjectLayout {
     pub(crate) fn new(config: &AsterConfig) -> Result<Self> {
-        let source = project_directory(&config.paths.source, "source")?;
+        let pages = project_directory(&config.paths.pages, "pages")?;
         let content = project_directory(&config.paths.content, "content")?;
         let public = project_directory(&config.paths.public, "public")?;
         let output = project_directory(&config.paths.output, "output")?;
-        ensure_disjoint(&source, "source", &content, "content")?;
-        ensure_disjoint(&source, "source", &public, "public")?;
-        ensure_disjoint(&source, "source", &output, "output")?;
+        ensure_disjoint(&pages, "pages", &content, "content")?;
+        ensure_disjoint(&pages, "pages", &public, "public")?;
+        ensure_disjoint(&pages, "pages", &output, "output")?;
         ensure_disjoint(&content, "content", &public, "public")?;
         ensure_disjoint(&content, "content", &output, "output")?;
         ensure_disjoint(&public, "public", &output, "output")?;
 
-        let assets = project_directory(&config.output.assets, "assets")?;
+        let generated_assets = project_directory(&config.output.assets, "generated assets")?;
         let fonts = config
             .typst
             .fonts
@@ -94,17 +94,17 @@ impl ProjectLayout {
         }
 
         Ok(Self {
-            source,
+            pages,
             content,
             public,
             output,
-            assets,
+            generated_assets,
             fonts,
         })
     }
 
-    pub(crate) fn source(&self) -> &VirtualPath {
-        &self.source
+    pub(crate) fn pages(&self) -> &VirtualPath {
+        &self.pages
     }
 
     pub(crate) fn content(&self) -> &VirtualPath {
@@ -115,8 +115,8 @@ impl ProjectLayout {
         &self.public
     }
 
-    pub(crate) fn assets(&self) -> &VirtualPath {
-        &self.assets
+    pub(crate) fn generated_assets(&self) -> &VirtualPath {
+        &self.generated_assets
     }
 
     pub(crate) fn output(&self) -> &VirtualPath {

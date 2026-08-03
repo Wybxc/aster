@@ -7,8 +7,9 @@
 
 = Template file names define output routes.
 
-Every `.typ` file under `src/` is a page template. Brackets in its relative path
-declare route parameters.
+Every `.typ` file under `pages/` is a route template. Templates with
+`<endpoint>` metadata generate arbitrary files; all others generate HTML pages.
+Brackets in a template's relative path declare route parameters.
 
 #table(
   columns: (1.1fr, 1fr),

@@ -33,7 +33,7 @@ fn write_theme(path: &Path, color: &str) {
 fn custom_theme_changes_replace_the_highlight_stylesheet() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::create_dir_all(root.join("pages")).unwrap();
     std::fs::write(
         root.join("aster.toml"),
         concat!(
@@ -44,7 +44,7 @@ fn custom_theme_changes_replace_the_highlight_stylesheet() {
     )
     .unwrap();
     std::fs::write(
-        root.join("src/index.typ"),
+        root.join("pages/index.typ"),
         concat!(
             "#html.html({\n",
             "  html.head[]\n",
@@ -75,10 +75,10 @@ fn custom_theme_changes_replace_the_highlight_stylesheet() {
 fn creates_head_before_body_for_highlight_stylesheet() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::create_dir_all(root.join("pages")).unwrap();
     std::fs::write(root.join("aster.toml"), "").unwrap();
     std::fs::write(
-        root.join("src/index.typ"),
+        root.join("pages/index.typ"),
         concat!("#html.html({\n", "  html.body[Page]\n", "})\n"),
     )
     .unwrap();
@@ -99,7 +99,7 @@ fn creates_head_before_body_for_highlight_stylesheet() {
 fn invalid_theme_warns_once_for_the_whole_build() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::create_dir_all(root.join("pages")).unwrap();
     std::fs::write(
         root.join("aster.toml"),
         concat!(
@@ -111,7 +111,7 @@ fn invalid_theme_warns_once_for_the_whole_build() {
     .unwrap();
     for page in ["index", "about"] {
         std::fs::write(
-            root.join("src").join(format!("{page}.typ")),
+            root.join("pages").join(format!("{page}.typ")),
             "#html.html(html.body[Page])",
         )
         .unwrap();
@@ -140,7 +140,7 @@ fn allows_symlinked_theme_outside_project_root() {
     let temp = tempfile::tempdir().unwrap();
     let external = tempfile::tempdir().unwrap();
     let root = temp.path();
-    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::create_dir_all(root.join("pages")).unwrap();
     std::fs::write(
         root.join("aster.toml"),
         concat!(
@@ -151,7 +151,7 @@ fn allows_symlinked_theme_outside_project_root() {
     )
     .unwrap();
     std::fs::write(
-        root.join("src/index.typ"),
+        root.join("pages/index.typ"),
         concat!(
             "#html.html({\n",
             "  html.head[]\n",

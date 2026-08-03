@@ -97,7 +97,7 @@ pub(crate) struct OutputPublication {
 
 impl OutputPublication {
     pub fn new(project: &Project, layout: &ProjectLayout) -> Result<Self> {
-        let assets_dir = RoutePath::new(layout.assets().get_without_slash())
+        let assets_dir = RoutePath::new(layout.generated_assets().get_without_slash())
             .context("invalid output assets directory")?;
         Ok(Self {
             project_root: project.root().to_owned(),
@@ -218,15 +218,12 @@ pub struct PagePublication<'a> {
 
 impl PagePublication<'_> {
     /// Resolve a source reference relative to the template within the project virtual root.
-    pub fn resolve_source(&self, reference: &Path) -> Result<VirtualPath> {
-        ensure!(
-            !reference.is_absolute(),
-            "source reference must be relative"
-        );
+    pub fn resolve_source(&self, reference: &str) -> Result<VirtualPath> {
+        if reference.starts_with('/') {
+            return VirtualPath::new(reference)
+                .with_context(|| format!("invalid project-root source reference {reference}"));
+        }
 
-        let reference = reference
-            .to_str()
-            .context("source reference is not valid UTF-8")?;
         let template_dir = self
             .template
             .parent()
@@ -328,7 +325,7 @@ mod tests {
     fn fixture() -> (tempfile::TempDir, Project, ProjectLayout) {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path();
-        std::fs::create_dir_all(root.join("src/blog")).unwrap();
+        std::fs::create_dir_all(root.join("pages/blog")).unwrap();
         std::fs::write(root.join("aster.toml"), "").unwrap();
         let project = Project::open(root.to_owned()).unwrap();
         let layout = ProjectLayout::new(&AsterConfig::default()).unwrap();
@@ -355,7 +352,7 @@ mod tests {
         let asset = publication
             .add_highlight_stylesheet(b"body{}".to_vec())
             .unwrap();
-        let template = VirtualPath::new("/src/blog/[slug].typ").unwrap();
+        let template = VirtualPath::new("/pages/blog/[slug].typ").unwrap();
         let directory_output = RoutePath::new("blog/post/index.html").unwrap();
         let page = publication.page(&template, &directory_output);
 
@@ -375,22 +372,25 @@ mod tests {
     }
 
     #[test]
-    fn source_resolution_uses_template_directory_and_project_confinement() {
+    fn source_resolution_supports_template_and_project_root_references() {
         let (_temp, project, layout) = fixture();
         std::fs::write(project.root().join("style.css"), "body{}").unwrap();
-        let template = VirtualPath::new("/src/blog/[slug].typ").unwrap();
+        std::fs::create_dir(project.root().join("styles")).unwrap();
+        std::fs::write(project.root().join("styles/site.css"), "body{}").unwrap();
+        let template = VirtualPath::new("/pages/blog/[slug].typ").unwrap();
         let mut publication = OutputPublication::new(&project, &layout).unwrap();
         let output = RoutePath::new("blog/post/index.html").unwrap();
         let page = publication.page(&template, &output);
 
         assert_eq!(
-            page.resolve_source(Path::new("../../style.css")).unwrap(),
+            page.resolve_source("../../style.css").unwrap(),
             VirtualPath::new("/style.css").unwrap()
         );
-        assert!(
-            page.resolve_source(Path::new("../../../outside.css"))
-                .is_err()
+        assert_eq!(
+            page.resolve_source("/styles/site.css").unwrap(),
+            VirtualPath::new("/styles/site.css").unwrap()
         );
+        assert!(page.resolve_source("../../../outside.css").is_err());
     }
 
     #[test]
@@ -409,7 +409,7 @@ mod tests {
             .unwrap();
         assert_eq!(first, second);
 
-        let template = VirtualPath::new("/src/index.typ").unwrap();
+        let template = VirtualPath::new("/pages/index.typ").unwrap();
         let output = RoutePath::new("index.html").unwrap();
         publication
             .page(&template, &output)
