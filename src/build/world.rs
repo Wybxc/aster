@@ -12,6 +12,7 @@ use typst::syntax::{FileId, RootedPath, VirtualPath, VirtualRoot};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
 use typst::{Feature, Library, LibraryExt, World};
+use typst_kit::datetime::Time;
 use typst_kit::diagnostics::{self, DiagnosticFormat, DiagnosticWorld};
 use typst_kit::fonts::FontStore;
 
@@ -30,6 +31,7 @@ pub struct TypstSession {
     font_config: Option<FontConfig>,
     fonts: FontStore,
     files: ProjectFiles,
+    now: Time,
 }
 
 impl TypstSession {
@@ -40,6 +42,7 @@ impl TypstSession {
             font_config: None,
             fonts: FontStore::new(),
             files,
+            now: Time::system(),
         }
     }
 
@@ -49,6 +52,7 @@ impl TypstSession {
 
     pub fn reset(&mut self) {
         self.files.reset();
+        self.now.reset();
     }
 
     pub(crate) fn project_files(&self) -> Tracked<'_, ProjectFiles> {
@@ -155,6 +159,7 @@ impl TypstSession {
             fonts: &self.fonts,
             files: &self.files,
             main,
+            now: &self.now,
         }
     }
 }
@@ -219,6 +224,7 @@ struct CompileWorld<'a> {
     fonts: &'a FontStore,
     files: &'a ProjectFiles,
     main: FileId,
+    now: &'a Time,
 }
 
 impl World for CompileWorld<'_> {
@@ -246,8 +252,8 @@ impl World for CompileWorld<'_> {
         self.fonts.font(index)
     }
 
-    fn today(&self, _offset: Option<Duration>) -> Option<Datetime> {
-        None
+    fn today(&self, offset: Option<Duration>) -> Option<Datetime> {
+        self.now.today(offset)
     }
 }
 

@@ -27,6 +27,30 @@ fn build_reuses_the_session_and_observes_source_changes() {
 }
 
 #[test]
+fn build_provides_current_date_with_local_and_explicit_offsets() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::write(
+        root.join("src/index.typ"),
+        concat!(
+            "#html.elem(\"p\")[#datetime.today().display()]\n",
+            "#html.elem(\"p\")[#datetime.today(offset: 0).display()]\n",
+        ),
+    )
+    .unwrap();
+
+    BuildSession::new(project(root)).build().unwrap();
+
+    let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
+    let dates = html
+        .split(|character: char| !character.is_ascii_digit() && character != '-')
+        .filter(|text| text.len() == 10 && text.as_bytes()[4] == b'-' && text.as_bytes()[7] == b'-')
+        .collect::<Vec<_>>();
+    assert_eq!(dates.len(), 2, "expected two rendered dates in {html}");
+}
+
+#[test]
 fn build_loads_content_and_frontmatter_through_entry_module() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();

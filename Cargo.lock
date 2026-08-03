@@ -3808,6 +3808,7 @@ version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "27ee52e27dfab0da5ac3d19e7e43a21fbc7ff83af9301119468bae89fa857a8b"
 dependencies = [
+ "chrono",
  "codespan-reporting",
  "dirs",
  "ecow",
