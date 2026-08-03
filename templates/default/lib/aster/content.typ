@@ -11,7 +11,7 @@
     "maybe not running in an Aster project context?"
 )
 #assert(
-  _state.protocol == 3,
+  _state.protocol == 4,
   message: "unsupported Aster content protocol; this version of " +
     "content.typ is incompatible with the Aster binary",
 )

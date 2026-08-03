@@ -9,8 +9,7 @@
 #let entry = get-entry("docs", path)
 
 #if entry != none [
-  #let rendered = entry.render()
-  #let meta = rendered.metadata
+  #let meta = entry.metadata()
   #let root = root-prefix(path.split("/").len())
 
   #show: site.with(
@@ -32,6 +31,6 @@
         #link(root + "docs/reference/configuration.html")[Configuration]
       ]
     ]
-    #html.elem("article")[#rendered.content]
+    #html.elem("article")[#entry.render()]
   ]
 ]

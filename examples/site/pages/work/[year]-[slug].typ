@@ -13,8 +13,7 @@
 #let entry = get-entry("projects", year + "/" + slug)
 
 #if entry != none [
-  #let rendered = entry.render()
-  #let meta = rendered.metadata
+  #let meta = entry.metadata()
 
   #show: site.with(
     title: meta.title,
@@ -26,7 +25,7 @@
     #html.elem("p")[#meta.summary]
   ]
 
-  #html.elem("article")[#rendered.content]
+  #html.elem("article")[#entry.render()]
   #html.elem("nav", attrs: ("aria-label": "Project navigation"))[
     #link("../index.html")[Return to the project list]
   ]

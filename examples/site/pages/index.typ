@@ -3,20 +3,20 @@
 
 #let journal = {
   get-collection("journal")
-    .map(entry => (entry: entry, rendered: entry.render()))
-    .sorted(key: item => item.rendered.metadata.date)
+    .map(entry => (entry: entry, metadata: entry.metadata()))
+    .sorted(key: item => item.metadata.date)
     .rev()
 }
 #let projects = {
   get-collection("projects")
-    .map(entry => (entry: entry, rendered: entry.render()))
+    .map(entry => (entry: entry, metadata: entry.metadata()))
     .sorted(key: item => item.entry.id)
     .rev()
 }
 #let docs = {
   get-collection("docs")
-    .map(entry => (entry: entry, rendered: entry.render()))
-    .sorted(key: item => item.rendered.metadata.order)
+    .map(entry => (entry: entry, metadata: entry.metadata()))
+    .sorted(key: item => item.metadata.order)
 }
 
 #show: site.with(description: sys.inputs.site.description)
@@ -50,11 +50,11 @@
 
 #html.elem("section")[
   #heading(level: 2)[The journal explains how Aster performs incremental builds.]
-  Each listing calls the entry's lazy `render` function because this page needs
-  both the title and the summary.
+  Each listing calls the entry's lazy `metadata` function without retaining
+  article bodies.
   #list(
     ..journal.map(item => {
-      let meta = item.rendered.metadata
+      let meta = item.metadata
       html.elem("article")[
         #heading(level: 3)[
           #link("journal/" + item.entry.id + ".html")[#meta.title]
@@ -72,7 +72,7 @@
   #list(
     ..projects.map(item => {
       let parts = item.entry.id.split("/")
-      let meta = item.rendered.metadata
+      let meta = item.metadata
       html.elem("article")[
         #heading(level: 3)[
           #link("work/" + parts.first() + "-" + parts.last() + ".html")[#meta.title]
@@ -89,7 +89,7 @@
   the generated file keeps the same nested path.
   #list(
     ..docs.map(item => {
-      let meta = item.rendered.metadata
+      let meta = item.metadata
       html.elem("article")[
         #heading(level: 3)[
           #link("docs/" + item.entry.id + ".html")[#meta.title]

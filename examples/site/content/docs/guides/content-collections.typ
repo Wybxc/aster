@@ -15,16 +15,17 @@ The adapter exports three queries:
 
 == Entry modules delay content evaluation.
 
-An entry exposes `id`, `collection`, and `render`. It intentionally exposes no
-file path and stores no evaluated content.
+An entry exposes `id`, `collection`, `metadata`, and `render`. It intentionally
+exposes no file path and stores no evaluated content.
 
 ```typ
 #let post = get-entry("journal", "incremental-by-default")
-#let result = post.render()
+#let metadata = post.metadata()
 
-#result.metadata.tags.join(", ")
-#result.content
+#metadata.tags.join(", ")
+#post.render()
 ```
 
-The render closure performs a normal Typst import. This preserves source-aware
-diagnostics and lets comemo track the exact file dependency.
+Both closures perform a normal Typst import. This preserves source-aware
+diagnostics and lets comemo track the exact file dependency. Typst memoizes the
+shared module evaluation when a page needs both metadata and content.

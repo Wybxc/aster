@@ -15,15 +15,15 @@ collection rather than a separate subsystem.
 #import "/lib/aster/content.typ": get-entry
 
 #let entry = get-entry("journal", "content-without-glue")
-#let rendered = entry.render()
+#let metadata = entry.metadata()
 
-#rendered.metadata.title
-#rendered.content
+#metadata.title
+#entry.render()
 ```
 
 `get-entry` returns the module stored in `sys.inputs` unchanged. Calling
-`render` dynamically imports only that source file and returns a dictionary
-containing `metadata` and `content`.
+`metadata` or `render` dynamically imports only that source file. The former
+returns the frontmatter dictionary; the latter returns the entry content.
 
 == One collection model supports different routes.
 

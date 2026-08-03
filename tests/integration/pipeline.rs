@@ -51,7 +51,7 @@ fn build_provides_current_date_with_local_and_explicit_offsets() {
 }
 
 #[test]
-fn build_loads_content_and_frontmatter_through_entry_module() {
+fn build_exposes_separate_content_and_metadata_accessors() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
     std::fs::create_dir_all(root.join("content/blog")).unwrap();
@@ -68,10 +68,11 @@ fn build_loads_content_and_frontmatter_through_entry_module() {
         concat!(
             "#import \"/lib/aster/content.typ\": get-entry\n",
             "#let post = get-entry(\"blog\", \"post\")\n",
-            "#let rendered = post.render()\n",
+            "#let metadata = post.metadata()\n",
+            "#let content = post.render()\n",
             "#html.html({\n",
             "  html.head[]\n",
-            "  html.body[#rendered.metadata.title #rendered.content]\n",
+            "  html.body[#metadata.title #content]\n",
             "})\n",
         ),
     )

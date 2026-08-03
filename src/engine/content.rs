@@ -11,7 +11,7 @@ use typst::syntax::{RootedPath, SyntaxNode, parse_code};
 use typst::{Library, LibraryExt};
 use typst_eval::CapturesVisitor;
 
-pub const PROTOCOL_VERSION: i64 = 3;
+pub const PROTOCOL_VERSION: i64 = 4;
 pub const INPUT_NAME: &str = "_aster";
 
 pub(crate) struct ContentEntry {
@@ -84,12 +84,13 @@ fn entry_module(collection: &EcoString, id: &EcoString, source: RootedPath) -> M
     let mut scope = Scope::new();
     scope.define("id", Str::from(id.as_str()));
     scope.define("collection", Str::from(collection.as_str()));
+    scope.define("metadata", metadata_closure(source.clone()));
     scope.define("render", render_closure(source));
     Module::new(eco_format!("{collection}/{id}"), scope)
 }
 
-fn render_closure(source: RootedPath) -> Func {
-    const RENDER_CLOSURE_SOURCE: &str = r#"() => {
+fn metadata_closure(source: RootedPath) -> Func {
+    const METADATA_CLOSURE_SOURCE: &str = r#"() => {
   let find-frontmatter(node) = {
     let fields = node.fields()
     if fields.at("label", default: none) == <frontmatter> {
@@ -117,40 +118,55 @@ fn render_closure(source: RootedPath) -> Func {
   import source as entry-module
   let entry-content = include entry-module
   let metadata = find-frontmatter(entry-content)
-  (
-    metadata: if metadata == none { (:) } else { metadata },
-    content: entry-content,
-  )
+  if metadata == none { (:) } else { metadata }
 }"#;
 
-    static RENDER_CLOSURE_NODE: LazyLock<SyntaxNode> = LazyLock::new(|| {
-        let root = parse_code(RENDER_CLOSURE_SOURCE);
-        let (errors, _) = root.errors_and_warnings();
-        assert!(errors.is_empty(), "Aster render closure must parse");
-        let code = root
-            .cast::<ast::Code>()
-            .expect("render closure must be code");
-        let mut expressions = code.exprs();
-        let ast::Expr::Closure(closure) = expressions.next().expect("render closure must exist")
-        else {
-            panic!("render expression must be a closure");
-        };
-        assert!(
-            expressions.next().is_none(),
-            "render closure must be the only expression"
-        );
-        closure.to_untyped().clone()
-    });
+    static METADATA_CLOSURE_NODE: LazyLock<SyntaxNode> =
+        LazyLock::new(|| parse_closure(METADATA_CLOSURE_SOURCE));
 
+    captured_closure(METADATA_CLOSURE_NODE.clone(), source)
+}
+
+fn render_closure(source: RootedPath) -> Func {
+    const RENDER_CLOSURE_SOURCE: &str = r#"() => {
+  import source as entry-module
+  include entry-module
+}"#;
+
+    static RENDER_CLOSURE_NODE: LazyLock<SyntaxNode> =
+        LazyLock::new(|| parse_closure(RENDER_CLOSURE_SOURCE));
+
+    captured_closure(RENDER_CLOSURE_NODE.clone(), source)
+}
+
+fn parse_closure(source: &str) -> SyntaxNode {
+    let root = parse_code(source);
+    let (errors, _) = root.errors_and_warnings();
+    assert!(errors.is_empty(), "Aster entry closure must parse");
+    let code = root
+        .cast::<ast::Code>()
+        .expect("entry closure must be code");
+    let mut expressions = code.exprs();
+    let ast::Expr::Closure(closure) = expressions.next().expect("entry closure must exist") else {
+        panic!("entry expression must be a closure");
+    };
+    assert!(
+        expressions.next().is_none(),
+        "entry closure must be the only expression"
+    );
+    closure.to_untyped().clone()
+}
+
+fn captured_closure(node: SyntaxNode, source: RootedPath) -> Func {
     static CAPTURE_LIBRARY: LazyLock<Library> = LazyLock::new(Library::default);
 
     let mut scopes = Scopes::new(Some(&CAPTURE_LIBRARY));
     scopes.top.define("source", source);
 
     let mut captures = CapturesVisitor::new(Some(&scopes), Capturer::Function);
-    captures.visit(&RENDER_CLOSURE_NODE);
+    captures.visit(&node);
     Func::from(Closure {
-        node: ClosureNode::Closure(RENDER_CLOSURE_NODE.clone()),
+        node: ClosureNode::Closure(node),
         defaults: Vec::new(),
         captured: captures.finish(),
         num_pos_params: 0,
@@ -197,6 +213,10 @@ mod tests {
             entry.field("collection", ()).unwrap(),
             &Value::Str(Str::from("blog"))
         );
+        assert!(matches!(
+            entry.field("metadata", ()).unwrap(),
+            Value::Func(_)
+        ));
         assert!(matches!(entry.field("render", ()).unwrap(), Value::Func(_)));
         assert!(entry.field("file-path", ()).is_err());
         assert!(entry.field("content", ()).is_err());

@@ -10,13 +10,13 @@
 
 #let entries = {
   get-collection("journal")
-    .map(entry => (entry: entry, rendered: entry.render()))
-    .sorted(key: item => item.rendered.metadata.date)
+    .map(entry => (entry: entry, metadata: entry.metadata()))
+    .sorted(key: item => item.metadata.date)
     .rev()
 }
 
 #let items = entries.map(item => {
-  let metadata = item.rendered.metadata
+  let metadata = item.metadata
   let url = sys.inputs.site.url + "journal/" + item.entry.id + "/"
   (
     tag: "item",
@@ -41,7 +41,7 @@
         (tag: "link", children: (sys.inputs.site.url,)),
         (tag: "description", children: (sys.inputs.site.description,)),
         (tag: "language", children: (sys.inputs.site.language,)),
-        (tag: "lastBuildDate", children: (rss-date(entries.first().rendered.metadata.date),)),
+        (tag: "lastBuildDate", children: (rss-date(entries.first().metadata.date),)),
         ..items,
       ),
     ),
