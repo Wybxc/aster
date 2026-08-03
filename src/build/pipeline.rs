@@ -58,10 +58,8 @@ impl BuildSession {
             add_public_files(session, &layout, &mut publication)
                 .context("failed to collect public files")?;
 
-            let mut css = transform::CssProcessor::new(
-                session.project_files(),
-                manifest.config.assets.minify_css,
-            );
+            let mut css =
+                transform::CssProcessor::new(session.project_files(), &manifest.config.css)?;
             let mut image =
                 transform::ImageProcessor::new(manifest.config.assets.image_inline_threshold);
             let (mut highlight, highlight_warning) = transform::HighlightProcessor::new(

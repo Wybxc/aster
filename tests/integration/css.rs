@@ -37,6 +37,64 @@ fn bundles_and_tracks_entry_and_transitive_imports() {
 }
 
 #[test]
+fn transforms_for_configured_targets_without_minifying() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join("src")).unwrap();
+    write_css_page(root);
+    std::fs::write(
+        root.join("aster.toml"),
+        concat!(
+            "[css]\n",
+            "minify = false\n",
+            "targets = [\"ie 11\"]\n",
+            "custom-media = true\n",
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("src/style.css"),
+        concat!(
+            "@custom-media --narrow (max-width: 30rem);\n",
+            "@media (--narrow) {\n",
+            "  .page { color: red; & .child { color: blue; } }\n",
+            "}\n",
+        ),
+    )
+    .unwrap();
+
+    BuildSession::new(project(root)).build().unwrap();
+
+    let css = generated_asset_containing(root, ".page").1;
+    assert!(css.contains("@media (max-width: 30rem)"), "{css}");
+    assert!(!css.contains("@custom-media"), "{css}");
+    assert!(css.contains(".page .child"), "{css}");
+    assert!(css.contains('\n'), "CSS should not be minified: {css}");
+}
+
+#[test]
+fn rejects_invalid_browser_targets() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::write(root.join("src/index.typ"), "#html.body[Page]").unwrap();
+    std::fs::write(
+        root.join("aster.toml"),
+        "[css]\ntargets = [\"not-a-browser 1\"]\n",
+    )
+    .unwrap();
+    let error = BuildSession::new(project(root))
+        .build()
+        .err()
+        .expect("invalid Browserslist query must fail the build");
+
+    assert!(
+        format!("{error:#}").contains("invalid CSS browser targets"),
+        "unexpected error: {error:#}"
+    );
+}
+
+#[test]
 fn rechecks_missing_imports() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();

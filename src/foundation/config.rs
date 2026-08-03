@@ -2,7 +2,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
-use typst::ecow::EcoString;
+use typst::ecow::{EcoString, EcoVec};
 use typst::foundations::{Dict, Value};
 
 /// Complete `aster.toml` manifest, represented for both Typst and Aster.
@@ -88,14 +88,34 @@ impl Default for OutputConfig {
 #[serde(default, rename_all = "kebab-case")]
 pub(crate) struct AssetsConfig {
     pub image_inline_threshold: usize,
-    pub minify_css: bool,
 }
 
 impl Default for AssetsConfig {
     fn default() -> Self {
         Self {
             image_inline_threshold: 1024,
-            minify_css: true,
+        }
+    }
+}
+
+/// CSS bundling and transformation settings.
+#[derive(Clone, Deserialize, Eq, Hash, PartialEq)]
+#[serde(default, rename_all = "kebab-case")]
+pub(crate) struct CssConfig {
+    /// Remove whitespace and apply size optimizations to generated CSS.
+    pub minify: bool,
+    /// Browserslist queries used for syntax lowering and vendor prefixes.
+    pub targets: EcoVec<EcoString>,
+    /// Enable parsing and transforming `@custom-media` rules.
+    pub custom_media: bool,
+}
+
+impl Default for CssConfig {
+    fn default() -> Self {
+        Self {
+            minify: true,
+            targets: EcoVec::new(),
+            custom_media: false,
         }
     }
 }
@@ -129,6 +149,7 @@ pub(crate) struct AsterConfig {
     pub paths: PathsConfig,
     pub output: OutputConfig,
     pub assets: AssetsConfig,
+    pub css: CssConfig,
     pub typst: TypstConfig,
     pub highlight: HighlightConfig,
 }
@@ -242,7 +263,10 @@ mod tests {
                 "clean-urls = false\n",
                 "[assets]\n",
                 "image-inline-threshold = 2048\n",
-                "minify-css = false\n",
+                "[css]\n",
+                "minify = false\n",
+                "targets = [\"last 2 Chrome versions\", \"Firefox ESR\"]\n",
+                "custom-media = true\n",
                 "[typst.fonts]\n",
                 "paths = [\"fonts\"]\n",
                 "system = false\n",
@@ -262,7 +286,17 @@ mod tests {
         assert!(config.output.pretty);
         assert!(!config.output.clean_urls);
         assert_eq!(config.assets.image_inline_threshold, 2048);
-        assert!(!config.assets.minify_css);
+        assert!(!config.css.minify);
+        assert_eq!(
+            config
+                .css
+                .targets
+                .iter()
+                .map(EcoString::as_str)
+                .collect::<Vec<_>>(),
+            ["last 2 Chrome versions", "Firefox ESR"]
+        );
+        assert!(config.css.custom_media);
         assert_eq!(config.typst.fonts.paths, ["fonts"]);
         assert!(!config.typst.fonts.system);
         assert!(!config.highlight.enabled);

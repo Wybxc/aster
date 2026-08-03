@@ -49,7 +49,11 @@ pretty = false
 
 [assets]
 image-inline-threshold = 1024
-minify-css = true
+
+[css]
+minify = true
+targets = ["defaults"]
+custom-media = false
 
 [typst.fonts]
 paths = ["fonts"]
@@ -63,3 +67,10 @@ themes = { light = "InspiredGitHub", dark = "base16-eighties.dark" }
 `image-inline-threshold` is the decoded byte size at which an image data URL
 becomes a generated asset. Setting `system` to `false` makes font discovery
 depend only on the configured project-local font directories.
+
+CSS files linked with `rel=\"css\"` are bundled with Lightning CSS. `targets`
+accepts Browserslist queries and controls syntax lowering and vendor prefixes.
+When it is omitted, Aster preserves modern syntax rather than assuming a
+browser support policy. `custom-media` enables the draft `@custom-media`
+syntax; `minify` only controls output compression and does not disable target
+transforms.

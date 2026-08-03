@@ -4,14 +4,15 @@ use std::sync::Arc;
 use anyhow::Result;
 use comemo::Tracked;
 use lightningcss::bundler::{Bundler, FileProvider, ResolveResult, SourceProvider};
-use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions};
-use lightningcss::targets::Browsers;
+use lightningcss::stylesheet::{MinifyOptions, ParserFlags, ParserOptions, PrinterOptions};
+use lightningcss::targets::{Browsers, Targets};
 use typst::ecow::{EcoString, eco_format};
 use typst::syntax::VirtualPath;
 use typst_html::HtmlElement;
 
 use crate::build::output::PagePublication;
 use crate::build::transform::{Processor, WalkControl, dom::HtmlElementExt};
+use crate::foundation::config::CssConfig;
 use crate::foundation::files::{FileAccessError, ProjectFiles};
 
 /// A cheaply cloneable CSS transformation error at the memoization seam.
@@ -28,11 +29,13 @@ enum BundleError {
         kind: EcoString,
         location: EcoString,
     },
-    #[error("failed to minify CSS: {kind}{location}")]
-    Minify {
+    #[error("failed to transform CSS: {kind}{location}")]
+    Transform {
         kind: EcoString,
         location: EcoString,
     },
+    #[error("invalid CSS browser targets: {message}")]
+    InvalidTargets { message: EcoString },
     #[error("failed to serialize CSS: {kind}{location}")]
     Serialize {
         kind: EcoString,
@@ -62,15 +65,16 @@ fn decompose(error: &lightningcss::error::Error<impl std::fmt::Display>) -> (Eco
 
 pub(crate) struct CssProcessor<'a> {
     project_files: Tracked<'a, ProjectFiles>,
-    minify: bool,
+    config: CssConfig,
 }
 
 impl<'a> CssProcessor<'a> {
-    pub fn new(project_files: Tracked<'a, ProjectFiles>, minify: bool) -> Self {
-        Self {
+    pub fn new(project_files: Tracked<'a, ProjectFiles>, config: &CssConfig) -> Result<Self> {
+        resolve_targets(config).map_err(|error| anyhow::anyhow!("{error:#}"))?;
+        Ok(Self {
             project_files,
-            minify,
-        }
+            config: config.clone(),
+        })
     }
 }
 
@@ -94,7 +98,7 @@ impl Processor for CssProcessor<'_> {
             self.project_files,
             &source,
             page.project_root(),
-            self.minify,
+            &self.config,
         )
         .map_err(|error| anyhow::anyhow!("{error:#}"))?;
         let url = page.add_bundled_stylesheet(&source, css.into_bytes())?;
@@ -111,7 +115,7 @@ fn bundle_file(
     project_files: Tracked<ProjectFiles>,
     entry: &VirtualPath,
     project_root: &Path,
-    minify: bool,
+    config: &CssConfig,
 ) -> std::result::Result<String, BundleError> {
     let entry = entry
         .realize(project_root)
@@ -120,7 +124,17 @@ fn bundle_file(
             message: eco_format!("{error}"),
         })?;
     let provider = ConfinedFileProvider::new(project_root.to_owned(), project_files);
-    let mut bundler = Bundler::new(&provider, None, ParserOptions::default());
+    let targets = resolve_targets(config)?;
+    let mut flags = ParserFlags::empty();
+    flags.set(ParserFlags::CUSTOM_MEDIA, config.custom_media);
+    let mut bundler = Bundler::new(
+        &provider,
+        None,
+        ParserOptions {
+            flags,
+            ..ParserOptions::default()
+        },
+    );
     let mut stylesheet = bundler.bundle(&entry).map_err(|error| {
         let (kind, location) = decompose(&error);
         BundleError::Bundle {
@@ -129,20 +143,21 @@ fn bundle_file(
             location,
         }
     })?;
-    if minify {
+    if config.minify || targets.browsers.is_some() {
         stylesheet
             .minify(MinifyOptions {
-                targets: Browsers::default().into(),
+                targets,
                 ..MinifyOptions::default()
             })
             .map_err(|error| {
                 let (kind, location) = decompose(&error);
-                BundleError::Minify { kind, location }
+                BundleError::Transform { kind, location }
             })?;
     }
     let result = stylesheet
         .to_css(PrinterOptions {
-            minify,
+            minify: config.minify,
+            targets,
             ..PrinterOptions::default()
         })
         .map_err(|error| {
@@ -150,6 +165,18 @@ fn bundle_file(
             BundleError::Serialize { kind, location }
         })?;
     Ok(result.code)
+}
+
+fn resolve_targets(config: &CssConfig) -> std::result::Result<Targets, BundleError> {
+    if config.targets.is_empty() {
+        return Ok(Targets::default());
+    }
+
+    Browsers::from_browserslist(&config.targets)
+        .map(Into::into)
+        .map_err(|error| BundleError::InvalidTargets {
+            message: eco_format!("{error}"),
+        })
 }
 
 struct ConfinedFileProvider<'a> {

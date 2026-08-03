@@ -10,7 +10,7 @@ comemo = "0.5"
 data-url = "0.3"
 futures-util = "0.3"
 include_dir = "0.7"
-lightningcss = "=1.0.0-alpha.72"
+lightningcss = { version = "=1.0.0-alpha.72", default-features = false, features = ["bundler", "browserslist"] }
 mime_guess = "2"
 notify-debouncer-full = "0.7"
 poem = { version = "3.1", default-features = false, features = ["server", "sse", "static-files"] }
