@@ -7,6 +7,7 @@ edition = "2024"
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 comemo = "0.5"
+cssparser = "0.37"
 data-url = "0.3"
 futures-util = "0.3"
 include_dir = "0.7"
@@ -28,6 +29,7 @@ typst-html = "0.15.1"
 typst-kit = { version = "0.15.1", features = ["datetime", "emit-diagnostics", "scan-fonts", "system-downloader", "system-files"] }
 typst-library = "0.15.1"
 typst-svg = "0.15.1"
+url = "2.5"
 walkdir = "2.5"
 
 [dev-dependencies]

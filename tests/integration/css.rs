@@ -37,6 +37,138 @@ fn bundles_and_tracks_entry_and_transitive_imports() {
 }
 
 #[test]
+fn publishes_and_tracks_assets_from_transitive_stylesheets() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join("src/theme")).unwrap();
+    std::fs::create_dir_all(root.join("src/fonts")).unwrap();
+    write_css_page(root);
+    let entry = root.join("src/style.css");
+    let imported = root.join("src/theme/fonts.css");
+    let font = root.join("src/fonts/site.woff2");
+    std::fs::write(&entry, "@import \"theme/fonts.css\";").unwrap();
+    std::fs::write(
+        &imported,
+        concat!(
+            "@font-face {",
+            "font-family: Site;",
+            "src: url(\"../fonts/site.woff2?v=1#regular\") format(\"woff2\");",
+            "}",
+            ".font-rule {",
+            "font-family: Site;",
+            "background: url(\"../fonts/site.woff2?v=1#regular\");",
+            "}",
+        ),
+    )
+    .unwrap();
+    std::fs::write(&font, b"first font").unwrap();
+
+    let mut session = BuildSession::new(project(root));
+    session.build().unwrap();
+
+    let first_font = generated_asset_with_extension(root, "woff2");
+    assert_eq!(std::fs::read(&first_font).unwrap(), b"first font");
+    let (first_css_path, first_css) = generated_asset_containing(root, ".font-rule");
+    let first_font_name = first_font.file_name().unwrap().to_string_lossy();
+    assert!(first_font_name.starts_with("site."), "{first_font_name}");
+    let rewritten_url = format!("url(\"{first_font_name}?v=1#regular\")");
+    assert_eq!(first_css.matches(&rewritten_url).count(), 2, "{first_css}");
+    assert!(!first_css.contains("../fonts/site.woff2"), "{first_css}");
+    let dependencies = session.dependencies();
+    assert!(dependencies.contains(&FilesystemDependency::File(entry)));
+    assert!(dependencies.contains(&FilesystemDependency::File(imported)));
+    assert!(dependencies.contains(&FilesystemDependency::File(font.clone())));
+
+    std::fs::write(&font, b"changed font").unwrap();
+    session.build().unwrap();
+
+    let changed_font = generated_asset_with_extension(root, "woff2");
+    let (changed_css_path, changed_css) = generated_asset_containing(root, ".font-rule");
+    assert_ne!(changed_font, first_font);
+    assert_ne!(changed_css_path, first_css_path);
+    assert_ne!(changed_css, first_css);
+    assert!(!first_font.exists());
+    assert!(!first_css_path.exists());
+}
+
+#[test]
+fn preserves_browser_managed_urls() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join("src")).unwrap();
+    write_css_page(root);
+    std::fs::write(
+        root.join("src/style.css"),
+        concat!(
+            "@import \"https://example.com/theme.css\";",
+            ".remote { background: url(\"https://example.com/image.png\"); }",
+            ".root { background: url(\"/images/site.svg\"); }",
+            ".inline { background: url(\"data:image/svg+xml,%3Csvg/%3E\"); }",
+            ".fragment { filter: url(\"#blur\"); }",
+        ),
+    )
+    .unwrap();
+
+    BuildSession::new(project(root)).build().unwrap();
+
+    let css = generated_asset_containing(root, ".remote").1;
+    assert!(css.contains("https://example.com/theme.css"), "{css}");
+    assert!(css.contains("https://example.com/image.png"), "{css}");
+    assert!(css.contains("/images/site.svg"), "{css}");
+    assert!(css.contains("data:image/svg+xml,%3Csvg/%3E"), "{css}");
+    assert!(css.contains("#blur"), "{css}");
+}
+
+#[test]
+fn rechecks_missing_css_assets() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join("src")).unwrap();
+    write_css_page(root);
+    std::fs::write(
+        root.join("src/style.css"),
+        ".asset-rule { background: url(\"assets/missing.bin\"); }",
+    )
+    .unwrap();
+    let missing = root.join("src/assets/missing.bin");
+
+    let mut session = BuildSession::new(project(root));
+    assert!(session.build().is_err());
+    assert!(
+        session
+            .dependencies()
+            .contains(&FilesystemDependency::File(missing.clone()))
+    );
+
+    std::fs::create_dir_all(missing.parent().unwrap()).unwrap();
+    std::fs::write(&missing, b"asset").unwrap();
+    session.build().unwrap();
+    assert_eq!(
+        std::fs::read(generated_asset_with_extension(root, "bin")).unwrap(),
+        b"asset"
+    );
+}
+
+#[test]
+fn rejects_css_assets_outside_project_root() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join("src")).unwrap();
+    write_css_page(root);
+    std::fs::write(
+        root.join("src/style.css"),
+        ".asset-rule { background: url(\"../../outside.bin\"); }",
+    )
+    .unwrap();
+
+    let error = BuildSession::new(project(root))
+        .build()
+        .err()
+        .expect("escaping CSS asset must fail");
+    assert!(format!("{error:#}").contains("escapes project root"));
+}
+
+#[test]
 fn transforms_for_configured_targets_without_minifying() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
@@ -217,4 +349,12 @@ fn allows_symlinked_css_outside_project_root() {
     assert!(session.dependencies().into_iter().any(
         |dependency| matches!(dependency, FilesystemDependency::File(path) if path == linked)
     ));
+}
+
+fn generated_asset_with_extension(root: &std::path::Path, extension: &str) -> std::path::PathBuf {
+    std::fs::read_dir(root.join("dist/_assets"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .find(|path| path.extension().is_some_and(|value| value == extension))
+        .unwrap()
 }

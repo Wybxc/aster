@@ -144,6 +144,7 @@ dependencies = [
  "anyhow",
  "clap",
  "comemo",
+ "cssparser",
  "data-url 0.3.2",
  "futures-util",
  "include_dir",
@@ -166,6 +167,7 @@ dependencies = [
  "typst-kit",
  "typst-library",
  "typst-svg",
+ "url",
  "walkdir",
 ]
 

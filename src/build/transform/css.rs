@@ -1,14 +1,19 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Result;
 use comemo::Tracked;
+use cssparser::serialize_string;
 use lightningcss::bundler::{Bundler, FileProvider, ResolveResult, SourceProvider};
+use lightningcss::dependencies::{Dependency, DependencyOptions, UrlDependency};
 use lightningcss::stylesheet::{MinifyOptions, ParserFlags, ParserOptions, PrinterOptions};
 use lightningcss::targets::{Browsers, Targets};
-use typst::ecow::{EcoString, eco_format};
+use typst::ecow::{EcoString, EcoVec, eco_format};
+use typst::foundations::Bytes;
 use typst::syntax::VirtualPath;
 use typst_html::HtmlElement;
+use url::Url;
 
 use crate::build::output::PagePublication;
 use crate::build::transform::{Processor, WalkControl, dom::HtmlElementExt};
@@ -41,15 +46,39 @@ enum BundleError {
         kind: EcoString,
         location: EcoString,
     },
-    #[error("CSS import {path} escapes project root {project_root}")]
+    #[error("CSS reference {path} escapes project root {project_root}")]
     Escapes {
         path: Arc<Path>,
         project_root: Arc<Path>,
     },
     #[error("invalid CSS path {path}: {message}")]
     InvalidPath { path: Arc<Path>, message: EcoString },
+    #[error("invalid CSS URL {url} in {source_path}: {message}")]
+    InvalidUrl {
+        url: EcoString,
+        source_path: Arc<Path>,
+        message: EcoString,
+    },
+    #[error("CSS dependency placeholder {placeholder} was not found in serialized output")]
+    MissingPlaceholder { placeholder: EcoString },
+    #[error("CSS dependency placeholder collision for {placeholder}")]
+    PlaceholderCollision { placeholder: EcoString },
     #[error(transparent)]
     File(#[from] FileAccessError),
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct BundledStylesheet {
+    code: EcoString,
+    assets: EcoVec<CssAsset>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct CssAsset {
+    placeholder: EcoString,
+    source: VirtualPath,
+    content: Bytes,
+    suffix: EcoString,
 }
 
 /// Decompose a lightningcss error into its stable classification and a
@@ -94,13 +123,22 @@ impl Processor for CssProcessor<'_> {
             anyhow::anyhow!("link element of type \"css\" is missing href attribute")
         })?;
         let source = page.resolve_source(Path::new(href.as_str()))?;
-        let css = bundle_file(
+        let bundle = bundle_file(
             self.project_files,
             &source,
             page.project_root(),
             &self.config,
         )
         .map_err(|error| anyhow::anyhow!("{error:#}"))?;
+        let mut css = bundle.code.to_string();
+        for asset in bundle.assets {
+            let mut reference = page
+                .add_css_asset(&asset.source, asset.content)?
+                .to_string();
+            reference.push_str(&asset.suffix);
+            replace_css_url(&mut css, &asset.placeholder, &reference)
+                .map_err(|error| anyhow::anyhow!("{error:#}"))?;
+        }
         let url = page.add_bundled_stylesheet(&source, css.into_bytes())?;
 
         element.update_attr("href", move |value| *value = url);
@@ -116,7 +154,7 @@ fn bundle_file(
     entry: &VirtualPath,
     project_root: &Path,
     config: &CssConfig,
-) -> std::result::Result<String, BundleError> {
+) -> std::result::Result<BundledStylesheet, BundleError> {
     let entry = entry
         .realize(project_root)
         .map_err(|error| BundleError::InvalidPath {
@@ -154,17 +192,94 @@ fn bundle_file(
                 BundleError::Transform { kind, location }
             })?;
     }
-    let result = stylesheet
+    let mut result = stylesheet
         .to_css(PrinterOptions {
             minify: config.minify,
             targets,
+            analyze_dependencies: Some(DependencyOptions::default()),
             ..PrinterOptions::default()
         })
         .map_err(|error| {
             let (kind, location) = decompose(&error);
             BundleError::Serialize { kind, location }
         })?;
-    Ok(result.code)
+
+    let mut assets = EcoVec::new();
+    let mut seen = BTreeMap::new();
+    for dependency in result.dependencies.take().unwrap_or_default() {
+        match dependency {
+            Dependency::Import(dependency) => {
+                if remember_dependency(
+                    &mut seen,
+                    &dependency.placeholder,
+                    &dependency.url,
+                    &dependency.loc.file_path,
+                )? {
+                    replace_css_url(&mut result.code, &dependency.placeholder, &dependency.url)?;
+                }
+            }
+            Dependency::Url(dependency) => {
+                if !remember_dependency(
+                    &mut seen,
+                    &dependency.placeholder,
+                    &dependency.url,
+                    &dependency.loc.file_path,
+                )? {
+                    continue;
+                }
+                if let Some(asset) = provider.load_asset(&dependency)? {
+                    assets.push(asset);
+                } else {
+                    replace_css_url(&mut result.code, &dependency.placeholder, &dependency.url)?;
+                }
+            }
+        }
+    }
+
+    Ok(BundledStylesheet {
+        code: result.code.into(),
+        assets,
+    })
+}
+
+fn remember_dependency(
+    seen: &mut BTreeMap<EcoString, (EcoString, Arc<Path>)>,
+    placeholder: &str,
+    url: &str,
+    source: &str,
+) -> std::result::Result<bool, BundleError> {
+    let signature = (EcoString::from(url), Arc::<Path>::from(Path::new(source)));
+    if let Some(existing) = seen.get(placeholder) {
+        if existing != &signature {
+            return Err(BundleError::PlaceholderCollision {
+                placeholder: placeholder.into(),
+            });
+        }
+        return Ok(false);
+    }
+    seen.insert(placeholder.into(), signature);
+    Ok(true)
+}
+
+fn replace_css_url(
+    code: &mut String,
+    placeholder: &str,
+    replacement: &str,
+) -> std::result::Result<(), BundleError> {
+    let placeholder_value = serialize_css_string(placeholder);
+    if !code.contains(&placeholder_value) {
+        return Err(BundleError::MissingPlaceholder {
+            placeholder: placeholder.into(),
+        });
+    }
+    *code = code.replace(&placeholder_value, &serialize_css_string(replacement));
+    Ok(())
+}
+
+fn serialize_css_string(value: &str) -> String {
+    let mut result = String::new();
+    serialize_string(value, &mut result).expect("writing to a string cannot fail");
+    result
 }
 
 fn resolve_targets(config: &CssConfig) -> std::result::Result<Targets, BundleError> {
@@ -210,6 +325,24 @@ impl<'a> ConfinedFileProvider<'a> {
                 })?;
         Ok((virtual_path, path))
     }
+
+    fn load_asset(
+        &self,
+        dependency: &UrlDependency,
+    ) -> std::result::Result<Option<CssAsset>, BundleError> {
+        let origin = Path::new(&dependency.loc.file_path);
+        let Some((path, suffix)) = resolve_file_reference(origin, &dependency.url)? else {
+            return Ok(None);
+        };
+        let (source, _) = self.confined(&path)?;
+        let content = self.project_files.read(&source)?;
+        Ok(Some(CssAsset {
+            placeholder: dependency.placeholder.as_str().into(),
+            source,
+            content,
+            suffix,
+        }))
+    }
 }
 
 impl SourceProvider for ConfinedFileProvider<'_> {
@@ -228,8 +361,64 @@ impl SourceProvider for ConfinedFileProvider<'_> {
         specifier: &str,
         originating_file: &Path,
     ) -> std::result::Result<ResolveResult, Self::Error> {
-        let candidate = originating_file.with_file_name(specifier);
+        let Some((candidate, _)) = resolve_file_reference(originating_file, specifier)? else {
+            return Ok(ResolveResult::External(specifier.to_owned()));
+        };
         let (_, path) = self.confined(&candidate)?;
         Ok(ResolveResult::File(path))
     }
+}
+
+fn resolve_file_reference(
+    origin: &Path,
+    reference: &str,
+) -> std::result::Result<Option<(PathBuf, EcoString)>, BundleError> {
+    if is_browser_managed_reference(reference) {
+        return Ok(None);
+    }
+
+    let base = Url::from_file_path(origin).map_err(|()| BundleError::InvalidUrl {
+        url: reference.into(),
+        source_path: origin.into(),
+        message: "source path cannot be represented as a file URL".into(),
+    })?;
+    let mut resolved = base
+        .join(reference)
+        .map_err(|error| BundleError::InvalidUrl {
+            url: reference.into(),
+            source_path: origin.into(),
+            message: eco_format!("{error}"),
+        })?;
+    if resolved.scheme() != "file" {
+        return Ok(None);
+    }
+
+    let query = resolved.query().map(str::to_owned);
+    let fragment = resolved.fragment().map(str::to_owned);
+    resolved.set_query(None);
+    resolved.set_fragment(None);
+    let path = resolved
+        .to_file_path()
+        .map_err(|()| BundleError::InvalidUrl {
+            url: reference.into(),
+            source_path: origin.into(),
+            message: "resolved URL cannot be represented as a file path".into(),
+        })?;
+
+    let mut suffix = String::new();
+    if let Some(query) = query {
+        suffix.push('?');
+        suffix.push_str(&query);
+    }
+    if let Some(fragment) = fragment {
+        suffix.push('#');
+        suffix.push_str(&fragment);
+    }
+    Ok(Some((path, suffix.into())))
+}
+
+fn is_browser_managed_reference(reference: &str) -> bool {
+    reference.is_empty()
+        || matches!(reference.chars().next(), Some('/' | '#' | '?'))
+        || Url::parse(reference).is_ok()
 }

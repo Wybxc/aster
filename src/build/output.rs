@@ -59,15 +59,15 @@ pub(crate) struct PublishedOutput {
 #[derive(Eq, PartialEq)]
 enum OutputFile {
     Page(Vec<u8>),
-    Asset(Vec<u8>),
+    Asset(Bytes),
     Public(Bytes),
 }
 
 impl OutputFile {
     fn content(&self) -> &[u8] {
         match self {
-            Self::Page(content) | Self::Asset(content) => content,
-            Self::Public(content) => content.as_slice(),
+            Self::Page(content) => content,
+            Self::Asset(content) | Self::Public(content) => content.as_slice(),
         }
     }
 
@@ -101,7 +101,7 @@ impl OutputPublication {
 
     /// Register the generated highlight stylesheet.
     pub fn add_highlight_stylesheet(&mut self, content: Vec<u8>) -> Result<AssetPath> {
-        self.add_asset("highlight", "css", content)
+        self.add_asset("highlight", Some("css"), Bytes::new(content))
     }
 
     /// Register a file from the project's public directory at the output root.
@@ -110,9 +110,17 @@ impl OutputPublication {
         self.insert(path, OutputFile::Public(content))
     }
 
-    fn add_asset(&mut self, name: &str, extension: &str, content: Vec<u8>) -> Result<AssetPath> {
-        let hash = content_hash(&content);
-        let filename = format!("{name}.{hash}.{extension}");
+    fn add_asset(
+        &mut self,
+        name: &str,
+        extension: Option<&str>,
+        content: Bytes,
+    ) -> Result<AssetPath> {
+        let hash = content_hash(content.as_slice());
+        let filename = match extension {
+            Some(extension) => format!("{name}.{hash}.{extension}"),
+            None => format!("{name}.{hash}"),
+        };
         let path =
             PathBuf::from(self.assets_dir.as_virtual_path().get_without_slash()).join(filename);
         let path = RoutePath::new(path)?;
@@ -215,15 +223,29 @@ impl PagePublication<'_> {
         let name = entry
             .file_stem()
             .context("stylesheet entry has no file name")?;
-        let asset = self.publication.add_asset(name, "css", content)?;
+        let asset = self
+            .publication
+            .add_asset(name, Some("css"), Bytes::new(content))?;
         self.reference(&asset)
+    }
+
+    /// Register a local `url()` dependency and return its URL from generated CSS.
+    pub fn add_css_asset(&mut self, source: &VirtualPath, content: Bytes) -> Result<EcoString> {
+        let name = source.file_stem().context("CSS asset has no file name")?;
+        let asset = self
+            .publication
+            .add_asset(name, source.extension(), content)?;
+        Ok(asset
+            .0
+            .as_virtual_path()
+            .relative_from(self.publication.assets_dir.as_virtual_path()))
     }
 
     /// Register an extracted image and return its browser-facing URL from this page.
     pub fn add_image(&mut self, format: ImageFormat, content: Vec<u8>) -> Result<EcoString> {
-        let asset = self
-            .publication
-            .add_asset("img", format.extension(), content)?;
+        let asset =
+            self.publication
+                .add_asset("img", Some(format.extension()), Bytes::new(content))?;
         self.reference(&asset)
     }
 
