@@ -28,8 +28,8 @@ site/
 └── pages/
     ├── index.typ
     ├── rss.xml.typ
-    ├── journal/[slug].typ
-    └── docs/[...path].typ
+    ├── journal/[slug]/index.typ
+    └── docs/[...path]/index.typ
 ```
 
 The following command builds the site once:

@@ -13,19 +13,19 @@ name = "Aster contributors"
 
 [[navigation]]
 label = "Overview"
-href = "index.html"
+href = "./"
 
 [[navigation]]
 label = "Capabilities"
-href = "features.html"
+href = "features/"
 
 [[navigation]]
 label = "Journal"
-href = "journal/incremental-by-default.html"
+href = "journal/incremental-by-default/"
 
 [[navigation]]
 label = "Docs"
-href = "docs/guides/getting-started.html"
+href = "docs/guides/getting-started/"
 
 [highlight]
 themes = { light = "InspiredGitHub", dark = "base16-eighties.dark" }

@@ -29,8 +29,8 @@
   together in one Aster project.
 
   #html.elem("nav", attrs: ("aria-label": "Introduction"))[
-    #link("docs/guides/getting-started.html")[Read the complete guide]
-    #link("features.html")[Review the Typst examples]
+    #link("docs/guides/getting-started/")[Read the complete guide]
+    #link("features/")[Review the Typst examples]
   ]
 ]
 
@@ -57,7 +57,7 @@
       let meta = item.metadata
       html.elem("article")[
         #heading(level: 3)[
-          #link("journal/" + item.entry.id + ".html")[#meta.title]
+          #link("journal/" + item.entry.id + "/")[#meta.title]
         ]
         #html.elem("p")[#meta.summary]
       ]
@@ -68,14 +68,14 @@
 #html.elem("section")[
   #heading(level: 2)[Project pages combine the year and slug in one route.]
   Each nested project id is split into the parameters required by
-  `work/[year]-[slug].typ` before Aster renders the page.
+  `work/[year]-[slug]/index.typ` before Aster renders the page.
   #list(
     ..projects.map(item => {
       let parts = item.entry.id.split("/")
       let meta = item.metadata
       html.elem("article")[
         #heading(level: 3)[
-          #link("work/" + parts.first() + "-" + parts.last() + ".html")[#meta.title]
+          #link("work/" + parts.first() + "-" + parts.last() + "/")[#meta.title]
         ]
         #html.elem("p")[#meta.summary]
       ]
@@ -92,7 +92,7 @@
       let meta = item.metadata
       html.elem("article")[
         #heading(level: 3)[
-          #link("docs/" + item.entry.id + ".html")[#meta.title]
+          #link("docs/" + item.entry.id + "/")[#meta.title]
         ]
         #html.elem("p")[#meta.summary]
       ]

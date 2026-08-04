@@ -32,7 +32,6 @@ pub(super) fn plan_routes(
     layout: &ProjectLayout,
     base_inputs: &Dict,
     base_library: &LazyHash<Library>,
-    clean_urls: bool,
 ) -> Result<(Vec<PlannedRoute>, Vec<BuildWarning>)> {
     let templates = session.route_templates(layout)?;
     let mut routes = Vec::new();
@@ -74,7 +73,7 @@ pub(super) fn plan_routes(
                 content::with_route_params(base_inputs, &params)?;
             }
             let output = match kind {
-                PlannedRouteKind::Page => pattern.generate(&params, clean_urls)?,
+                PlannedRouteKind::Page => pattern.generate(&params)?,
                 PlannedRouteKind::Endpoint => pattern.generate_endpoint(&params)?,
             };
             routes.push(PlannedRoute {

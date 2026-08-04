@@ -1,5 +1,5 @@
 use std::net::{IpAddr, SocketAddr, TcpListener};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -200,7 +200,14 @@ async fn serve_site(
     static_request: StaticFileRequest,
     Data(state): Data<&ServerState>,
 ) -> Response {
-    let route = match RoutePath::new(if path.is_empty() { "index.html" } else { &path }) {
+    let path = if path.is_empty() {
+        "index.html".to_owned()
+    } else if path.ends_with('/') {
+        format!("{path}index.html")
+    } else {
+        path
+    };
+    let route = match RoutePath::new(path) {
         Ok(route) => route,
         Err(_) => return status_page(StatusCode::BAD_REQUEST, "Invalid request path", 0),
     };
@@ -221,8 +228,15 @@ async fn serve_file(
             site.revision,
         );
     };
-    let Some(path) = resolve_output_file(output_dir, &route) else {
-        return status_page(StatusCode::NOT_FOUND, "Page not found", site.revision);
+    let (path, not_found) = match route.as_virtual_path().realize(output_dir) {
+        Ok(path) if path.is_file() => (path, false),
+        _ => {
+            let path = output_dir.join("404.html");
+            if !path.is_file() {
+                return status_page(StatusCode::NOT_FOUND, "Page not found", site.revision);
+            }
+            (path, true)
+        }
     };
 
     let mut content = match tokio::fs::read(&path).await {
@@ -247,20 +261,13 @@ async fn serve_file(
         Ok(response) => response.with_content_type(content_type).into_response(),
         Err(error) => error.as_response(),
     };
+    if not_found {
+        response.set_status(StatusCode::NOT_FOUND);
+    }
     response
         .headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     response
-}
-
-fn resolve_output_file(root: &Path, route: &RoutePath) -> Option<PathBuf> {
-    let path = route.as_virtual_path().realize(root).ok()?;
-    let path = if path.is_dir() {
-        path.join("index.html")
-    } else {
-        path
-    };
-    path.is_file().then_some(path)
 }
 
 fn inject_reload_script(content: Vec<u8>, revision: u64) -> Vec<u8> {
@@ -326,7 +333,7 @@ mod tests {
     }
 
     #[test]
-    fn serves_directory_indexes_and_rejects_traversal() {
+    fn serves_explicit_directory_indexes_and_rejects_traversal() {
         let temp = tempfile::tempdir().unwrap();
         std::fs::create_dir(temp.path().join("about")).unwrap();
         std::fs::write(
@@ -334,6 +341,7 @@ mod tests {
             "<!doctype html><html><body>About</body></html>",
         )
         .unwrap();
+        std::fs::write(temp.path().join("foo"), "Exact file").unwrap();
         let app = application(state(Some(temp.path().to_owned()), 7));
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -344,10 +352,57 @@ mod tests {
             let response = app
                 .get_response(Request::builder().uri("/about".parse().unwrap()).finish())
                 .await;
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
+            assert!(
+                response
+                    .into_body()
+                    .into_string()
+                    .await
+                    .unwrap()
+                    .contains("Page not found")
+            );
+
+            std::fs::write(
+                temp.path().join("404.html"),
+                "<!doctype html><html><body>Custom not found</body></html>",
+            )
+            .unwrap();
+
+            let response = app
+                .get_response(Request::builder().uri("/foo".parse().unwrap()).finish())
+                .await;
+            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(
+                response.into_body().into_string().await.unwrap(),
+                "Exact file"
+            );
+
+            let response = app
+                .get_response(Request::builder().uri("/foo/".parse().unwrap()).finish())
+                .await;
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
+            let html = response.into_body().into_string().await.unwrap();
+            assert!(html.contains("Custom not found"));
+            assert!(html.contains("/_aster/live-reload.js?v=7"));
+
+            let response = app
+                .get_response(Request::builder().uri("/about/".parse().unwrap()).finish())
+                .await;
             assert_eq!(response.status(), StatusCode::OK);
             let html = response.into_body().into_string().await.unwrap();
             assert!(html.contains("About"));
             assert!(html.contains("/_aster/live-reload.js?v=7"));
+
+            let response = app
+                .get_response(
+                    Request::builder()
+                        .uri("/about/index.html".parse().unwrap())
+                        .finish(),
+                )
+                .await;
+            assert_eq!(response.status(), StatusCode::OK);
+            let html = response.into_body().into_string().await.unwrap();
+            assert!(html.contains("About"));
 
             let response = app
                 .get_response(
@@ -357,16 +412,40 @@ mod tests {
                 )
                 .await;
             assert_eq!(response.status(), StatusCode::NOT_FOUND);
+            let html = response.into_body().into_string().await.unwrap();
+            assert!(html.contains("Custom not found"));
+
+            let response = app
+                .get_response(
+                    Request::builder()
+                        .uri("/404.html".parse().unwrap())
+                        .finish(),
+                )
+                .await;
+            assert_eq!(response.status(), StatusCode::OK);
+            let html = response.into_body().into_string().await.unwrap();
+            assert!(html.contains("Custom not found"));
 
             let response = app
                 .get_response(
                     Request::builder()
                         .method(Method::HEAD)
-                        .uri("/about".parse().unwrap())
+                        .uri("/about/".parse().unwrap())
                         .finish(),
                 )
                 .await;
             assert_eq!(response.status(), StatusCode::OK);
+            assert!(response.into_body().into_bytes().await.unwrap().is_empty());
+
+            let response = app
+                .get_response(
+                    Request::builder()
+                        .method(Method::HEAD)
+                        .uri("/missing".parse().unwrap())
+                        .finish(),
+                )
+                .await;
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
             assert!(response.into_body().into_bytes().await.unwrap().is_empty());
 
             let response = app

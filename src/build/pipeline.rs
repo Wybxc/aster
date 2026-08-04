@@ -78,13 +78,8 @@ impl BuildSession {
                 load_content(session, &layout).context("failed to load content collections")?;
             let base_inputs = content::with_protocol(manifest.inputs, protocol)?;
             let base_library = session.library(base_inputs.clone());
-            let (routes, route_warnings) = plan_routes(
-                session,
-                &layout,
-                &base_inputs,
-                &base_library,
-                manifest.config.output.clean_urls,
-            )?;
+            let (routes, route_warnings) =
+                plan_routes(session, &layout, &base_inputs, &base_library)?;
             warnings.extend(route_warnings);
 
             for job in routes {

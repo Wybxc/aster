@@ -109,12 +109,10 @@ fn invalid_theme_warns_once_for_the_whole_build() {
         ),
     )
     .unwrap();
-    for page in ["index", "about"] {
-        std::fs::write(
-            root.join("pages").join(format!("{page}.typ")),
-            "#html.html(html.body[Page])",
-        )
-        .unwrap();
+    for page in ["index.typ", "about/index.typ"] {
+        let path = root.join("pages").join(page);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, "#html.html(html.body[Page])").unwrap();
     }
 
     let project = project(root);

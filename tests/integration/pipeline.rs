@@ -103,7 +103,7 @@ fn reentrant_build_discovers_added_and_removed_pages() {
     let root = temp.path();
     std::fs::create_dir_all(root.join("pages")).unwrap();
     let index = root.join("pages/index.typ");
-    let about = root.join("pages/about.typ");
+    let about = root.join("pages/about/index.typ");
     std::fs::write(&index, "#html.elem(\"p\")[Index]").unwrap();
 
     let project = project(root);
@@ -111,6 +111,7 @@ fn reentrant_build_discovers_added_and_removed_pages() {
     driver.build().unwrap();
     assert!(root.join("dist/index.html").is_file());
 
+    std::fs::create_dir_all(about.parent().unwrap()).unwrap();
     std::fs::write(&about, "#html.elem(\"p\")[About]").unwrap();
     driver.build().unwrap();
     assert!(root.join("dist/index.html").is_file());

@@ -27,8 +27,8 @@ fn write_routes(project: &Project, template: &str, routes: &str) {
 
 #[test]
 fn route_plan_is_sorted_and_probes_dynamic_templates() {
-    let (_temp, project) = fixture(&["z.typ", "blog/[slug].typ", "a.typ"]);
-    write_routes(&project, "blog/[slug].typ", "((slug: \"post\"),)");
+    let (_temp, project) = fixture(&["z/index.typ", "blog/[slug]/index.typ", "a/index.typ"]);
+    write_routes(&project, "blog/[slug]/index.typ", "((slug: \"post\"),)");
 
     let outcome = BuildSession::new(project.clone()).build().unwrap();
     let output_dir = project.root().join("dist");
@@ -52,9 +52,8 @@ fn route_plan_is_sorted_and_probes_dynamic_templates() {
 }
 
 #[test]
-fn route_plan_supports_file_outputs_when_clean_urls_are_disabled() {
+fn route_plan_preserves_file_shaped_page_routes() {
     let (_temp, project) = fixture(&["a.typ", "blog/[slug].typ"]);
-    std::fs::write(project.config_file(), "[output]\nclean-urls = false\n").unwrap();
     write_routes(&project, "blog/[slug].typ", "((slug: \"post\"),)");
 
     let outcome = BuildSession::new(project.clone()).build().unwrap();
@@ -85,7 +84,6 @@ fn route_plan_rejects_static_dynamic_collision() {
 #[test]
 fn route_plan_rejects_page_endpoint_collision() {
     let (_temp, project) = fixture(&["feed.typ", "feed.html.typ"]);
-    std::fs::write(project.config_file(), "[output]\nclean-urls = false\n").unwrap();
     std::fs::write(
         project.root().join("pages/feed.html.typ"),
         "#metadata(\"feed\") <endpoint>",

@@ -2,22 +2,18 @@
 #import "/templates/site.typ": site
 
 #metadata(
-  get-collection-ids("projects").map(id => {
-    let parts = id.split("/")
-    (year: parts.first(), slug: parts.last())
-  })
+  get-collection-ids("journal").map(slug => (slug: slug))
 ) <route>
 
-#let year = sys.inputs.at("year", default: "")
 #let slug = sys.inputs.at("slug", default: "")
-#let entry = get-entry("projects", year + "/" + slug)
+#let entry = get-entry("journal", slug)
 
 #if entry != none [
   #let meta = entry.metadata()
 
   #show: site.with(
     title: meta.title,
-    root: "../",
+    root: "../../",
     description: meta.summary,
   )
   #show heading.where(level: 1): it => html.elem("header")[
@@ -26,7 +22,7 @@
   ]
 
   #html.elem("article")[#entry.render()]
-  #html.elem("nav", attrs: ("aria-label": "Project navigation"))[
-    #link("../index.html")[Return to the project list]
+  #html.elem("nav", attrs: ("aria-label": "Journal navigation"))[
+    #link("../../")[Return to all journal entries]
   ]
 ]

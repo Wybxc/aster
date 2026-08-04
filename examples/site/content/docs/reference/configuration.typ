@@ -18,7 +18,7 @@ edition = "2026"
 
 [[navigation]]
 label = "Overview"
-href = "index.html"
+href = "./"
 ```
 
 Templates read the resulting values directly through `sys.inputs`:

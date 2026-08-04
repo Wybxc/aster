@@ -19,9 +19,10 @@ Brackets in a template's relative path declare route parameters.
     *Aster writes this output.*
   ],
   [`about.typ`], [`about.html`],
-  [`journal/[slug].typ`], [`journal/<slug>.html`],
-  [`work/[year]-[slug].typ`], [`work/<year>-<slug>.html`],
-  [`docs/[...path].typ`], [The output preserves the nested path below `docs/`.],
+  [`about/index.typ`], [`about/index.html`],
+  [`journal/[slug]/index.typ`], [`journal/<slug>/index.html`],
+  [`work/[year]-[slug]/index.typ`], [`work/<year>-<slug>/index.html`],
+  [`docs/[...path]/index.typ`], [The output preserves the nested path below `docs/`.],
 )
 
 Dynamic templates declare their parameter sets through labelled metadata:
@@ -34,3 +35,7 @@ Dynamic templates declare their parameter sets through labelled metadata:
 
 Aster validates missing parameters, extra parameters, unsafe segments, and
 output collisions before rendering pages.
+
+During development, `aster dev` serves the root `404.html` with a 404 status
+when a requested file does not exist. Define `pages/404.typ` to provide this
+page.

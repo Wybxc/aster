@@ -24,6 +24,7 @@
 
 #show: site.with(
   title: "Typst can express the complete page.",
+  root: "../",
   description: "This page shows how Aster preserves Typst evaluation, semantic output, layout, and source highlighting.",
 )
 
