@@ -43,7 +43,14 @@ fn component_file_resources_are_resolved_tracked_and_injected_once() {
     let js_name = generated_asset_containing(root, "js", "cardsReady");
     assert_eq!(html.matches(&css_name).count(), 1, "{html}");
     assert_eq!(html.matches(&js_name).count(), 1, "{html}");
-    assert!(html.contains("<script src="), "{html}");
+    let head_end = html.find("</head>").expect("generated head");
+    let script_position = html.find("<script src=").expect("component script");
+    assert!(script_position < head_end, "{html}");
+    assert!(
+        html[script_position..head_end].contains(" defer>"),
+        "{html}"
+    );
+    assert!(!html[head_end..].contains(&js_name), "{html}");
     assert!(!html.contains("type=\"module\""), "{html}");
     assert_eq!(html.matches("class=\"card\"").count(), 2, "{html}");
 

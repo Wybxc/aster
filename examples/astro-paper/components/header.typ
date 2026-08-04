@@ -9,6 +9,7 @@
 ]
 
 #let header(active: "") = [
+  #metadata("./header.js") <script>
   #html.elem("div", attrs: (class: "skip-link-host"))[
     #html.elem("a", attrs: (
       id: "skip-to-content",

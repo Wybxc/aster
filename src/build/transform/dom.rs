@@ -51,27 +51,6 @@ pub fn append_to_head(document: &mut HtmlDocument, element: HtmlElement) {
     head.children.push(HtmlNode::Element(element));
 }
 
-/// Append one generated element to the document body, creating it if needed.
-pub fn append_to_body(document: &mut HtmlDocument, element: HtmlElement) {
-    let root = document.root_mut();
-    debug_assert_eq!(root.tag, typst_html::tag::html);
-
-    let body_index = root
-        .children
-        .iter()
-        .position(|node| matches!(node, HtmlNode::Element(element) if element.is_tag(typst_html::tag::body)))
-        .unwrap_or_else(|| {
-            root.children
-                .push(HtmlElement::new(typst_html::tag::body).into());
-            root.children.len() - 1
-        });
-
-    let HtmlNode::Element(body) = &mut root.children.make_mut()[body_index] else {
-        unreachable!("body index must identify an element");
-    };
-    body.children.push(HtmlNode::Element(element));
-}
-
 impl HtmlElementExt for HtmlElement {
     #[inline]
     fn is_tag(&self, tag: typst_html::HtmlTag) -> bool {

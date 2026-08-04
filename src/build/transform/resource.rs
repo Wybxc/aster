@@ -14,7 +14,7 @@ use crate::build::output::PagePublication;
 use crate::foundation::files::ProjectFiles;
 
 use super::css::CssProcessor;
-use super::dom::{append_to_body, append_to_head};
+use super::dom::append_to_head;
 
 /// Resources emitted by the component modules used to render one page.
 pub(crate) struct ComponentResources {
@@ -133,8 +133,9 @@ impl ComponentResources {
                     };
                     let script = HtmlElement::new(typst_html::tag::script)
                         .with_attr(typst_html::attr::src, url)
+                        .with_attr(typst_html::attr::defer, "")
                         .spanned(span);
-                    append_to_body(document, script);
+                    append_to_head(document, script);
                 }
             }
         }
