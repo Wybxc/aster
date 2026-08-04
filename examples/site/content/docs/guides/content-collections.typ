@@ -7,7 +7,7 @@
 
 = Content collections load entries only when pages need them.
 
-The adapter exports three queries:
+The project library exports three content queries:
 
 - `get-collection-ids(name)` reads membership without loading entry bodies.
 - `get-collection(name)` returns sorted entry modules.

@@ -1,6 +1,6 @@
 use aster::{BuildSession, Project};
 
-use crate::common::{install_content_adapter, project};
+use crate::common::{install_library, project};
 
 #[test]
 fn build_reuses_the_session_and_observes_source_changes() {
@@ -56,7 +56,7 @@ fn build_exposes_separate_content_and_metadata_accessors() {
     let root = temp.path();
     std::fs::create_dir_all(root.join("content/blog")).unwrap();
     std::fs::create_dir_all(root.join("pages")).unwrap();
-    install_content_adapter(root);
+    install_library(root);
     let content_entry = root.join("content/blog/post.typ");
     std::fs::write(
         &content_entry,
@@ -66,7 +66,7 @@ fn build_exposes_separate_content_and_metadata_accessors() {
     std::fs::write(
         root.join("pages/index.typ"),
         concat!(
-            "#import \"/lib/aster/content.typ\": get-entry\n",
+            "#import \"/lib.typ\": get-entry\n",
             "#let post = get-entry(\"blog\", \"post\")\n",
             "#let metadata = post.metadata()\n",
             "#let content = post.render()\n",

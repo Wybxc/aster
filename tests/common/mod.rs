@@ -5,16 +5,31 @@ use aster::Project;
 pub fn project(root: &Path) -> Project {
     let config = root.join("aster.toml");
     if !config.exists() {
-        std::fs::write(config, "").unwrap();
+        std::fs::write(
+            config,
+            "[site]\ntitle = \"Test Site\"\ndescription = \"\"\n",
+        )
+        .unwrap();
     }
     Project::open(root.to_owned()).unwrap()
 }
 
-pub fn install_content_adapter(root: &Path) {
-    std::fs::create_dir_all(root.join("lib/aster")).unwrap();
+pub fn install_library(root: &Path) {
+    std::fs::create_dir_all(root.join("components")).unwrap();
+    std::fs::create_dir_all(root.join("templates")).unwrap();
     std::fs::write(
-        root.join("lib/aster/content.typ"),
-        include_str!("../../templates/default/lib/aster/content.typ"),
+        root.join("lib.typ"),
+        include_str!("../../templates/default/lib.typ"),
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("components/navigation.typ"),
+        include_str!("../../templates/default/components/navigation.typ"),
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("templates/site.typ"),
+        include_str!("../../templates/default/templates/site.typ"),
     )
     .unwrap();
 }

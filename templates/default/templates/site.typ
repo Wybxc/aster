@@ -1,4 +1,5 @@
-#let settings = sys.inputs
+#import "/components/navigation.typ": navigation
+#import "/lib.typ": settings
 
 #let site(
   title: settings.site.title,
@@ -13,9 +14,7 @@
     #html.elem("link", attrs: (rel: "css", href: "/styles/site.css"))
   ]
   html.body[
-    #html.elem("header")[
-      #html.elem("nav")[#link("/")[*#settings.site.title*]]
-    ]
+    #navigation()
     #html.elem("main")[#body]
     #html.elem("footer")[Built with Aster and Typst.]
   ]

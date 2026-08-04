@@ -12,7 +12,7 @@ become nested ids, which makes a documentation tree a natural content
 collection rather than a separate subsystem.
 
 ```typ
-#import "/lib/aster/content.typ": get-entry
+#import "/lib.typ": get-entry
 
 #let entry = get-entry("journal", "content-without-glue")
 #let metadata = entry.metadata()

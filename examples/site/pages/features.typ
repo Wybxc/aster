@@ -1,5 +1,5 @@
 #import "@preview/example:0.1.0": add, mul
-#import "/site.typ": site
+#import "/templates/site.typ": site
 
 #let rows = (
   (

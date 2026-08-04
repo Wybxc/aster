@@ -1,5 +1,5 @@
-#import "/lib/aster/content.typ": get-collection
-#import "/site.typ": site
+#import "/lib.typ": get-collection
+#import "/templates/site.typ": site
 
 #let journal = {
   get-collection("journal")

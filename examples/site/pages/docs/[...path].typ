@@ -1,5 +1,5 @@
-#import "/lib/aster/content.typ": get-collection-ids, get-entry
-#import "/site.typ": root-prefix, site
+#import "/lib.typ": get-collection-ids, get-entry, root-prefix
+#import "/templates/site.typ": site
 
 #metadata(
   get-collection-ids("docs").map(path => (path: path))

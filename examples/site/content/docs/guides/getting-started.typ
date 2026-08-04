@@ -13,7 +13,11 @@ optional content, styles, assets, and public files in separate directories.
 ```text
 site/
 ├── aster.toml
-├── site.typ
+├── lib.typ
+├── components/
+│   └── navigation.typ
+├── templates/
+│   └── site.typ
 ├── assets/
 ├── content/
 │   ├── journal/

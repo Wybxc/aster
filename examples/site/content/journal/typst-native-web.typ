@@ -39,7 +39,7 @@ $sum_(k=1)^n k = (n(n+1))/2$, together with structured tables, figures, and raw
 HTML elements.
 
 ```typ
-#import "/site.typ": site
+#import "/templates/site.typ": site
 
 #show: site.with(title: "This page contains the release notes.")
 

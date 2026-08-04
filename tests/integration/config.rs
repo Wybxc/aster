@@ -1,6 +1,6 @@
 use aster::{BuildSession, FilesystemDependency};
 
-use crate::common::{install_content_adapter, project};
+use crate::common::{install_library, project};
 
 #[test]
 fn build_honors_configured_layout_and_processing_options() {
@@ -10,7 +10,7 @@ fn build_honors_configured_layout_and_processing_options() {
     std::fs::create_dir_all(root.join("styles")).unwrap();
     std::fs::create_dir_all(root.join("entries/blog")).unwrap();
     std::fs::create_dir_all(root.join("fonts/nested")).unwrap();
-    install_content_adapter(root);
+    install_library(root);
     std::fs::write(
         root.join("aster.toml"),
         concat!(
@@ -19,6 +19,9 @@ fn build_honors_configured_layout_and_processing_options() {
             "content = \"entries\"\n",
             "public = \"files\"\n",
             "output = \"public\"\n",
+            "[site]\n",
+            "title = \"Test Site\"\n",
+            "description = \"\"\n",
             "[output]\n",
             "assets = \"static/generated\"\n",
             "pretty = true\n",
@@ -43,7 +46,7 @@ fn build_honors_configured_layout_and_processing_options() {
     std::fs::write(
         root.join("routes/index.typ"),
         concat!(
-            "#import \"/lib/aster/content.typ\": get-entry\n",
+            "#import \"/lib.typ\": get-entry\n",
             "#let post = get-entry(\"blog\", \"post\")\n",
             "#let metadata = post.metadata()\n",
             "#html.html({\n",

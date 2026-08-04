@@ -1,6 +1,5 @@
-#let settings = sys.inputs
-
-#let root-prefix(depth) = range(depth).map(_ => "../").join()
+#import "/components/navigation.typ": navigation
+#import "/lib.typ": settings
 
 #let site(
   title: settings.site.title,
@@ -24,7 +23,10 @@
   html.html({
     html.head[
       #html.meta(charset: "utf-8")
-      #html.meta(name: "viewport", content: "width=device-width, initial-scale=1")
+      #html.meta(
+        name: "viewport",
+        content: "width=device-width, initial-scale=1",
+      )
       #html.meta(name: "description", content: description)
       #html.title(document-title)
       #html.elem("link", attrs: (
@@ -36,14 +38,7 @@
       #html.elem("link", attrs: (rel: "css", href: stylesheet))
     ]
     html.body[
-      #html.elem("header")[
-        #html.elem("nav", attrs: ("aria-label": "Primary navigation"))[
-          #link(root + "index.html")[*#settings.site.title*]
-          #for item in settings.navigation {
-            link(root + item.href)[#item.label]
-          }
-        ]
-      ]
+      #navigation(root)
       #html.elem("main")[#document]
       #html.elem("footer")[
         #html.elem("p")[This example was written by #settings.author.name.]

@@ -49,8 +49,11 @@ fn init_creates_a_buildable_project() {
 
     assert!(destination.join("pages/index.typ").is_file());
     assert!(destination.join("styles/site.css").is_file());
-    assert!(destination.join("lib/aster/content.typ").is_file());
-    assert!(!destination.join("lib").is_symlink());
+    assert!(destination.join("lib.typ").is_file());
+    assert!(destination.join("components/navigation.typ").is_file());
+    assert!(destination.join("templates/site.typ").is_file());
+    assert!(!destination.join("site.typ").exists());
+    assert!(!destination.join("lib/aster/content.typ").exists());
     let config = std::fs::read_to_string(destination.join("aster.toml")).unwrap();
     assert!(config.contains("name = \"my-site\""));
 

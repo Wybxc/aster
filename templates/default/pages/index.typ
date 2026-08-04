@@ -1,4 +1,4 @@
-#import "/site.typ": site
+#import "/templates/site.typ": site
 
 #show: site
 
