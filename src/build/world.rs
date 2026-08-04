@@ -75,6 +75,16 @@ impl TypstSession {
         Ok(())
     }
 
+    pub(crate) fn observe_watch_paths(
+        &self,
+        layout: &ProjectLayout,
+    ) -> Result<(), FileAccessError> {
+        for path in layout.watch_paths() {
+            self.files.watch(path)?;
+        }
+        Ok(())
+    }
+
     pub(crate) fn route_templates(
         &self,
         layout: &ProjectLayout,

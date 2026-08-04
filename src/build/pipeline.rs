@@ -51,6 +51,9 @@ impl BuildSession {
                 .context("failed to parse aster.toml")?;
             let layout = ProjectLayout::new(&manifest.config).context("invalid project layout")?;
             self.session
+                .observe_watch_paths(&layout)
+                .context("failed to inspect configured watch paths")?;
+            self.session
                 .configure_fonts(&manifest.config.typst.fonts, &layout)?;
 
             let session = &self.session;

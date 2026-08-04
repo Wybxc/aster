@@ -13,7 +13,7 @@ An **Aster project** is a directory containing `aster.toml`. Its conventional di
 - `public/` — files copied unchanged to the output root
 - `dist/` — the published output tree
 
-Project discovery selects the nearest ancestor containing an `aster.toml` file. A build requires `pages/`; `content/`, `styles/`, `assets/`, and `public/` are optional. The project owns watch-path policy: configuration, structural directories, and tracked build dependencies are watched while `dist/` is always excluded.
+Project discovery selects the nearest ancestor containing an `aster.toml` file. A build requires `pages/`; `content/`, `styles/`, `assets/`, and `public/` are optional. The project owns watch-path policy: configuration, structural directories, tracked build dependencies, and project-relative `[watch].paths` are watched while `dist/` is always excluded. An additional watch path is classified as a file or recursive directory from its current filesystem state; missing paths remain dependencies and are reclassified after creation. The project root and paths overlapping the output directory are rejected.
 
 Like Typst's standard filesystem loader, project paths retain their absolute lexical form instead of being canonicalized. Operating-system absolute paths and `..` paths that escape the project root are rejected, while filesystem access follows symbolic links even when their targets are outside the project root. A leading `/` in a project-source interface denotes the project virtual root; paths within that namespace are computed through Typst's `VirtualPath` model.
 
@@ -39,7 +39,7 @@ A **build session** is the reusable public build interface bound to one Aster pr
 
 The session is reused across builds. The first build compiles directly. Before each later build, it marks loaded files stale; subsequent reads update Typst sources in place so comemo can validate and reuse unchanged compilation and transformation results. After the build attempt, it ages the global comemo cache. Page compilation is memoized through a tracked Typst world.
 
-Callers do not construct or track Typst worlds. Source and content listings are memoized through the session's tracked project-file surface, so directory membership changes invalidate discovery. CSS bundling uses the same surface: path resolution and every entry or transitive import read become comemo constraints. Page compilation remains memoized through the tracked Typst world.
+Callers do not construct or track Typst worlds. Source and content listings are memoized through the session's tracked project-file surface, so directory membership changes invalidate discovery. CSS bundling uses the same surface: path resolution and every entry or transitive import read become comemo constraints. A `rel=\"css\"` link selects standard CSS bundling, while `rel=\"tailwind\"` runs that entry through the one-shot external Tailwind CLI before the same Lightning CSS post-processing. Aster conservatively records each Tailwind entry tree and conventional Tailwind configuration files because arbitrary filesystem reads by the child process cannot enter the tracked dependency graph. Page compilation remains memoized through the tracked Typst world.
 
 ## Document transform
 

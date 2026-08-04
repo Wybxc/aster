@@ -1,5 +1,7 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -7,7 +9,9 @@ use comemo::Tracked;
 use cssparser::serialize_string;
 use lightningcss::bundler::{Bundler, FileProvider, ResolveResult, SourceProvider};
 use lightningcss::dependencies::{Dependency, DependencyOptions, UrlDependency};
-use lightningcss::stylesheet::{MinifyOptions, ParserFlags, ParserOptions, PrinterOptions};
+use lightningcss::stylesheet::{
+    MinifyOptions, ParserFlags, ParserOptions, PrinterOptions, StyleSheet,
+};
 use lightningcss::targets::{Browsers, Targets};
 use typst::ecow::{EcoString, EcoVec, eco_format};
 use typst::foundations::Bytes;
@@ -28,6 +32,17 @@ use crate::foundation::files::{FileAccessError, ProjectFiles};
 /// reference-counted or cheap to clone.
 #[derive(Debug, Clone, thiserror::Error)]
 enum BundleError {
+    #[error(
+        "a Tailwind stylesheet requires the `tailwindcss` executable, but it was not found\n\
+         hint: install the standalone Tailwind CSS CLI and make `tailwindcss` available on PATH"
+    )]
+    TailwindNotFound,
+    #[error("failed to start Tailwind CSS CLI: {message}")]
+    TailwindStart { message: EcoString },
+    #[error("Tailwind CSS CLI failed for {path}: {message}")]
+    TailwindFailed { path: Arc<Path>, message: EcoString },
+    #[error("Tailwind CSS CLI returned non-UTF-8 output for {path}")]
+    TailwindUtf8 { path: Arc<Path> },
     #[error("failed to bundle {path}: {kind}{location}")]
     Bundle {
         path: Arc<Path>,
@@ -81,6 +96,12 @@ struct CssAsset {
     suffix: EcoString,
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+enum StylesheetKind {
+    Css,
+    Tailwind,
+}
+
 /// Decompose a lightningcss error into its stable classification and a
 /// formatted source location, both of which are cheaply cloneable.
 fn decompose(error: &lightningcss::error::Error<impl std::fmt::Display>) -> (EcoString, EcoString) {
@@ -95,6 +116,7 @@ fn decompose(error: &lightningcss::error::Error<impl std::fmt::Display>) -> (Eco
 pub(crate) struct CssProcessor<'a> {
     project_files: Tracked<'a, ProjectFiles>,
     config: CssConfig,
+    bundles: HashMap<(StylesheetKind, VirtualPath), BundledStylesheet>,
 }
 
 impl<'a> CssProcessor<'a> {
@@ -103,6 +125,7 @@ impl<'a> CssProcessor<'a> {
         Ok(Self {
             project_files,
             config: config.clone(),
+            bundles: HashMap::new(),
         })
     }
 }
@@ -113,23 +136,46 @@ impl Processor for CssProcessor<'_> {
         element: &mut HtmlElement,
         page: &mut PagePublication<'_>,
     ) -> Result<WalkControl> {
-        if !element.is_tag(typst_html::tag::link)
-            || !element.has_attr("rel", |value| value == "css")
-        {
+        if !element.is_tag(typst_html::tag::link) {
             return Ok(WalkControl::Continue);
         }
+        let Some((kind, relation)) = element.get_attr("rel").and_then(|relation| {
+            let kind = match relation.as_str() {
+                "css" => StylesheetKind::Css,
+                "tailwind" => StylesheetKind::Tailwind,
+                _ => return None,
+            };
+            Some((kind, relation))
+        }) else {
+            return Ok(WalkControl::Continue);
+        };
 
         let href = element.get_attr("href").ok_or_else(|| {
-            anyhow::anyhow!("link element of type \"css\" is missing href attribute")
+            anyhow::anyhow!("link element with rel=\"{relation}\" is missing href attribute")
         })?;
         let source = page.resolve_source(&href)?;
-        let bundle = bundle_file(
-            self.project_files,
-            &source,
-            page.project_root(),
-            &self.config,
-        )
-        .map_err(|error| anyhow::anyhow!("{error:#}"))?;
+        let key = (kind, source.clone());
+        let bundle = if let Some(bundle) = self.bundles.get(&key) {
+            bundle.clone()
+        } else {
+            let bundle = match kind {
+                StylesheetKind::Css => bundle_file(
+                    self.project_files,
+                    &source,
+                    page.project_root(),
+                    &self.config,
+                ),
+                StylesheetKind::Tailwind => bundle_tailwind_file(
+                    self.project_files,
+                    &source,
+                    page.project_root(),
+                    &self.config,
+                ),
+            }
+            .map_err(|error| anyhow::anyhow!("{error:#}"))?;
+            self.bundles.insert(key, bundle.clone());
+            bundle
+        };
         let mut css = bundle.code.to_string();
         for asset in bundle.assets {
             let mut reference = page
@@ -173,7 +219,7 @@ fn bundle_file(
             ..ParserOptions::default()
         },
     );
-    let mut stylesheet = bundler.bundle(&entry).map_err(|error| {
+    let stylesheet = bundler.bundle(&entry).map_err(|error| {
         let (kind, location) = decompose(&error);
         BundleError::Bundle {
             path: entry.into(),
@@ -181,6 +227,109 @@ fn bundle_file(
             location,
         }
     })?;
+    finish_stylesheet(stylesheet, &provider, targets, config)
+}
+
+fn bundle_tailwind_file(
+    project_files: Tracked<ProjectFiles>,
+    entry: &VirtualPath,
+    project_root: &Path,
+    config: &CssConfig,
+) -> std::result::Result<BundledStylesheet, BundleError> {
+    observe_tailwind_inputs(project_files, entry)?;
+    let entry = entry
+        .realize(project_root)
+        .map_err(|error| BundleError::InvalidPath {
+            path: PathBuf::from(entry.get_with_slash()).into(),
+            message: eco_format!("{error}"),
+        })?;
+    let css = run_tailwind_cli(OsStr::new("tailwindcss"), &entry, project_root)?;
+    let provider = ConfinedFileProvider::new(project_root.to_owned(), project_files);
+    let targets = resolve_targets(config)?;
+    let mut flags = ParserFlags::empty();
+    flags.set(ParserFlags::CUSTOM_MEDIA, config.custom_media);
+    let stylesheet = StyleSheet::parse(
+        &css,
+        ParserOptions {
+            filename: entry.to_string_lossy().into_owned(),
+            flags,
+            ..ParserOptions::default()
+        },
+    )
+    .map_err(|error| {
+        let (kind, location) = decompose(&error);
+        BundleError::Bundle {
+            path: entry.into(),
+            kind,
+            location,
+        }
+    })?;
+    finish_stylesheet(stylesheet, &provider, targets, config)
+}
+
+fn observe_tailwind_inputs(
+    project_files: Tracked<ProjectFiles>,
+    entry: &VirtualPath,
+) -> std::result::Result<(), BundleError> {
+    project_files.read(entry)?;
+    if let Some(directory) = entry.parent()
+        && !directory.is_root()
+    {
+        project_files.list(&directory, true)?;
+    }
+
+    for name in [
+        "tailwind.config.js",
+        "tailwind.config.cjs",
+        "tailwind.config.mjs",
+        "tailwind.config.ts",
+    ] {
+        let path = VirtualPath::new(name).expect("Tailwind config path is valid");
+        let _ = project_files.read(&path);
+    }
+    Ok(())
+}
+
+fn run_tailwind_cli(
+    executable: &OsStr,
+    entry: &Path,
+    project_root: &Path,
+) -> std::result::Result<String, BundleError> {
+    let output = Command::new(executable)
+        .arg("--input")
+        .arg(entry)
+        .current_dir(project_root)
+        .output()
+        .map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                BundleError::TailwindNotFound
+            } else {
+                BundleError::TailwindStart {
+                    message: eco_format!("{error}"),
+                }
+            }
+        })?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let message = stderr.trim();
+        return Err(BundleError::TailwindFailed {
+            path: entry.into(),
+            message: if message.is_empty() {
+                eco_format!("process exited with {}", output.status)
+            } else {
+                message.into()
+            },
+        });
+    }
+    String::from_utf8(output.stdout).map_err(|_| BundleError::TailwindUtf8 { path: entry.into() })
+}
+
+fn finish_stylesheet(
+    mut stylesheet: StyleSheet<'_>,
+    provider: &ConfinedFileProvider<'_>,
+    targets: Targets,
+    config: &CssConfig,
+) -> std::result::Result<BundledStylesheet, BundleError> {
     if config.minify || targets.browsers.is_some() {
         stylesheet
             .minify(MinifyOptions {
@@ -421,4 +570,38 @@ fn is_browser_managed_reference(reference: &str) -> bool {
     reference.is_empty()
         || matches!(reference.chars().next(), Some('/' | '#' | '?'))
         || Url::parse(reference).is_ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use comemo::Track;
+
+    use super::*;
+    use crate::foundation::{FilesystemDependency, Project};
+
+    #[test]
+    fn tailwind_inputs_track_entry_tree_and_conventional_configs() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        std::fs::create_dir(root.join("styles")).unwrap();
+        std::fs::write(root.join("aster.toml"), "").unwrap();
+        std::fs::write(root.join("styles/site.css"), "@import \"tailwindcss\";").unwrap();
+        let project = Project::open(root).unwrap();
+        let mut files = ProjectFiles::new(&project);
+        let entry = VirtualPath::new("styles/site.css").unwrap();
+
+        observe_tailwind_inputs(files.track(), &entry).unwrap();
+
+        let dependencies = files.dependencies();
+        assert!(dependencies.contains(&FilesystemDependency::File(root.join("styles/site.css"))));
+        assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("styles"))));
+        for name in [
+            "tailwind.config.js",
+            "tailwind.config.cjs",
+            "tailwind.config.mjs",
+            "tailwind.config.ts",
+        ] {
+            assert!(dependencies.contains(&FilesystemDependency::File(root.join(name))));
+        }
+    }
 }

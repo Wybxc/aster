@@ -101,3 +101,36 @@ fn snapshot_follows_reloaded_layout() {
     assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("entries"))));
     assert!(!dependencies.contains(&FilesystemDependency::Tree(root.join("pages"))));
 }
+
+#[test]
+fn includes_configured_watch_files_directories_and_missing_paths() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir(root.join("pages")).unwrap();
+    std::fs::create_dir(root.join("components")).unwrap();
+    std::fs::create_dir(root.join("plugins")).unwrap();
+    std::fs::write(root.join("pages/index.typ"), "#html.elem(\"p\")[Page]").unwrap();
+    std::fs::write(root.join("plugins/theme.ts"), "export default {};").unwrap();
+    std::fs::write(
+        root.join("aster.toml"),
+        concat!(
+            "[watch]\n",
+            "paths = [\"components\", \"plugins/theme.ts\", \"generated\"]\n",
+        ),
+    )
+    .unwrap();
+    let mut session = BuildSession::new(Project::open(root).unwrap());
+
+    session.build().unwrap();
+    let dependencies = session.dependencies();
+
+    assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("components"))));
+    assert!(dependencies.contains(&FilesystemDependency::File(root.join("plugins/theme.ts"))));
+    assert!(dependencies.contains(&FilesystemDependency::File(root.join("generated"))));
+
+    std::fs::create_dir(root.join("generated")).unwrap();
+    session.build().unwrap();
+    let dependencies = session.dependencies();
+    assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("generated"))));
+    assert!(!dependencies.contains(&FilesystemDependency::File(root.join("generated"))));
+}

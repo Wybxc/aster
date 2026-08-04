@@ -125,6 +125,45 @@ fn rejects_output_that_overlaps_pages_without_deleting_files() {
 }
 
 #[test]
+fn rejects_watch_path_overlapping_output() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir(root.join("pages")).unwrap();
+    std::fs::write(root.join("pages/index.typ"), "#html.elem(\"p\")[Page]").unwrap();
+    std::fs::write(
+        root.join("aster.toml"),
+        "[watch]\npaths = [\"dist/cache\"]\n",
+    )
+    .unwrap();
+
+    let error = BuildSession::new(project(root))
+        .build()
+        .err()
+        .expect("overlapping watch path must fail");
+
+    assert!(
+        format!("{error:#}")
+            .contains("watch path `dist/cache` must not overlap the output directory")
+    );
+}
+
+#[test]
+fn rejects_project_root_watch_path() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir(root.join("pages")).unwrap();
+    std::fs::write(root.join("pages/index.typ"), "#html.elem(\"p\")[Page]").unwrap();
+    std::fs::write(root.join("aster.toml"), "[watch]\npaths = [\".\"]\n").unwrap();
+
+    let error = BuildSession::new(project(root))
+        .build()
+        .err()
+        .expect("project root watch path must fail");
+
+    assert!(format!("{error:#}").contains("watch path cannot be the project root"));
+}
+
+#[test]
 fn session_recovers_after_manifest_is_fixed() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();

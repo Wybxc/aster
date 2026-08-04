@@ -13,10 +13,6 @@ pub trait HtmlElementExt {
     /// Check if the element's tag matches `tag`.
     fn is_tag(&self, tag: typst_html::HtmlTag) -> bool;
 
-    /// Check whether an attribute with the given `name` exists and
-    /// satisfies `predicate`.
-    fn has_attr(&self, name: &str, predicate: impl Fn(&EcoString) -> bool) -> bool;
-
     /// Return a clone of the value of the first attribute matching `name`.
     fn get_attr(&self, name: &str) -> Option<EcoString>;
 
@@ -33,13 +29,6 @@ impl HtmlElementExt for HtmlElement {
     #[inline]
     fn is_tag(&self, tag: typst_html::HtmlTag) -> bool {
         self.tag == tag
-    }
-
-    fn has_attr(&self, name: &str, predicate: impl Fn(&EcoString) -> bool) -> bool {
-        self.attrs
-            .0
-            .iter()
-            .any(|(a, v)| a.resolve().as_str() == name && predicate(v))
     }
 
     fn get_attr(&self, name: &str) -> Option<EcoString> {

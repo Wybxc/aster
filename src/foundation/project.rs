@@ -66,6 +66,7 @@ pub(crate) struct ProjectLayout {
     output: VirtualPath,
     generated_assets: VirtualPath,
     fonts: Vec<VirtualPath>,
+    watch_paths: Vec<VirtualPath>,
 }
 
 impl ProjectLayout {
@@ -92,6 +93,21 @@ impl ProjectLayout {
         for font in &fonts {
             ensure_disjoint(font, "font", &output, "output")?;
         }
+        let watch_paths = config
+            .watch
+            .paths
+            .iter()
+            .map(|value| {
+                let path = project_path(value, "watch")?;
+                ensure!(!path.is_root(), "watch path cannot be the project root");
+                ensure!(
+                    !overlaps(&path, &output),
+                    "watch path `{}` must not overlap the output directory",
+                    path.get_without_slash()
+                );
+                Ok(path)
+            })
+            .collect::<Result<_>>()?;
 
         Ok(Self {
             pages,
@@ -100,6 +116,7 @@ impl ProjectLayout {
             output,
             generated_assets,
             fonts,
+            watch_paths,
         })
     }
 
@@ -126,6 +143,10 @@ impl ProjectLayout {
     pub(crate) fn font_dirs(&self) -> impl Iterator<Item = &VirtualPath> {
         self.fonts.iter()
     }
+
+    pub(crate) fn watch_paths(&self) -> impl Iterator<Item = &VirtualPath> {
+        self.watch_paths.iter()
+    }
 }
 
 fn project_directory(value: &str, name: &str) -> Result<VirtualPath> {
@@ -151,11 +172,15 @@ fn ensure_disjoint(
     right: &VirtualPath,
     right_name: &str,
 ) -> Result<()> {
-    let left_path = Path::new(left.get_without_slash());
-    let right_path = Path::new(right.get_without_slash());
     ensure!(
-        !left_path.starts_with(right_path) && !right_path.starts_with(left_path),
+        !overlaps(left, right),
         "{left_name} and {right_name} directories must not overlap"
     );
     Ok(())
+}
+
+fn overlaps(left: &VirtualPath, right: &VirtualPath) -> bool {
+    let left = Path::new(left.get_without_slash());
+    let right = Path::new(right.get_without_slash());
+    left.starts_with(right) || right.starts_with(left)
 }

@@ -1,8 +1,8 @@
 //! Tracked filesystem access for a build session.
 //!
-//! File content accesses are recorded by the upstream `FileStore`; configured
-//! directory accesses are recorded here at the same boundary that validates
-//! them. Both are surfaced as build dependencies.
+//! File content accesses are recorded by the upstream `FileStore`; directory
+//! accesses and explicitly configured watch files are recorded here at the
+//! same boundary that validates them. All are surfaced as build dependencies.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -24,19 +24,20 @@ use crate::foundation::project::Project;
 /// The tracked filesystem surface of a Typst build session.
 ///
 /// File content accesses use the upstream `FileStore` slot state machine.
-/// Directory accesses use a small access journal rather than a second cache.
+/// Non-content dependencies use small journals rather than a second cache.
 pub(crate) struct ProjectFiles {
     root: PathBuf,
     store: FileStore<SystemFiles>,
     directories: Mutex<HashSet<VirtualPath>>,
+    watch_files: Mutex<HashSet<VirtualPath>>,
 }
 
-/// A filesystem input observed through tracked project access.
+/// A filesystem input observed or explicitly configured for the current build.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum FilesystemDependency {
-    /// A file whose contents were accessed.
+    /// A file whose contents were accessed or whose path was configured.
     File(PathBuf),
-    /// A directory whose recursive membership was accessed.
+    /// A directory whose recursive membership was accessed or configured.
     Tree(PathBuf),
 }
 
@@ -104,12 +105,14 @@ impl ProjectFiles {
             root,
             store,
             directories: Mutex::new(HashSet::new()),
+            watch_files: Mutex::new(HashSet::new()),
         }
     }
 
     pub(crate) fn reset(&mut self) {
         self.store.reset();
         self.directories.get_mut().unwrap().clear();
+        self.watch_files.get_mut().unwrap().clear();
     }
 
     pub(crate) fn dependencies(&mut self) -> Vec<FilesystemDependency> {
@@ -117,6 +120,17 @@ impl ProjectFiles {
         let mut observed = dependencies
             .filter_map(|id| loader.resolve(id).ok().map(FilesystemDependency::File))
             .collect::<Vec<_>>();
+        observed.extend(
+            self.watch_files
+                .get_mut()
+                .unwrap()
+                .iter()
+                .filter_map(|path| {
+                    path.realize(&self.root)
+                        .ok()
+                        .map(FilesystemDependency::File)
+                }),
+        );
         observed.extend(
             self.directories
                 .get_mut()
@@ -128,6 +142,8 @@ impl ProjectFiles {
                         .map(FilesystemDependency::Tree)
                 }),
         );
+        observed.sort();
+        observed.dedup();
         observed
     }
 
@@ -161,6 +177,37 @@ impl ProjectFiles {
                 message: eco_format!("{error}"),
             }),
         }
+    }
+
+    /// Record an explicitly configured file or recursive directory dependency.
+    pub(crate) fn watch(&self, path: &VirtualPath) -> Result<(), FileAccessError> {
+        let filesystem_path = path.realize(&self.root).map_err(|error| {
+            FileAccessError::Other(eco_format!(
+                "invalid watch path {}: {error}",
+                path.get_with_slash()
+            ))
+        })?;
+        match std::fs::metadata(&filesystem_path) {
+            Ok(metadata) if metadata.is_dir() => {
+                self.directories.lock().unwrap().insert(path.clone());
+            }
+            Ok(_) => {
+                self.watch_files.lock().unwrap().insert(path.clone());
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                // A missing path starts as a file dependency. The watcher polls
+                // for its creation, then the next build reclassifies it.
+                self.watch_files.lock().unwrap().insert(path.clone());
+            }
+            Err(error) => {
+                return Err(FileAccessError::Inspect {
+                    path: filesystem_path.into(),
+                    kind: error.kind(),
+                    message: eco_format!("{error}"),
+                });
+            }
+        }
+        Ok(())
     }
 }
 

@@ -98,7 +98,7 @@ impl Default for AssetsConfig {
 
 /// CSS bundling and transformation settings.
 #[derive(Clone, Deserialize, Eq, Hash, PartialEq)]
-#[serde(default, rename_all = "kebab-case")]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub(crate) struct CssConfig {
     /// Remove whitespace and apply size optimizations to generated CSS.
     pub minify: bool,
@@ -116,6 +116,13 @@ impl Default for CssConfig {
             custom_media: false,
         }
     }
+}
+
+/// Additional project paths observed by development commands.
+#[derive(Clone, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct WatchConfig {
+    pub paths: EcoVec<EcoString>,
 }
 
 #[derive(Clone, Default, Deserialize)]
@@ -148,6 +155,7 @@ pub(crate) struct AsterConfig {
     pub output: OutputConfig,
     pub assets: AssetsConfig,
     pub css: CssConfig,
+    pub watch: WatchConfig,
     pub typst: TypstConfig,
     pub highlight: HighlightConfig,
 }
@@ -222,6 +230,7 @@ mod tests {
         ));
         assert_eq!(manifest.config.highlight.themes.light, "Solarized (light)");
         assert_eq!(manifest.config.highlight.themes.dark, "Solarized (dark)");
+        assert!(manifest.config.watch.paths.is_empty());
     }
 
     #[test]
@@ -263,6 +272,8 @@ mod tests {
                 "minify = false\n",
                 "targets = [\"last 2 Chrome versions\", \"Firefox ESR\"]\n",
                 "custom-media = true\n",
+                "[watch]\n",
+                "paths = [\"components\", \"plugins/theme.ts\"]\n",
                 "[typst.fonts]\n",
                 "paths = [\"fonts\"]\n",
                 "system = false\n",
@@ -292,6 +303,15 @@ mod tests {
             ["last 2 Chrome versions", "Firefox ESR"]
         );
         assert!(config.css.custom_media);
+        assert_eq!(
+            config
+                .watch
+                .paths
+                .iter()
+                .map(EcoString::as_str)
+                .collect::<Vec<_>>(),
+            ["components", "plugins/theme.ts"]
+        );
         assert_eq!(config.typst.fonts.paths, ["fonts"]);
         assert!(!config.typst.fonts.system);
         assert!(!config.highlight.enabled);
@@ -328,6 +348,22 @@ mod tests {
 
         assert!(
             format!("{error:#}").contains("unknown field `clean-urls`"),
+            "unexpected error: {error:#}"
+        );
+    }
+
+    #[test]
+    fn rejects_removed_tailwind_setting() {
+        let temp = tempfile::tempdir().unwrap();
+        let config_file = temp.path().join("aster.toml");
+        std::fs::write(&config_file, "[css]\ntailwind = true\n").unwrap();
+
+        let error = load(&config_file)
+            .err()
+            .expect("removed Tailwind setting must be rejected");
+
+        assert!(
+            format!("{error:#}").contains("unknown field `tailwind`"),
             "unexpected error: {error:#}"
         );
     }
