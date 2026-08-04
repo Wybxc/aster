@@ -121,9 +121,12 @@ impl TypstSession {
         let document = warned
             .output
             .map_err(|diagnostics| diagnostic_error(&world, "compilation failed", &diagnostics))?;
+
+        const TYPST_HTML_WARNING: &str = "html export is under active development and incomplete";
         let warnings = warned
             .warnings
             .iter()
+            .filter(|warning| warning.message.as_str() != TYPST_HTML_WARNING)
             .map(|warning| format_warning(&world, warning))
             .collect();
         Ok((document, warnings))

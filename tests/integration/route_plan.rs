@@ -104,10 +104,6 @@ fn route_plan_reports_missing_dynamic_metadata() {
     let outcome = BuildSession::new(project).build().unwrap();
 
     assert!(outcome.outputs.is_empty());
-    assert!(
-        outcome
-            .warnings
-            .iter()
-            .any(|warning| warning.as_str().contains("no <route> metadata"))
-    );
+    assert_eq!(outcome.warnings.len(), 1);
+    assert!(outcome.warnings[0].as_str().contains("no <route> metadata"));
 }

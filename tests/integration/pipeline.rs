@@ -3,6 +3,18 @@ use aster::{BuildSession, Project};
 use crate::common::{install_library, project};
 
 #[test]
+fn build_suppresses_typst_html_warning() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join("pages")).unwrap();
+    std::fs::write(root.join("pages/index.typ"), "#html.elem(\"p\")[Page]").unwrap();
+
+    let outcome = BuildSession::new(project(root)).build().unwrap();
+
+    assert!(outcome.warnings.is_empty(), "{:?}", outcome.warnings);
+}
+
+#[test]
 fn build_reuses_the_session_and_observes_source_changes() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
