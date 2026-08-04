@@ -2,7 +2,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
-use typst::ecow::{EcoString, EcoVec};
+use typst::ecow::{EcoString, EcoVec, eco_vec};
 use typst::foundations::{Dict, Value};
 
 /// Complete `aster.toml` manifest, represented for both Typst and Aster.
@@ -100,7 +100,7 @@ impl Default for AssetsConfig {
 #[derive(Clone, Deserialize, Eq, Hash, PartialEq)]
 #[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub(crate) struct CssConfig {
-    /// Remove whitespace and apply size optimizations to generated CSS.
+    /// Serialize generated CSS without unnecessary whitespace.
     pub minify: bool,
     /// Browserslist queries used for syntax lowering and vendor prefixes.
     pub targets: EcoVec<EcoString>,
@@ -112,7 +112,7 @@ impl Default for CssConfig {
     fn default() -> Self {
         Self {
             minify: true,
-            targets: EcoVec::new(),
+            targets: eco_vec!["defaults".into()],
             custom_media: false,
         }
     }
@@ -230,6 +230,16 @@ mod tests {
         ));
         assert_eq!(manifest.config.highlight.themes.light, "Solarized (light)");
         assert_eq!(manifest.config.highlight.themes.dark, "Solarized (dark)");
+        assert_eq!(
+            manifest
+                .config
+                .css
+                .targets
+                .iter()
+                .map(EcoString::as_str)
+                .collect::<Vec<_>>(),
+            ["defaults"]
+        );
         assert!(manifest.config.watch.paths.is_empty());
     }
 

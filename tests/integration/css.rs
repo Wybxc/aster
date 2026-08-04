@@ -210,6 +210,41 @@ fn transforms_for_configured_targets_without_minifying() {
 }
 
 #[test]
+fn minify_only_compacts_serialized_output() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join("styles")).unwrap();
+    write_css_page(root);
+    std::fs::write(
+        root.join("aster.toml"),
+        "[css]\nminify = false\ntargets = []\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("styles/style.css"),
+        ".page { color: red; color: red; }",
+    )
+    .unwrap();
+
+    let mut session = BuildSession::new(project(root));
+    session.build().unwrap();
+
+    let readable = generated_asset_containing(root, ".page").1;
+    assert_eq!(readable.matches("color: red").count(), 1, "{readable}");
+    assert!(readable.contains('\n'), "{readable}");
+
+    std::fs::write(
+        root.join("aster.toml"),
+        "[css]\nminify = true\ntargets = []\n",
+    )
+    .unwrap();
+    session.build().unwrap();
+
+    let compact = generated_asset_containing(root, ".page").1;
+    assert_eq!(compact, ".page{color:red}");
+}
+
+#[test]
 fn rejects_invalid_browser_targets() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();

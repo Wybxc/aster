@@ -14,5 +14,7 @@ mod highlight;
 mod pipeline;
 #[path = "integration/public.rs"]
 mod public;
+#[path = "integration/resource.rs"]
+mod resource;
 #[path = "integration/route_plan.rs"]
 mod route_plan;

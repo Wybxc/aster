@@ -219,16 +219,22 @@ pub struct PagePublication<'a> {
 impl PagePublication<'_> {
     /// Resolve a source reference relative to the template within the project virtual root.
     pub fn resolve_source(&self, reference: &str) -> Result<VirtualPath> {
+        self.resolve_source_from(&self.template, reference)
+    }
+
+    /// Resolve a source reference relative to a known file in the project virtual root.
+    pub fn resolve_source_from(
+        &self,
+        origin: &VirtualPath,
+        reference: &str,
+    ) -> Result<VirtualPath> {
         if reference.starts_with('/') {
             return VirtualPath::new(reference)
                 .with_context(|| format!("invalid project-root source reference {reference}"));
         }
 
-        let template_dir = self
-            .template
-            .parent()
-            .context("page template has no parent")?;
-        template_dir.join(reference).with_context(|| {
+        let origin_dir = origin.parent().context("source file has no parent")?;
+        origin_dir.join(reference).with_context(|| {
             format!(
                 "source reference {reference} escapes project root {}",
                 self.publication.project_root.display()
@@ -265,6 +271,15 @@ impl PagePublication<'_> {
             .0
             .as_virtual_path()
             .relative_from(self.publication.assets_dir.as_virtual_path()))
+    }
+
+    /// Register a component script under the source file's name.
+    pub fn add_script(&mut self, source: &VirtualPath, content: Bytes) -> Result<EcoString> {
+        let name = source
+            .file_stem()
+            .context("script entry has no file name")?;
+        let asset = self.publication.add_asset(name, Some("js"), content)?;
+        self.reference(&asset)
     }
 
     /// Register an extracted image and return its browser-facing URL from this page.

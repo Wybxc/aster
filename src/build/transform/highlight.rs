@@ -17,7 +17,7 @@ use crate::foundation::config::HighlightConfig;
 use crate::foundation::files::{FileAccessError, ProjectFiles};
 
 use super::{Processor, WalkControl};
-use crate::build::transform::dom::HtmlElementExt;
+use crate::build::transform::dom::{HtmlElementExt, append_to_head};
 
 /// A cheaply cloneable theme-loading error at the memoization seam.
 #[derive(Debug, Clone, thiserror::Error)]
@@ -137,31 +137,10 @@ fn process_element(element: &mut HtmlElement) -> WalkControl {
 }
 
 fn attach_stylesheet(document: &mut HtmlDocument, url: EcoString) {
-    let root = document.root_mut();
-    debug_assert_eq!(root.tag, typst_html::tag::html);
-
-    let head_index = root
-        .children
-        .iter()
-        .position(|node| matches!(node, HtmlNode::Element(element) if element.is_tag(typst_html::tag::head)))
-        .unwrap_or_else(|| {
-            let body_index = root
-                .children
-                .iter()
-                .position(|node| matches!(node, HtmlNode::Element(element) if element.is_tag(typst_html::tag::body)))
-                .unwrap_or(0);
-            root.children
-                .insert(body_index, HtmlElement::new(typst_html::tag::head).into());
-            body_index
-        });
-
     let link = HtmlElement::new(typst_html::tag::link)
         .with_attr(typst_html::attr::rel, "stylesheet")
         .with_attr(typst_html::attr::href, url);
-    let HtmlNode::Element(head) = &mut root.children.make_mut()[head_index] else {
-        unreachable!("head index must identify an element");
-    };
-    head.children.push(HtmlNode::Element(link));
+    append_to_head(document, link);
 }
 
 /// Derive a semantic CSS variable suffix from a slice of scopes.

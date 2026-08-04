@@ -1,7 +1,7 @@
 //! DOM helpers — HTML element attribute access and colour formatting.
 
 use typst::ecow::{EcoString, eco_format};
-use typst_html::{HtmlElement, HtmlNode};
+use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 
 /// Format a syntect [`Color`](syntect::highlighting::Color) as `#rrggbb`.
 pub fn color_to_hex(c: syntect::highlighting::Color) -> EcoString {
@@ -23,6 +23,53 @@ pub trait HtmlElementExt {
     /// inserting `\n` for `<br>` elements so the result reflects
     /// multi-line content in source order.
     fn inner_text(&self) -> String;
+}
+
+/// Append one generated element to the document head, creating it if needed.
+pub fn append_to_head(document: &mut HtmlDocument, element: HtmlElement) {
+    let root = document.root_mut();
+    debug_assert_eq!(root.tag, typst_html::tag::html);
+
+    let head_index = root
+        .children
+        .iter()
+        .position(|node| matches!(node, HtmlNode::Element(element) if element.is_tag(typst_html::tag::head)))
+        .unwrap_or_else(|| {
+            let body_index = root
+                .children
+                .iter()
+                .position(|node| matches!(node, HtmlNode::Element(element) if element.is_tag(typst_html::tag::body)))
+                .unwrap_or(0);
+            root.children
+                .insert(body_index, HtmlElement::new(typst_html::tag::head).into());
+            body_index
+        });
+
+    let HtmlNode::Element(head) = &mut root.children.make_mut()[head_index] else {
+        unreachable!("head index must identify an element");
+    };
+    head.children.push(HtmlNode::Element(element));
+}
+
+/// Append one generated element to the document body, creating it if needed.
+pub fn append_to_body(document: &mut HtmlDocument, element: HtmlElement) {
+    let root = document.root_mut();
+    debug_assert_eq!(root.tag, typst_html::tag::html);
+
+    let body_index = root
+        .children
+        .iter()
+        .position(|node| matches!(node, HtmlNode::Element(element) if element.is_tag(typst_html::tag::body)))
+        .unwrap_or_else(|| {
+            root.children
+                .push(HtmlElement::new(typst_html::tag::body).into());
+            root.children.len() - 1
+        });
+
+    let HtmlNode::Element(body) = &mut root.children.make_mut()[body_index] else {
+        unreachable!("body index must identify an element");
+    };
+    body.children.push(HtmlNode::Element(element));
 }
 
 impl HtmlElementExt for HtmlElement {

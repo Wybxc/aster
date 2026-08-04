@@ -74,8 +74,6 @@ impl BuildSession {
                 &mut publication,
             )?;
             warnings.extend(highlight_warning);
-            let mut processors: [&mut dyn transform::Processor; 3] =
-                [&mut css, &mut image, &mut highlight];
 
             let protocol =
                 load_content(session, &layout).context("failed to load content collections")?;
@@ -98,7 +96,7 @@ impl BuildSession {
                         &job,
                         &library,
                         manifest.config.output.pretty,
-                        &mut processors,
+                        (&mut css, &mut image, &mut highlight),
                         &mut warnings,
                     ),
                     PlannedRouteKind::Endpoint => {
@@ -148,14 +146,24 @@ fn render_page(
     job: &PlannedRoute,
     library: &LazyHash<Library>,
     pretty: bool,
-    processors: &mut [&mut dyn transform::Processor],
+    processors: (
+        &mut transform::CssProcessor<'_>,
+        &mut transform::ImageProcessor,
+        &mut transform::HighlightProcessor,
+    ),
     warnings: &mut Vec<BuildWarning>,
 ) -> Result<()> {
     let (mut document, compiled_warnings) = session.compile_page(&job.template, library)?;
     warnings.extend(compiled_warnings);
+    let resources = transform::ComponentResources::collect(&document)?;
 
     let mut page = publication.page(&job.template, &job.output);
-    transform::process_document(&mut document, &mut page, processors)?;
+    let (css, image, highlight) = processors;
+    {
+        let mut processors: [&mut dyn transform::Processor; 3] = [css, image, highlight];
+        transform::process_document(&mut document, &mut page, &mut processors)?;
+    }
+    resources.apply(&mut document, &mut page, css, session.project_files())?;
     let html = typst_html::html(&document, &typst_html::HtmlOptions { pretty })
         .map_err(|error| anyhow::anyhow!("HTML encoding failed: {error:?}"))?;
     page.add_html(html)

@@ -178,8 +178,11 @@ impl ProjectFiles {
             }),
         }
     }
+}
 
-    /// Record an explicitly configured file or recursive directory dependency.
+#[comemo::track]
+impl ProjectFiles {
+    /// Record a file or recursive directory dependency without reading its contents.
     pub(crate) fn watch(&self, path: &VirtualPath) -> Result<(), FileAccessError> {
         let filesystem_path = path.realize(&self.root).map_err(|error| {
             FileAccessError::Other(eco_format!(
@@ -209,10 +212,7 @@ impl ProjectFiles {
         }
         Ok(())
     }
-}
 
-#[comemo::track]
-impl ProjectFiles {
     pub(crate) fn list(
         &self,
         directory: &VirtualPath,
