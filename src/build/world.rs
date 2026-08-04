@@ -6,8 +6,7 @@ use comemo::{Track, Tracked};
 use termcolor::NoColor;
 use typst::diag::{FileError, SourceDiagnostic, SourceResult, Warned};
 use typst::ecow::EcoVec;
-use typst::engine::{Route, Sink, Traced};
-use typst::foundations::{Bytes, Content, Datetime, Dict, Duration};
+use typst::foundations::{Bytes, Datetime, Dict, Duration};
 use typst::syntax::{FileId, RootedPath, VirtualPath, VirtualRoot};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
@@ -24,7 +23,7 @@ use crate::foundation::{FilesystemDependency, Project, ProjectLayout};
 /// A project-bound Typst build session.
 ///
 /// The project invariant, shared resources, input libraries, world construction,
-/// evaluation, HTML compilation, and source-aware diagnostics live here. Callers
+/// HTML compilation and source-aware diagnostics live here. Callers
 /// never construct or track a Typst world themselves.
 pub struct TypstSession {
     project: Project,
@@ -112,35 +111,7 @@ impl TypstSession {
         )
     }
 
-    pub fn evaluate(
-        &self,
-        entry: &VirtualPath,
-        library: &LazyHash<Library>,
-    ) -> Result<(Content, Vec<BuildWarning>)> {
-        let world = self.world(entry, library);
-        let source = world
-            .source(world.main())
-            .map_err(|error| anyhow::anyhow!("failed to load source: {error}"))?;
-        let mut sink = Sink::new();
-        let traced = Traced::default();
-        let module = typst_eval::eval(
-            (&world as &dyn World).track(),
-            library,
-            traced.track(),
-            sink.track_mut(),
-            Route::default().track(),
-            &source,
-        )
-        .map_err(|diagnostics| diagnostic_error(&world, "evaluation failed", &diagnostics))?;
-        let warnings = sink
-            .warnings()
-            .iter()
-            .map(|warning| format_warning(&world, warning))
-            .collect();
-        Ok((module.content(), warnings))
-    }
-
-    pub fn compile_page(
+    pub fn compile_document(
         &self,
         entry: &VirtualPath,
         library: &LazyHash<Library>,

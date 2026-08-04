@@ -153,7 +153,7 @@ fn render_page(
     ),
     warnings: &mut Vec<BuildWarning>,
 ) -> Result<()> {
-    let (mut document, compiled_warnings) = session.compile_page(&job.template, library)?;
+    let (mut document, compiled_warnings) = session.compile_document(&job.template, library)?;
     warnings.extend(compiled_warnings);
     let resources = transform::ComponentResources::collect(&document)?;
 
@@ -176,9 +176,9 @@ fn render_endpoint(
     library: &LazyHash<Library>,
     warnings: &mut Vec<BuildWarning>,
 ) -> Result<()> {
-    let (evaluated, evaluated_warnings) = session.evaluate(&job.template, library)?;
-    warnings.extend(evaluated_warnings);
-    let content = endpoint::extract(&evaluated)
+    let (document, compiled_warnings) = session.compile_document(&job.template, library)?;
+    warnings.extend(compiled_warnings);
+    let content = endpoint::extract(document.introspector().as_ref())
         .context("invalid endpoint declaration")?
         .context("endpoint route did not produce <endpoint>")?;
     publication.add_generated_file(job.output.clone(), content)

@@ -7,7 +7,6 @@ use std::sync::Arc;
 use aho_corasick::AhoCorasick;
 use anyhow::Result;
 use comemo::Tracked;
-use cssparser::serialize_string;
 use lightningcss::bundler::{Bundler, FileProvider, ResolveResult, SourceProvider};
 use lightningcss::dependencies::{Dependency, DependencyOptions, UrlDependency};
 use lightningcss::stylesheet::{
@@ -28,16 +27,16 @@ use crate::foundation::files::{FileAccessError, ProjectFiles};
 pub(crate) struct CssProcessor<'a> {
     project_files: Tracked<'a, ProjectFiles>,
     config: CssConfig,
-    bundles: HashMap<StylesheetSource, BundledStylesheet>,
+    stylesheets: HashMap<StylesheetSource, Bytes>,
 }
 
 impl<'a> CssProcessor<'a> {
     pub fn new(project_files: Tracked<'a, ProjectFiles>, config: &CssConfig) -> Result<Self> {
-        resolve_targets(config).map_err(|error| anyhow::anyhow!("{error:#}"))?;
+        resolve_targets(&config.targets).map_err(|error| anyhow::anyhow!("{error:#}"))?;
         Ok(Self {
             project_files,
             config: config.clone(),
-            bundles: HashMap::new(),
+            stylesheets: HashMap::new(),
         })
     }
 
@@ -56,13 +55,12 @@ impl<'a> CssProcessor<'a> {
         origin: &VirtualPath,
         code: EcoString,
         page: &mut PagePublication<'_>,
-    ) -> Result<EcoString> {
+    ) -> Result<Bytes> {
         let source = StylesheetSource::Css(CssBundleSource::Memory {
             origin: origin.clone(),
             code,
         });
-        let bundle = self.bundle(source, page.project_root())?;
-        bundle.resolve_references(page)
+        self.resolve_stylesheet(source, page)
     }
 
     fn add_stylesheet(
@@ -75,32 +73,38 @@ impl<'a> CssProcessor<'a> {
             StylesheetKind::Css => StylesheetSource::Css(CssBundleSource::File(source.clone())),
             StylesheetKind::Tailwind => StylesheetSource::Tailwind(source.clone()),
         };
-        let bundle = self.bundle(key, page.project_root())?;
-        let css = bundle.resolve_references(page)?;
-        page.add_bundled_stylesheet(source, css.as_bytes().to_vec())
+        let css = self.resolve_stylesheet(key, page)?;
+        page.add_bundled_stylesheet(source, css)
     }
 
-    fn bundle(
+    fn resolve_stylesheet(
         &mut self,
         source: StylesheetSource,
-        project_root: &Path,
-    ) -> Result<BundledStylesheet> {
-        let bundle = if let Some(bundle) = self.bundles.get(&source) {
-            bundle.clone()
+        page: &mut PagePublication<'_>,
+    ) -> Result<Bytes> {
+        let stylesheet = if let Some(stylesheet) = self.stylesheets.get(&source) {
+            stylesheet.clone()
         } else {
             let bundle = match &source {
-                StylesheetSource::Css(source) => {
-                    bundle_css(self.project_files, source, project_root, &self.config)
-                }
-                StylesheetSource::Tailwind(path) => {
-                    bundle_tailwind_file(self.project_files, path, project_root, &self.config)
-                }
+                StylesheetSource::Css(source) => bundle_css(
+                    self.project_files,
+                    source,
+                    page.project_root(),
+                    &self.config,
+                ),
+                StylesheetSource::Tailwind(path) => bundle_tailwind_file(
+                    self.project_files,
+                    path,
+                    page.project_root(),
+                    &self.config,
+                ),
             }
             .map_err(|error| anyhow::anyhow!("{error:#}"))?;
-            self.bundles.insert(source, bundle.clone());
-            bundle
+            let stylesheet = bundle.resolve_references(page)?;
+            self.stylesheets.insert(source, stylesheet.clone());
+            stylesheet
         };
-        Ok(bundle)
+        Ok(stylesheet)
     }
 }
 
@@ -258,7 +262,7 @@ fn bundle_with_provider(
     files: &ConfinedFileProvider<'_>,
     config: &CssConfig,
 ) -> std::result::Result<BundledStylesheet, BundleError> {
-    let targets = resolve_targets(config)?;
+    let targets = resolve_targets(&config.targets)?;
     let mut flags = ParserFlags::empty();
     flags.set(ParserFlags::CUSTOM_MEDIA, config.custom_media);
     let mut bundler = Bundler::new(
@@ -476,7 +480,11 @@ struct BundledStylesheet {
 }
 
 impl BundledStylesheet {
-    fn resolve_references(self, page: &mut PagePublication<'_>) -> Result<EcoString> {
+    fn resolve_references(self, page: &mut PagePublication<'_>) -> Result<Bytes> {
+        if self.references.is_empty() {
+            return Ok(Bytes::from_string(self.code));
+        }
+
         let mut replacements = Vec::with_capacity(self.references.len());
         for reference in self.references {
             let (placeholder, url) = match reference {
@@ -494,8 +502,8 @@ impl BundledStylesheet {
             };
             replacements.push((placeholder, url));
         }
-        replace_css_placeholders(self.code.to_string(), &replacements)
-            .map(Into::into)
+        replace_css_placeholders(&self.code, &replacements)
+            .map(Bytes::from_string)
             .map_err(|error| anyhow::anyhow!("{error:#}"))
     }
 }
@@ -515,16 +523,12 @@ enum CssReference {
 }
 
 fn replace_css_placeholders(
-    code: String,
+    code: &str,
     replacements: &[(EcoString, EcoString)],
 ) -> std::result::Result<String, BundleError> {
-    if replacements.is_empty() {
-        return Ok(code);
-    }
-
     let serialize = |value: &str| {
         let mut result = String::new();
-        serialize_string(value, &mut result).expect("writing to a string cannot fail");
+        cssparser::serialize_string(value, &mut result).expect("writing to a string cannot fail");
         result
     };
     let patterns = replacements
@@ -535,11 +539,12 @@ fn replace_css_placeholders(
         .iter()
         .map(|(_, replacement)| serialize(replacement))
         .collect::<Vec<_>>();
-    let matcher = AhoCorasick::new(&patterns)
-        .expect("serialized CSS dependency placeholders are valid patterns");
+    let matcher = AhoCorasick::new(&patterns).map_err(|error| BundleError::PlaceholderMatcher {
+        message: eco_format!("{error}"),
+    })?;
     let mut found = vec![false; patterns.len()];
     let mut result = String::with_capacity(code.len());
-    matcher.replace_all_with(&code, &mut result, |matched, _, output| {
+    matcher.replace_all_with(code, &mut result, |matched, _, output| {
         let index = matched.pattern().as_usize();
         found[index] = true;
         output.push_str(&serialized_replacements[index]);
@@ -558,10 +563,7 @@ fn resolve_file_reference(
     origin: &Path,
     reference: &str,
 ) -> std::result::Result<Option<(PathBuf, EcoString)>, BundleError> {
-    if reference.is_empty()
-        || matches!(reference.chars().next(), Some('/' | '#' | '?'))
-        || Url::parse(reference).is_ok()
-    {
+    if reference.is_empty() || matches!(reference.chars().next(), Some('/' | '#' | '?')) {
         return Ok(None);
     }
 
@@ -605,12 +607,13 @@ fn resolve_file_reference(
     Ok(Some((path, suffix.into())))
 }
 
-fn resolve_targets(config: &CssConfig) -> std::result::Result<Targets, BundleError> {
-    if config.targets.is_empty() {
+#[comemo::memoize]
+fn resolve_targets(queries: &EcoVec<EcoString>) -> std::result::Result<Targets, BundleError> {
+    if queries.is_empty() {
         return Ok(Targets::default());
     }
 
-    Browsers::from_browserslist(&config.targets)
+    Browsers::from_browserslist(queries)
         .map(Into::into)
         .map_err(|error| BundleError::InvalidTargets {
             message: eco_format!("{error}"),
@@ -680,6 +683,8 @@ enum BundleError {
     },
     #[error("CSS dependency placeholder {placeholder} was not found in serialized output")]
     MissingPlaceholder { placeholder: EcoString },
+    #[error("failed to build CSS dependency placeholder matcher: {message}")]
+    PlaceholderMatcher { message: EcoString },
     #[error("CSS dependency placeholder collision for {placeholder}")]
     PlaceholderCollision { placeholder: EcoString },
     #[error(transparent)]

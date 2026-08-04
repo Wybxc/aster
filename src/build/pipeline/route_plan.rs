@@ -43,10 +43,11 @@ pub(super) fn plan_routes(
             .context("route template is outside configured pages directory")?;
         let pattern = route::parse_template(relative)
             .with_context(|| format!("invalid route template {}", relative.display()))?;
-        let (evaluated, evaluated_warnings) = session
-            .evaluate(&template, base_library)
+        let (document, compiled_warnings) = session
+            .compile_document(&template, base_library)
             .with_context(|| format!("failed to probe {}", relative.display()))?;
-        let is_endpoint = endpoint::is_declared(&evaluated)
+        let introspector = document.introspector().as_ref();
+        let is_endpoint = endpoint::is_declared(introspector)
             .with_context(|| format!("invalid endpoint declaration in {}", relative.display()))?;
         let kind = if is_endpoint {
             PlannedRouteKind::Endpoint
@@ -54,8 +55,8 @@ pub(super) fn plan_routes(
             PlannedRouteKind::Page
         };
         let param_sets = if pattern.is_dynamic() {
-            warnings.extend(evaluated_warnings);
-            let params = route::extract(&evaluated)
+            warnings.extend(compiled_warnings);
+            let params = route::extract(introspector)
                 .with_context(|| format!("invalid route metadata in {}", relative.display()))?;
             if params.is_empty() {
                 warnings.push(BuildWarning::new(eco_format!(

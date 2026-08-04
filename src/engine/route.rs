@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail, ensure};
 use typst::ecow::{EcoString, EcoVec};
-use typst::foundations::{Content, Value};
-use typst::introspection::MetadataElem;
+use typst::foundations::{Label, Selector, Value};
+use typst::introspection::{Introspector, MetadataElem};
 use typst::syntax::VirtualPath;
 
 /// Parameter assignments for one generated page.
@@ -302,21 +302,15 @@ fn join_names(names: &[EcoString]) -> String {
         .join(", ")
 }
 
-pub(crate) fn extract(content: &Content) -> Result<EcoVec<ParamSet>> {
-    let mut declarations = Vec::new();
-    let _ = content.traverse(&mut |element| {
-        if element
-            .label()
-            .is_some_and(|label| *label.resolve() == *"route")
-            && let Some(metadata) = element.to_packed::<MetadataElem>()
-        {
-            declarations.push(metadata.value.clone());
-        }
-        std::ops::ControlFlow::<()>::Continue(())
-    });
-
+pub(crate) fn extract(introspector: &dyn Introspector) -> Result<EcoVec<ParamSet>> {
+    let selector =
+        Selector::Label(Label::construct("route".into()).expect("route label is non-empty"));
     let mut result = EcoVec::new();
-    for declaration in declarations {
+    for element in introspector.query(&selector) {
+        let Some(metadata) = element.to_packed::<MetadataElem>() else {
+            continue;
+        };
+        let declaration = metadata.value.clone();
         let Value::Array(items) = declaration else {
             bail!("route metadata must be an array of dictionaries");
         };

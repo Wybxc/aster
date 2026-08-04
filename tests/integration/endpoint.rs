@@ -59,7 +59,7 @@ fn endpoint_bytes_are_tracked_and_refreshed_by_a_reused_session() {
 }
 
 #[test]
-fn dynamic_endpoints_are_evaluated_for_each_declared_route() {
+fn contextual_dynamic_endpoints_are_compiled_for_each_declared_route() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
     std::fs::create_dir_all(root.join("pages/feed")).unwrap();
@@ -67,8 +67,10 @@ fn dynamic_endpoints_are_evaluated_for_each_declared_route() {
         root.join("pages/feed/[slug].xml.typ"),
         concat!(
             "#let slug = sys.inputs.at(\"slug\", default: none)\n",
-            "#metadata(((slug: \"alpha\"), (slug: \"beta\"))) <route>\n",
-            "#metadata(if slug == none { none } else { \"<feed>\" + slug + \"</feed>\" }) <endpoint>\n",
+            "#context [\n",
+            "  #metadata(((slug: \"alpha\"), (slug: \"beta\"))) <route>\n",
+            "  #metadata(if slug == none { none } else { \"<feed>\" + slug + \"</feed>\" }) <endpoint>\n",
+            "]\n",
         ),
     )
     .unwrap();

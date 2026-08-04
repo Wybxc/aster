@@ -92,6 +92,34 @@ fn publishes_and_tracks_assets_from_transitive_stylesheets() {
 }
 
 #[test]
+fn reuses_resolved_stylesheet_across_page_output_directories() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join("styles")).unwrap();
+    write_css_page(root);
+    let template = std::fs::read_to_string(root.join("pages/index.typ")).unwrap();
+    std::fs::create_dir_all(root.join("pages/nested")).unwrap();
+    std::fs::write(root.join("pages/nested/index.typ"), template).unwrap();
+    std::fs::write(
+        root.join("styles/style.css"),
+        ".shared { background: url(\"pixel.bin\"); }",
+    )
+    .unwrap();
+    std::fs::write(root.join("styles/pixel.bin"), b"pixel").unwrap();
+
+    BuildSession::new(project(root)).build().unwrap();
+
+    let (css_path, css) = generated_asset_containing(root, ".shared");
+    let css_name = css_path.file_name().unwrap().to_string_lossy();
+    let root_html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
+    let nested_html = std::fs::read_to_string(root.join("dist/nested/index.html")).unwrap();
+    assert!(root_html.contains(&format!("href=\"_assets/{css_name}\"")));
+    assert!(nested_html.contains(&format!("href=\"../_assets/{css_name}\"")));
+    assert!(css.contains("pixel."), "{css}");
+    assert!(!css.contains("pixel.bin"), "{css}");
+}
+
+#[test]
 fn preserves_browser_managed_urls() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();

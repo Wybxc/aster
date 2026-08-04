@@ -250,14 +250,12 @@ impl PagePublication<'_> {
     pub fn add_bundled_stylesheet(
         &mut self,
         entry: &VirtualPath,
-        content: Vec<u8>,
+        content: Bytes,
     ) -> Result<EcoString> {
         let name = entry
             .file_stem()
             .context("stylesheet entry has no file name")?;
-        let asset = self
-            .publication
-            .add_asset(name, Some("css"), Bytes::new(content))?;
+        let asset = self.publication.add_asset(name, Some("css"), content)?;
         self.reference(&asset)
     }
 

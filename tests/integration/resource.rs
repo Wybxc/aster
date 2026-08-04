@@ -182,6 +182,65 @@ fn raw_resources_are_deduplicated_by_component_and_accept_surrounding_whitespace
 }
 
 #[test]
+fn component_resources_preserve_document_order() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join("pages")).unwrap();
+    std::fs::create_dir_all(root.join("components")).unwrap();
+    std::fs::write(
+        root.join("components/outer.typ"),
+        concat!(
+            "#import \"./inner.typ\": inner\n",
+            "#let outer() = [\n",
+            "  #metadata(\"./outer-first.css\") <style>\n",
+            "  #inner()\n",
+            "  #metadata(\"./outer-last.css\") <style>\n",
+            "]\n",
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("components/inner.typ"),
+        "#let inner() = [#metadata(\"./inner.css\") <style>]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("components/outer-first.css"),
+        ".outer-first { color: red; }",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("components/inner.css"),
+        ".inner { color: green; }",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("components/outer-last.css"),
+        ".outer-last { color: blue; }",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("pages/index.typ"),
+        concat!(
+            "#import \"/components/outer.typ\": outer\n",
+            "#html.html({ html.head[]; html.body[#outer()] })\n",
+        ),
+    )
+    .unwrap();
+
+    BuildSession::new(project(root)).build().unwrap();
+
+    let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
+    let first = generated_asset_containing(root, "css", ".outer-first");
+    let inner = generated_asset_containing(root, "css", ".inner");
+    let last = generated_asset_containing(root, "css", ".outer-last");
+    let first = html.find(&first).unwrap();
+    let inner = html.find(&inner).unwrap();
+    let last = html.find(&last).unwrap();
+    assert!(first < inner && inner < last, "{html}");
+}
+
+#[test]
 fn resource_content_rejects_multiple_raw_elements() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
