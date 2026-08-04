@@ -1,0 +1,36 @@
+[project]
+name = "aster-paper"
+
+[site]
+title = "AstroPaper"
+description = "A minimal, responsive, accessible, and SEO-friendly blog theme."
+url = "https://example.com/"
+language = "en"
+author = "Sat Naing"
+profile = "https://satna.ing"
+
+[posts]
+per-page = 3
+per-index = 4
+
+[features]
+theme-toggle = true
+
+[[socials]]
+name = "GitHub"
+href = "https://github.com/satnaing/astro-paper"
+
+[[socials]]
+name = "X"
+href = "https://x.com/username"
+
+[[socials]]
+name = "LinkedIn"
+href = "https://www.linkedin.com/in/username/"
+
+[[socials]]
+name = "Mail"
+href = "mailto:yourmail@gmail.com"
+
+[highlight]
+themes = { light = "InspiredGitHub", dark = "base16-eighties.dark" }

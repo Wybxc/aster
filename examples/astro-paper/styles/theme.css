@@ -1,0 +1,35 @@
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --font-app: ui-monospace, "SFMono-Regular", "Cascadia Code", "Roboto Mono", monospace;
+}
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+  --background: #fdfdfd;
+  --foreground: #282728;
+  --accent: #006cac;
+  --accent-foreground: #ffffff;
+  --muted: #e6e6e6;
+  --muted-foreground: #5d6470;
+  --border: #dedcdc;
+  --code-background: #f3f4f6;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #212737;
+  --foreground: #eaedf3;
+  --accent: #ff6b01;
+  --accent-foreground: #ffffff;
+  --muted: #343f60;
+  --muted-foreground: #b8c1d1;
+  --border: #8f4c1c;
+  --code-background: #171c28;
+}

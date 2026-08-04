@@ -1,0 +1,469 @@
+@import "tailwindcss";
+@import "./theme.css";
+@import "./typography.css";
+
+@layer base {
+  * {
+    box-sizing: border-box;
+    border-color: var(--border);
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground font-app m-0 flex min-h-screen flex-col;
+    letter-spacing: 0;
+  }
+
+  a {
+    @apply text-inherit underline-offset-4;
+  }
+
+  a:hover {
+    @apply text-accent;
+  }
+
+  a:focus-visible,
+  button:focus-visible {
+    @apply outline-accent outline-2 outline-offset-2 outline-dashed;
+  }
+
+  button {
+    font: inherit;
+  }
+
+  ::selection {
+    @apply bg-accent text-accent-foreground;
+  }
+}
+
+@layer components {
+  .skip-link-host {
+    @apply absolute;
+  }
+
+  .skip-link {
+    @apply bg-background text-accent fixed start-4 top-0 z-50 -translate-y-full px-3 py-2 transition-transform;
+  }
+
+  .skip-link:focus {
+    @apply translate-y-4;
+  }
+
+  .site-header,
+  .site-footer,
+  .app-main {
+    @apply mx-auto w-full max-w-3xl px-4;
+  }
+
+  .header-inner {
+    @apply border-border relative flex min-h-20 items-center justify-between border-b;
+  }
+
+  .brand {
+    @apply py-1 text-2xl font-semibold no-underline;
+  }
+
+  .site-nav {
+    @apply flex items-center;
+  }
+
+  .nav-items {
+    @apply m-0 flex list-none items-center gap-3 p-0;
+  }
+
+  .nav-link {
+    @apply block px-2 py-2 font-medium no-underline;
+  }
+
+  .nav-link.active,
+  .icon-button.active {
+    @apply text-accent underline decoration-wavy decoration-2 underline-offset-8;
+  }
+
+  .icon-button {
+    @apply text-foreground relative inline-flex size-10 shrink-0 items-center justify-center border-0 bg-transparent p-2 no-underline;
+  }
+
+  .icon-button:hover {
+    @apply text-accent;
+  }
+
+  .icon {
+    @apply size-6;
+  }
+
+  .menu-button {
+    @apply hidden;
+  }
+
+  .menu-close-icon,
+  .sun-icon {
+    @apply hidden;
+  }
+
+  [data-theme="dark"] .moon-icon {
+    @apply hidden;
+  }
+
+  [data-theme="dark"] .sun-icon {
+    @apply block;
+  }
+
+  .app-main {
+    @apply pb-12 pt-10;
+  }
+
+  .home-main {
+    @apply pb-16;
+  }
+
+  .intro {
+    @apply min-h-72 py-10;
+  }
+
+  .intro h1 {
+    @apply m-0 text-4xl font-bold sm:text-5xl;
+  }
+
+  .hero-title-row {
+    @apply my-4 flex items-center gap-3 sm:my-8;
+  }
+
+  .hero-rss {
+    @apply text-accent inline-flex size-10 items-center justify-center no-underline;
+  }
+
+  .intro-copy {
+    @apply mt-5 max-w-2xl text-lg leading-8;
+  }
+
+  .intro-secondary {
+    @apply mt-2;
+  }
+
+  .home-socials {
+    @apply mt-4 flex items-center gap-2;
+  }
+
+  .primary-link {
+    @apply inline-flex min-h-11 items-center px-4 py-2 font-semibold no-underline;
+  }
+
+  .primary-link {
+    @apply bg-accent text-accent-foreground;
+  }
+
+  .primary-link:hover {
+    @apply text-accent-foreground opacity-90;
+  }
+
+  .home-section {
+    @apply border-border border-t py-9;
+  }
+
+  .section-heading {
+    @apply mb-4 flex items-baseline justify-between gap-4;
+  }
+
+  .section-heading h2 {
+    @apply m-0 text-2xl font-semibold;
+  }
+
+  .all-posts {
+    @apply my-8 text-center;
+  }
+
+  .all-posts a {
+    @apply inline-flex min-h-11 items-center gap-2 px-3 py-2 font-medium no-underline;
+  }
+
+  .all-posts .icon {
+    @apply size-5;
+  }
+
+  .listing-page > h1,
+  .standard-page > h1,
+  .article-header h1 {
+    @apply m-0 text-3xl font-semibold;
+  }
+
+  .page-description {
+    @apply text-muted-foreground mb-8 mt-2 italic;
+  }
+
+  .post-list {
+    @apply m-0 list-none p-0;
+  }
+
+  .post-card {
+    @apply my-7;
+  }
+
+  .post-card-link {
+    @apply text-accent inline-block text-lg font-medium decoration-dashed no-underline;
+  }
+
+  .post-card-link:hover {
+    @apply underline;
+  }
+
+  .post-card h2,
+  .post-card h3 {
+    @apply m-0 text-lg font-medium;
+  }
+
+  .post-card > p {
+    @apply mb-2 mt-2 leading-7;
+  }
+
+  .post-meta {
+    @apply text-muted-foreground mt-1 flex flex-wrap items-center gap-3 text-sm;
+  }
+
+  .updated::before {
+    content: "|";
+    @apply me-3;
+  }
+
+  .tag-row,
+  .article-tags,
+  .tag-cloud {
+    @apply m-0 flex list-none flex-wrap gap-3 p-0;
+  }
+
+  .tag-link {
+    @apply text-accent text-sm decoration-dashed;
+  }
+
+  .tag-link::before {
+    content: "#";
+  }
+
+  .tag-link.large {
+    @apply border-border inline-flex min-h-11 items-center gap-2 border px-3 py-2 text-base no-underline;
+  }
+
+  .tag-count {
+    @apply text-muted-foreground;
+  }
+
+  .pagination {
+    @apply mt-12 flex items-center justify-center gap-4;
+  }
+
+  .pagination-link {
+    @apply inline-flex min-h-11 min-w-28 items-center justify-center gap-2 px-2 font-medium no-underline;
+  }
+
+  .pagination-link .icon {
+    @apply size-5;
+  }
+
+  .pagination-link.disabled {
+    @apply text-muted-foreground opacity-50;
+  }
+
+  .pagination-status {
+    @apply text-muted-foreground whitespace-nowrap;
+  }
+
+  .article-main {
+    @apply relative;
+  }
+
+  .back-link {
+    @apply text-muted-foreground mb-7 inline-flex items-center gap-2 text-sm no-underline;
+  }
+
+  .back-link .icon {
+    @apply size-4;
+  }
+
+  .article-header {
+    @apply mb-8;
+  }
+
+  .article-tags {
+    @apply border-border mt-10 border-t pt-7;
+  }
+
+  .adjacent-posts {
+    @apply border-border mt-8 grid grid-cols-2 gap-5 border-t pt-8;
+  }
+
+  .adjacent-link {
+    @apply flex min-h-20 items-center gap-3 no-underline;
+  }
+
+  .adjacent-link.newer {
+    @apply justify-end text-right;
+  }
+
+  .adjacent-link small {
+    @apply text-muted-foreground mb-1 block;
+  }
+
+  .adjacent-link .icon {
+    @apply size-5 shrink-0;
+  }
+
+  .reading-progress {
+    @apply bg-accent fixed start-0 top-0 z-50 h-1 w-0;
+  }
+
+  .back-to-top {
+    @apply bg-background border-border fixed bottom-6 end-6 z-20 hidden border shadow-sm;
+  }
+
+  .back-to-top.visible {
+    @apply inline-flex;
+  }
+
+  .archive-year {
+    @apply border-border grid grid-cols-[5rem_1fr] border-t py-5;
+  }
+
+  .archive-year h2 {
+    @apply m-0 text-xl font-semibold;
+  }
+
+  .archive-year ul {
+    @apply m-0 list-none p-0;
+  }
+
+  .archive-year li {
+    @apply mb-3 grid grid-cols-[4rem_1fr] gap-3;
+  }
+
+  .archive-year time {
+    @apply text-muted-foreground text-sm;
+  }
+
+  .not-found {
+    @apply flex min-h-[60vh] flex-col items-start justify-center;
+  }
+
+  .error-code {
+    @apply text-accent m-0 text-6xl font-bold;
+  }
+
+  .not-found h1 {
+    @apply mb-2 mt-3 text-3xl;
+  }
+
+  .site-footer {
+    @apply mt-auto;
+  }
+
+  .footer-inner {
+    @apply border-border flex min-h-20 flex-row-reverse items-center justify-between gap-4 border-t py-4 text-sm;
+  }
+
+  .footer-inner p {
+    @apply m-0;
+  }
+
+  .social-links {
+    @apply flex gap-1;
+  }
+
+  .lightbox {
+    @apply fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-6;
+  }
+
+  .lightbox img {
+    @apply max-h-[90vh] max-w-[90vw] object-contain;
+  }
+
+  .lightbox-close {
+    @apply absolute end-4 top-4 size-11 border-0 bg-transparent text-3xl text-white;
+  }
+
+}
+
+@media (max-width: 639px) {
+  .header-inner {
+    @apply min-h-16 items-start py-3;
+  }
+
+  .brand {
+    @apply py-2 text-xl;
+  }
+
+  .site-nav {
+    @apply flex-col items-end;
+  }
+
+  .menu-button {
+    @apply inline-flex;
+  }
+
+  .nav-items {
+    @apply hidden w-44 grid-cols-2 gap-2 pt-3;
+  }
+
+  .nav-items.open {
+    @apply grid;
+  }
+
+  .nav-items li {
+    @apply col-span-2;
+  }
+
+  .nav-items li:has(.theme-button),
+  .nav-items li:has(.icon-button[href]) {
+    @apply col-span-1 flex justify-center;
+  }
+
+  .nav-link {
+    @apply text-center;
+  }
+
+  .menu-button[aria-expanded="true"] .menu-open-icon {
+    @apply hidden;
+  }
+
+  .menu-button[aria-expanded="true"] .menu-close-icon {
+    @apply block;
+  }
+
+  .intro {
+    @apply min-h-64 py-8;
+  }
+
+  .home-socials {
+    @apply items-start;
+  }
+
+  .adjacent-posts {
+    @apply grid-cols-1;
+  }
+
+  .adjacent-link.newer {
+    @apply justify-start text-left;
+  }
+
+  .archive-year {
+    @apply grid-cols-1 gap-3;
+  }
+
+  .footer-inner {
+    @apply flex-col py-6 text-center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
