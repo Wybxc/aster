@@ -217,6 +217,10 @@ pub struct PagePublication<'a> {
 }
 
 impl PagePublication<'_> {
+    pub(crate) fn template(&self) -> &VirtualPath {
+        &self.template
+    }
+
     /// Resolve a source reference relative to the template within the project virtual root.
     pub fn resolve_source(&self, reference: &str) -> Result<VirtualPath> {
         self.resolve_source_from(&self.template, reference)

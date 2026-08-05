@@ -9,7 +9,7 @@
 ]
 
 #let header(active: "") = [
-  #metadata("./header.js") <aster-script>
+  #metadata("./header.js") <aster-module>
   #html.elem("div", attrs: (class: "skip-link-host"))[
     #html.elem("a", attrs: (
       id: "skip-to-content",

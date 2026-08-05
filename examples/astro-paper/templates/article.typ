@@ -32,7 +32,7 @@
     extra-head: head,
   )
 
-  [#metadata("./article.js") <aster-script>]
+  [#metadata("./article.js") <aster-module>]
   html.elem("div", attrs: (id: "reading-progress", class: "reading-progress"))[]
   html.elem("main", attrs: (id: "main-content", class: "app-main article-main"))[
     #html.elem("a", attrs: (class: "back-link", href: "/posts/"))[#arrow-left-icon Back to posts]

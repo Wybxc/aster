@@ -24,6 +24,58 @@ fn write_tailwind_project(root: &Path) {
     std::fs::write(root.join("aster.toml"), "[highlight]\nenabled = false\n").unwrap();
 }
 
+fn write_module_project(root: &Path) {
+    std::fs::create_dir_all(root.join("pages")).unwrap();
+    std::fs::create_dir_all(root.join("components")).unwrap();
+    std::fs::write(
+        root.join("components/widget.typ"),
+        concat!(
+            "#let widget() = [\n",
+            "  #metadata(\"./entry.js\") <aster-module>\n",
+            "  #html.elem(\"div\")[Widget]\n",
+            "]\n",
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("components/entry.js"),
+        "import { value } from './dependency.js'; console.log(value);",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("components/dependency.js"),
+        "export const value = 'dependency';",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("pages/entry.js"),
+        "import { value } from './dependency.js'; console.log(value);",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("pages/dependency.js"),
+        "export const value = 'page dependency';",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("pages/index.typ"),
+        concat!(
+            "#import \"/components/widget.typ\": widget\n",
+            "#html.html({\n",
+            "  html.head[\n",
+            "    #html.elem(\"script\", attrs: (\"type\": \"module\", \"src\": \"./entry.js\"))\n",
+            "    #html.script(\"console.log('inline module source')\", type: \"module\")\n",
+            "    #html.elem(\"script\", attrs: (\"type\": \"module\", \"src\": \"https://example.com/remote.js\"))\n",
+            "    #html.elem(\"script\", attrs: (\"src\": \"./classic.js\"))\n",
+            "  ]\n",
+            "  html.body[#widget()]\n",
+            "})\n",
+        ),
+    )
+    .unwrap();
+    std::fs::write(root.join("aster.toml"), "[highlight]\nenabled = false\n").unwrap();
+}
+
 fn init(destination: &Path) -> Output {
     Command::new(env!("CARGO_BIN_EXE_aster"))
         .arg("init")
@@ -139,6 +191,99 @@ fn build_suggests_installing_missing_tailwind_cli() {
         stderr.contains("hint: install the standalone Tailwind CSS CLI"),
         "{stderr}"
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn build_uses_esbuild_for_module_resources_and_html_scripts() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write_module_project(root);
+    let bin = root.join("bin");
+    std::fs::create_dir(&bin).unwrap();
+    let executable = bin.join("esbuild");
+    std::fs::write(
+        &executable,
+        r#"#!/bin/sh
+outfile=
+metafile=
+entry=
+for argument in "$@"; do
+  case "$argument" in
+    --outfile=*) outfile=${argument#--outfile=} ;;
+    --metafile=*) metafile=${argument#--metafile=} ;;
+    -*) ;;
+    *) entry=$argument ;;
+  esac
+done
+printf 'console.log("bundled dependency");\n' > "$outfile"
+printf '{"inputs":{"entry.js":{},"dependency.js":{}},"outputs":{"%s":{}}}\n' "$outfile" > "$metafile"
+"#,
+    )
+    .unwrap();
+    let mut permissions = std::fs::metadata(&executable).unwrap().permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(&executable, permissions).unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_aster"))
+        .arg("build")
+        .arg("--project")
+        .arg(root)
+        .env("PATH", &bin)
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
+    assert!(html.contains("type=\"module\""), "{html}");
+    assert!(!html.contains("defer"), "{html}");
+    assert!(!html.contains("src=\"./entry.js\""), "{html}");
+    assert!(!html.contains("inline module source"), "{html}");
+    assert!(
+        html.contains("src=\"https://example.com/remote.js\""),
+        "{html}"
+    );
+    assert!(html.contains("src=\"./classic.js\""), "{html}");
+    let script = std::fs::read_dir(root.join("dist/_assets"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .find_map(|path| {
+            let script = std::fs::read_to_string(path).ok()?;
+            script.contains("bundled dependency").then_some(script)
+        })
+        .expect("bundled module asset");
+    assert!(script.contains("bundled dependency"));
+}
+
+#[test]
+fn build_suggests_installing_missing_esbuild_cli() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write_module_project(root);
+    let empty_bin = root.join("empty-bin");
+    std::fs::create_dir(&empty_bin).unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_aster"))
+        .arg("build")
+        .arg("--project")
+        .arg(root)
+        .env("PATH", empty_bin)
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("requires the `esbuild` executable"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("hint: install esbuild"), "{stderr}");
 }
 
 #[test]

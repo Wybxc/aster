@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 
 use anyhow::{Context, Result, bail, ensure};
-use comemo::Tracked;
 use typst::ecow::EcoString;
-use typst::foundations::{Bytes, Content, Packed, Value};
+use typst::foundations::{Content, Packed, Value};
 use typst::introspection::{Introspector, MetadataElem};
 use typst::model::ParbreakElem;
 use typst::syntax::{FileId, Span, VirtualPath, VirtualRoot};
@@ -11,10 +10,10 @@ use typst::text::{LinebreakElem, RawElem, SpaceElem};
 use typst_html::{HtmlDocument, HtmlElement};
 
 use crate::build::output::PagePublication;
-use crate::foundation::files::ProjectFiles;
 
 use super::css::CssProcessor;
 use super::dom::append_to_head;
+use super::script::{ScriptKind, ScriptProcessor};
 
 /// Resources emitted by the component modules used to render one page.
 pub(crate) struct ComponentResources {
@@ -37,6 +36,7 @@ impl ComponentResources {
             let kind = match label.resolve().as_str() {
                 "aster-style" => ResourceKind::Style,
                 "aster-script" => ResourceKind::Script,
+                "aster-module" => ResourceKind::Module,
                 _ => continue,
             };
             let span = content.span();
@@ -82,7 +82,7 @@ impl ComponentResources {
         document: &mut HtmlDocument,
         page: &mut PagePublication<'_>,
         css: &mut CssProcessor<'_>,
-        project_files: Tracked<ProjectFiles>,
+        scripts: &mut ScriptProcessor<'_>,
     ) -> Result<()> {
         for declaration in self.declarations {
             let ResourceDeclaration {
@@ -114,28 +114,29 @@ impl ComponentResources {
                         .spanned(span);
                     append_to_head(document, link);
                 }
-                Resource::Script(source) => {
+                Resource::Script(kind, source) => {
                     let url = match source {
                         ScriptSource::File(reference) => {
                             let source = resolve_source(page, component, &reference)?;
-                            let content = project_files.read(&source).with_context(|| {
+                            scripts.add_file(kind, &source, page).with_context(|| {
                                 format!(
-                                    "failed to read component script {}",
+                                    "failed to build component script {}",
                                     source.get_with_slash()
                                 )
-                            })?;
-                            page.add_script(&source, content)?
+                            })?
                         }
                         ScriptSource::Inline(code) => {
                             let component = component_project_source(&component)?;
-                            page.add_script(component, Bytes::from_string(code))?
+                            scripts.add_raw(kind, component, code, page)?
                         }
                     };
-                    let script = HtmlElement::new(typst_html::tag::script)
-                        .with_attr(typst_html::attr::src, url)
-                        .with_attr(typst_html::attr::defer, "")
-                        .spanned(span);
-                    append_to_head(document, script);
+                    let mut script = HtmlElement::new(typst_html::tag::script)
+                        .with_attr(typst_html::attr::src, url);
+                    script = match kind {
+                        ScriptKind::Classic => script.with_attr(typst_html::attr::defer, ""),
+                        ScriptKind::Module => script.with_attr(typst_html::attr::r#type, "module"),
+                    };
+                    append_to_head(document, script.spanned(span));
                 }
             }
         }
@@ -153,7 +154,7 @@ struct ResourceDeclaration {
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum Resource {
     Style(StyleSource),
-    Script(ScriptSource),
+    Script(ScriptKind, ScriptSource),
 }
 
 impl Resource {
@@ -164,7 +165,12 @@ impl Resource {
                 let path = path.clone().into();
                 Ok(match kind {
                     ResourceKind::Style => Self::Style(StyleSource::File(path)),
-                    ResourceKind::Script => Self::Script(ScriptSource::File(path)),
+                    ResourceKind::Script => {
+                        Self::Script(ScriptKind::Classic, ScriptSource::File(path))
+                    }
+                    ResourceKind::Module => {
+                        Self::Script(ScriptKind::Module, ScriptSource::File(path))
+                    }
                 })
             }
             Value::Content(content) => {
@@ -193,7 +199,12 @@ impl Resource {
                         code,
                         origin: raw_span.id().map_or(declaration, |_| raw_span),
                     }),
-                    ResourceKind::Script => Self::Script(ScriptSource::Inline(code)),
+                    ResourceKind::Script => {
+                        Self::Script(ScriptKind::Classic, ScriptSource::Inline(code))
+                    }
+                    ResourceKind::Module => {
+                        Self::Script(ScriptKind::Module, ScriptSource::Inline(code))
+                    }
                 })
             }
             _ => bail!(
@@ -221,6 +232,7 @@ enum ScriptSource {
 enum ResourceKind {
     Style,
     Script,
+    Module,
 }
 
 impl ResourceKind {
@@ -228,13 +240,14 @@ impl ResourceKind {
         match self {
             Self::Style => "style",
             Self::Script => "script",
+            Self::Module => "module",
         }
     }
 
     fn language(self) -> &'static str {
         match self {
             Self::Style => "css",
-            Self::Script => "js",
+            Self::Script | Self::Module => "js",
         }
     }
 }

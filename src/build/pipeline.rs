@@ -66,6 +66,8 @@ impl BuildSession {
 
             let mut css =
                 transform::CssProcessor::new(session.project_files(), &manifest.config.css)?;
+            let mut scripts =
+                transform::ScriptProcessor::new(session.project_files(), project.root());
             let mut image =
                 transform::ImageProcessor::new(manifest.config.assets.image_inline_threshold);
             let (mut highlight, highlight_warning) = transform::HighlightProcessor::new(
@@ -96,7 +98,7 @@ impl BuildSession {
                         &job,
                         &library,
                         manifest.config.output.pretty,
-                        (&mut css, &mut image, &mut highlight),
+                        (&mut css, &mut scripts, &mut image, &mut highlight),
                         &mut warnings,
                     ),
                     PlannedRouteKind::Endpoint => {
@@ -148,6 +150,7 @@ fn render_page(
     pretty: bool,
     processors: (
         &mut transform::CssProcessor<'_>,
+        &mut transform::ScriptProcessor<'_>,
         &mut transform::ImageProcessor,
         &mut transform::HighlightProcessor,
     ),
@@ -158,12 +161,12 @@ fn render_page(
     let resources = transform::ComponentResources::collect(&document)?;
 
     let mut page = publication.page(&job.template, &job.output);
-    let (css, image, highlight) = processors;
+    let (css, scripts, image, highlight) = processors;
     {
-        let mut processors: [&mut dyn transform::Processor; 3] = [css, image, highlight];
+        let mut processors: [&mut dyn transform::Processor; 4] = [css, scripts, image, highlight];
         transform::process_document(&mut document, &mut page, &mut processors)?;
     }
-    resources.apply(&mut document, &mut page, css, session.project_files())?;
+    resources.apply(&mut document, &mut page, css, scripts)?;
     let html = typst_html::html(&document, &typst_html::HtmlOptions { pretty })
         .map_err(|error| anyhow::anyhow!("HTML encoding failed: {error:?}"))?;
     page.add_html(html)

@@ -3,6 +3,7 @@ pub(super) mod dom;
 mod highlight;
 mod image;
 mod resource;
+mod script;
 
 use anyhow::Result;
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
@@ -13,6 +14,7 @@ pub(crate) use css::CssProcessor;
 pub(crate) use highlight::HighlightProcessor;
 pub(crate) use image::ImageProcessor;
 pub(crate) use resource::ComponentResources;
+pub(crate) use script::ScriptProcessor;
 
 /// One participant in the shared document traversal.
 pub(crate) trait Processor {

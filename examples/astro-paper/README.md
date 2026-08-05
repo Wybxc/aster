@@ -11,7 +11,8 @@ Typography, article heading links, copy buttons, a reading progress indicator,
 RSS, `robots.txt`, and a sitemap. Pagefind and generated Open Graph images are
 intentionally omitted.
 
-Install the standalone Tailwind CSS CLI as `tailwindcss`, then run:
+Install the standalone Tailwind CSS CLI as `tailwindcss` and esbuild as
+`esbuild`, then run:
 
 ```sh
 cargo run -- build -p examples/astro-paper

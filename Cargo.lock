@@ -156,6 +156,7 @@ dependencies = [
  "scopeguard",
  "seahash",
  "serde",
+ "serde_json",
  "syntect",
  "tempfile",
  "termcolor",
