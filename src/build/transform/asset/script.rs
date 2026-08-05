@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use comemo::Tracked;
-use serde::Deserialize;
+use serde::{Deserialize, de::IgnoredAny};
 use typst::ecow::{EcoString, eco_format};
 use typst::foundations::Bytes;
 use typst::syntax::VirtualPath;
@@ -98,12 +98,9 @@ impl ModuleSource {
 
 #[derive(Deserialize)]
 struct EsbuildMetafile {
-    inputs: BTreeMap<String, EsbuildFile>,
-    outputs: BTreeMap<String, EsbuildFile>,
+    inputs: BTreeMap<String, IgnoredAny>,
+    outputs: BTreeMap<String, IgnoredAny>,
 }
-
-#[derive(Deserialize)]
-struct EsbuildFile {}
 
 fn bundle_module(
     project_files: Tracked<ProjectFiles>,

@@ -20,12 +20,12 @@ use crate::foundation::config::FontConfig;
 use crate::foundation::files::{FileAccessError, ProjectFiles, list_typst_files};
 use crate::foundation::{FilesystemDependency, Project, ProjectLayout};
 
-/// A project-bound Typst build session.
+/// A reusable build session bound to one Aster project.
 ///
 /// The project invariant, shared resources, input libraries, world construction,
 /// HTML compilation and source-aware diagnostics live here. Callers
 /// never construct or track a Typst world themselves.
-pub struct TypstSession {
+pub struct BuildSession {
     project: Project,
     font_config: Option<FontConfig>,
     fonts: FontStore,
@@ -33,7 +33,8 @@ pub struct TypstSession {
     now: Time,
 }
 
-impl TypstSession {
+impl BuildSession {
+    /// Create a reusable session bound to a validated project.
     pub fn new(project: Project) -> Self {
         let files = ProjectFiles::new(&project);
         Self {
@@ -45,11 +46,12 @@ impl TypstSession {
         }
     }
 
+    /// Return the project bound to this session.
     pub fn project(&self) -> &Project {
         &self.project
     }
 
-    pub fn reset(&mut self) {
+    pub(crate) fn reset(&mut self) {
         self.files.reset();
         self.now.reset();
     }
@@ -98,11 +100,12 @@ impl TypstSession {
         list_typst_files(self.project_files(), layout.content(), false)
     }
 
-    pub(crate) fn dependencies(&mut self) -> Vec<FilesystemDependency> {
+    /// Return the inputs observed by the latest build attempt.
+    pub fn dependencies(&mut self) -> Vec<FilesystemDependency> {
         self.files.dependencies()
     }
 
-    pub fn library(&self, inputs: Dict) -> LazyHash<Library> {
+    pub(crate) fn library(&self, inputs: Dict) -> LazyHash<Library> {
         LazyHash::new(
             Library::builder()
                 .with_inputs(inputs)
@@ -111,7 +114,7 @@ impl TypstSession {
         )
     }
 
-    pub fn compile_document(
+    pub(crate) fn compile_document(
         &self,
         entry: &VirtualPath,
         library: &LazyHash<Library>,

@@ -7,8 +7,7 @@ use typst::foundations::Dict;
 use typst::syntax::VirtualPath;
 use typst::utils::LazyHash;
 
-use crate::build::BuildWarning;
-use crate::build::world::TypstSession;
+use crate::build::{BuildSession, BuildWarning};
 use crate::engine::route::{self, ParamSet, RoutePath};
 use crate::engine::{content, endpoint};
 use crate::foundation::ProjectLayout;
@@ -28,7 +27,7 @@ pub(super) enum PlannedRouteKind {
 
 /// Discover, classify, and validate every route template before rendering.
 pub(super) fn plan_routes(
-    session: &TypstSession,
+    session: &BuildSession,
     layout: &ProjectLayout,
     base_inputs: &Dict,
     base_library: &LazyHash<Library>,

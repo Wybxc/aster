@@ -9,7 +9,6 @@ use typst::utils::LazyHash;
 
 use crate::build::output::OutputPublication;
 use crate::build::transform;
-use crate::build::world::TypstSession;
 use crate::engine::content::ContentEntry;
 use crate::engine::{content, endpoint};
 use crate::foundation::ProjectLayout;
@@ -38,25 +37,22 @@ pub struct BuildOutcome {
 impl BuildSession {
     /// Build and publish the complete project output tree.
     pub fn build(&mut self) -> Result<BuildOutcome> {
-        self.session.reset();
+        self.reset();
         let outcome = (|| {
-            let config_file = self.session.project().config_file();
-            let config_path = self.session.project().config_path();
+            let config_file = self.project().config_file();
+            let config_path = self.project().config_path();
             let content = self
-                .session
                 .project_files()
                 .read(&config_path)
                 .context("failed to read aster.toml")?;
             let manifest = ProjectManifest::parse(content.as_slice(), &config_file)
                 .context("failed to parse aster.toml")?;
             let layout = ProjectLayout::new(&manifest.config).context("invalid project layout")?;
-            self.session
-                .observe_watch_paths(&layout)
+            self.observe_watch_paths(&layout)
                 .context("failed to inspect configured watch paths")?;
-            self.session
-                .configure_fonts(&manifest.config.typst.fonts, &layout)?;
+            self.configure_fonts(&manifest.config.typst.fonts, &layout)?;
 
-            let session = &self.session;
+            let session = &*self;
             let started = Instant::now();
             let project = session.project().clone();
             let mut warnings = Vec::new();
@@ -123,7 +119,7 @@ impl BuildSession {
 }
 
 fn add_public_files(
-    session: &TypstSession,
+    session: &BuildSession,
     layout: &ProjectLayout,
     publication: &mut OutputPublication,
 ) -> Result<()> {
@@ -143,7 +139,7 @@ fn add_public_files(
 }
 
 fn render_page(
-    session: &TypstSession,
+    session: &BuildSession,
     publication: &mut OutputPublication,
     job: &PlannedRoute,
     library: &LazyHash<Library>,
@@ -171,7 +167,7 @@ fn render_page(
 }
 
 fn render_endpoint(
-    session: &TypstSession,
+    session: &BuildSession,
     publication: &mut OutputPublication,
     job: &PlannedRoute,
     library: &LazyHash<Library>,
@@ -186,7 +182,7 @@ fn render_endpoint(
 }
 
 fn load_content(
-    session: &TypstSession,
+    session: &BuildSession,
     layout: &ProjectLayout,
 ) -> Result<typst::foundations::Value> {
     let mut entries = Vec::new();
