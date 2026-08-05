@@ -7,12 +7,12 @@ use typst::foundations::Dict;
 use typst::syntax::VirtualPath;
 use typst::utils::LazyHash;
 
-use crate::build::{BuildSession, BuildWarning};
+use crate::build::{BuildSession, BuildWarning, files, world};
 use crate::engine::route::{self, ParamSet, RoutePath};
 use crate::engine::{content, endpoint};
 use crate::foundation::ProjectLayout;
 
-pub(super) struct PlannedRoute {
+pub struct PlannedRoute {
     pub kind: PlannedRouteKind,
     pub template: VirtualPath,
     pub output: RoutePath,
@@ -20,19 +20,19 @@ pub(super) struct PlannedRoute {
 }
 
 #[derive(Clone, Copy)]
-pub(super) enum PlannedRouteKind {
+pub enum PlannedRouteKind {
     Page,
     Endpoint,
 }
 
 /// Discover, classify, and validate every route template before rendering.
-pub(super) fn plan_routes(
+pub fn plan_routes(
     session: &BuildSession,
     layout: &ProjectLayout,
     base_inputs: &Dict,
     base_library: &LazyHash<Library>,
 ) -> Result<(Vec<PlannedRoute>, Vec<BuildWarning>)> {
-    let templates = session.route_templates(layout)?;
+    let templates = files::list_typst_files(session.project_files(), layout.pages(), true)?;
     let mut routes = Vec::new();
     let mut warnings = Vec::new();
 
@@ -42,9 +42,9 @@ pub(super) fn plan_routes(
             .context("route template is outside configured pages directory")?;
         let pattern = route::parse_template(relative)
             .with_context(|| format!("invalid route template {}", relative.display()))?;
-        let (document, compiled_warnings) = session
-            .compile_document(&template, base_library)
-            .with_context(|| format!("failed to probe {}", relative.display()))?;
+        let (document, compiled_warnings) =
+            world::compile_document(session, &template, base_library)
+                .with_context(|| format!("failed to probe {}", relative.display()))?;
         let introspector = document.introspector().as_ref();
         let is_endpoint = endpoint::is_declared(introspector)
             .with_context(|| format!("invalid endpoint declaration in {}", relative.display()))?;
@@ -55,7 +55,7 @@ pub(super) fn plan_routes(
         };
         let param_sets = if pattern.is_dynamic() {
             warnings.extend(compiled_warnings);
-            let params = route::extract(introspector)
+            let params = route::extract_params(introspector)
                 .with_context(|| format!("invalid route metadata in {}", relative.display()))?;
             if params.is_empty() {
                 warnings.push(BuildWarning::new(eco_format!(

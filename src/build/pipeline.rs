@@ -17,7 +17,7 @@ use crate::foundation::config::ProjectManifest;
 mod route_plan;
 
 use self::route_plan::{PlannedRoute, PlannedRouteKind, plan_routes};
-use super::{BuildSession, BuildWarning};
+use super::{BuildSession, BuildWarning, files, world};
 
 /// The complete build outcome. No build stage decides terminal formatting or
 /// exit status; the CLI renders this value after the pipeline finishes.
@@ -48,9 +48,12 @@ impl BuildSession {
             let manifest = ProjectManifest::parse(content.as_slice(), &config_file)
                 .context("failed to parse aster.toml")?;
             let layout = ProjectLayout::new(&manifest.config).context("invalid project layout")?;
-            self.observe_watch_paths(&layout)
-                .context("failed to inspect configured watch paths")?;
-            self.configure_fonts(&manifest.config.typst.fonts, &layout)?;
+            for path in layout.watch_paths() {
+                self.files
+                    .watch(path)
+                    .context("failed to inspect configured watch paths")?;
+            }
+            world::configure_fonts(self, &manifest.config.typst.fonts, &layout)?;
 
             let session = &*self;
             let started = Instant::now();
@@ -76,7 +79,7 @@ impl BuildSession {
             let protocol =
                 load_content(session, &layout).context("failed to load content collections")?;
             let base_inputs = content::with_protocol(manifest.inputs, protocol)?;
-            let base_library = session.library(base_inputs.clone());
+            let base_library = world::library(base_inputs.clone());
             let (routes, route_warnings) =
                 plan_routes(session, &layout, &base_inputs, &base_library)?;
             warnings.extend(route_warnings);
@@ -85,7 +88,7 @@ impl BuildSession {
                 let library = if job.params.is_empty() {
                     base_library.clone()
                 } else {
-                    session.library(content::with_route_params(&base_inputs, &job.params)?)
+                    world::library(content::with_route_params(&base_inputs, &job.params)?)
                 };
                 match job.kind {
                     PlannedRouteKind::Page => render_page(
@@ -150,7 +153,8 @@ fn render_page(
     ),
     warnings: &mut Vec<BuildWarning>,
 ) -> Result<()> {
-    let (mut document, compiled_warnings) = session.compile_document(&job.template, library)?;
+    let (mut document, compiled_warnings) =
+        world::compile_document(session, &job.template, library)?;
     warnings.extend(compiled_warnings);
     let resources = transform::ComponentResources::collect(&document)?;
 
@@ -173,7 +177,7 @@ fn render_endpoint(
     library: &LazyHash<Library>,
     warnings: &mut Vec<BuildWarning>,
 ) -> Result<()> {
-    let (document, compiled_warnings) = session.compile_document(&job.template, library)?;
+    let (document, compiled_warnings) = world::compile_document(session, &job.template, library)?;
     warnings.extend(compiled_warnings);
     let content = endpoint::extract(document.introspector().as_ref())
         .context("invalid endpoint declaration")?
@@ -187,7 +191,7 @@ fn load_content(
 ) -> Result<typst::foundations::Value> {
     let mut entries = Vec::new();
 
-    for path in session.content_files(layout)? {
+    for path in files::list_typst_files(session.project_files(), layout.content(), false)? {
         let content_relative = Path::new(path.get_without_slash())
             .strip_prefix(Path::new(layout.content().get_without_slash()))
             .context("content path is outside configured content directory")?;

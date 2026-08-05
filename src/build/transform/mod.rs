@@ -1,5 +1,5 @@
 mod asset;
-pub(super) mod dom;
+mod dom;
 mod highlight;
 
 use anyhow::Result;
@@ -7,11 +7,11 @@ use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 
 use crate::build::output::PagePublication;
 
-pub(crate) use asset::{AssetProcessor, ComponentResources};
-pub(crate) use highlight::HighlightProcessor;
+pub use asset::{AssetProcessor, ComponentResources};
+pub use highlight::HighlightProcessor;
 
 /// One participant in the shared document traversal.
-pub(crate) trait Processor {
+pub trait Processor {
     /// Process one element and optionally suppress traversal into its children.
     fn process_element(
         &mut self,
@@ -30,7 +30,7 @@ pub(crate) trait Processor {
 }
 
 /// Run prepared processors over one document in caller-defined order.
-pub(crate) fn process_document(
+pub fn process_document(
     doc: &mut HtmlDocument,
     page: &mut PagePublication<'_>,
     processors: &mut [&mut dyn Processor],
@@ -54,7 +54,7 @@ pub(crate) fn process_document(
     Ok(())
 }
 
-pub(crate) enum WalkControl {
+pub enum WalkControl {
     Continue,
     SkipChildren,
 }

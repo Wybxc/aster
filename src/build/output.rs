@@ -16,13 +16,13 @@ fn content_hash(data: &[u8]) -> u64 {
 
 /// The stable output location of a generated asset.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct AssetPath(RoutePath);
+pub struct AssetPath(RoutePath);
 
 /// The publication-layer result returned to the build pipeline.
 ///
 /// Publication writes pages, endpoints, and internal assets. Only the two
 /// user-authored route kinds are surfaced as build results.
-pub(crate) struct PublishedOutput {
+pub struct PublishedOutput {
     /// Root directory containing the complete published site.
     pub output_dir: PathBuf,
     /// Published page paths in deterministic route order; generated assets are omitted.
@@ -62,7 +62,7 @@ impl OutputFile {
 ///
 /// Asset identity, browser references, output confinement, stale-file removal,
 /// and filesystem publication all live behind this module's interface.
-pub(crate) struct OutputPublication {
+pub struct OutputPublication {
     project_root: PathBuf,
     output_dir: PathBuf,
     assets_dir: RoutePath,
@@ -87,13 +87,13 @@ impl OutputPublication {
     }
 
     /// Register a file from the project's public directory at the output root.
-    pub(crate) fn add_public_file(&mut self, path: &Path, content: Bytes) -> Result<()> {
+    pub fn add_public_file(&mut self, path: &Path, content: Bytes) -> Result<()> {
         let path = RoutePath::new(path).context("invalid public file path")?;
         self.insert(path, OutputFile::Public(content))
     }
 
     /// Register a generated endpoint at its exact output route.
-    pub(crate) fn add_generated_file(&mut self, path: RoutePath, content: Bytes) -> Result<()> {
+    pub fn add_generated_file(&mut self, path: RoutePath, content: Bytes) -> Result<()> {
         self.insert(path, OutputFile::Generated(content))
     }
 
@@ -193,7 +193,7 @@ pub struct PagePublication<'a> {
 }
 
 impl PagePublication<'_> {
-    pub(crate) fn template(&self) -> &VirtualPath {
+    pub fn template(&self) -> &VirtualPath {
         &self.template
     }
 

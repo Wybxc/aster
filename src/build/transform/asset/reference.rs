@@ -7,7 +7,7 @@ use crate::build::output::PagePublication;
 
 /// The lexical interpretation of a URL-bearing resource attribute.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum UrlReference<'a> {
+pub enum UrlReference<'a> {
     /// A single leading slash resolves from the project virtual root.
     ProjectRoot { path: &'a str, suffix: &'a str },
     /// A path resolves relative to the source that produced the HTML or CSS.
@@ -18,7 +18,7 @@ pub(crate) enum UrlReference<'a> {
     Browser,
 }
 
-pub(crate) fn classify_url(reference: &str) -> UrlReference<'_> {
+pub fn classify_url(reference: &str) -> UrlReference<'_> {
     if reference.is_empty()
         || reference.starts_with("//")
         || matches!(reference.as_bytes().first(), Some(b'#' | b'?'))
@@ -43,7 +43,7 @@ pub(crate) fn classify_url(reference: &str) -> UrlReference<'_> {
 }
 
 /// A classified project reference resolved to the project virtual filesystem.
-pub(crate) struct ProjectReference {
+pub struct ProjectReference {
     pub source: VirtualPath,
     suffix: EcoString,
 }
@@ -54,7 +54,7 @@ impl ProjectReference {
     }
 }
 
-pub(crate) fn resolve_project_reference(
+pub fn resolve_project_reference(
     page: &PagePublication<'_>,
     span: Span,
     reference: UrlReference<'_>,
@@ -73,7 +73,7 @@ pub(crate) fn resolve_project_reference(
     }))
 }
 
-pub(crate) fn source_origin(page: &PagePublication<'_>, span: Span) -> Result<VirtualPath> {
+pub fn source_origin(page: &PagePublication<'_>, span: Span) -> Result<VirtualPath> {
     let Some(id) = span.id() else {
         return Ok(page.template().clone());
     };

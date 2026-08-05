@@ -13,9 +13,9 @@ use typst::ecow::EcoString;
 use typst::syntax::{Span, VirtualPath};
 use typst_html::HtmlElement;
 
+use crate::build::files::ProjectFiles;
 use crate::build::output::PagePublication;
 use crate::foundation::config::{AssetsConfig, CssConfig};
-use crate::foundation::files::ProjectFiles;
 
 use self::{
     css::{CssPipeline, StylesheetKind},
@@ -25,16 +25,16 @@ use self::{
 };
 use super::{Processor, WalkControl, dom::HtmlElementExt};
 
-pub(crate) use self::component::ComponentResources;
+pub use self::component::ComponentResources;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub(super) enum ScriptKind {
+enum ScriptKind {
     Classic,
     Module,
 }
 
 /// Discovers, builds, and publishes resources referenced by a page.
-pub(crate) struct AssetProcessor<'a> {
+pub struct AssetProcessor<'a> {
     project_files: Tracked<'a, ProjectFiles>,
     inline_threshold: usize,
     css: CssPipeline<'a>,
@@ -56,7 +56,7 @@ impl<'a> AssetProcessor<'a> {
         })
     }
 
-    pub(super) fn add_stylesheet_file(
+    fn add_stylesheet_file(
         &mut self,
         source: &VirtualPath,
         page: &mut PagePublication<'_>,
@@ -64,7 +64,7 @@ impl<'a> AssetProcessor<'a> {
         self.css.add_file(source, page)
     }
 
-    pub(super) fn add_stylesheet_raw(
+    fn add_stylesheet_raw(
         &mut self,
         origin: &VirtualPath,
         name: &VirtualPath,
@@ -75,7 +75,7 @@ impl<'a> AssetProcessor<'a> {
         page.add_bundled_stylesheet(name, content)
     }
 
-    pub(super) fn add_script_file(
+    fn add_script_file(
         &mut self,
         kind: ScriptKind,
         source: &VirtualPath,
@@ -84,7 +84,7 @@ impl<'a> AssetProcessor<'a> {
         self.scripts.add_file(kind, source, page)
     }
 
-    pub(super) fn add_script_raw(
+    fn add_script_raw(
         &mut self,
         kind: ScriptKind,
         origin: &VirtualPath,

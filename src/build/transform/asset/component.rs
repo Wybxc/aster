@@ -15,7 +15,7 @@ use super::{AssetProcessor, ScriptKind};
 use crate::build::transform::dom::append_to_head;
 
 /// Resources emitted by the component modules used to render one page.
-pub(crate) struct ComponentResources {
+pub struct ComponentResources {
     declarations: Vec<ResourceDeclaration>,
 }
 

@@ -8,13 +8,13 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use aster::Project;
 
-pub(crate) mod build;
-pub(crate) mod dev;
-pub(crate) mod diag;
-pub(crate) mod init;
-pub(crate) mod watch;
+pub mod build;
+pub mod dev;
+pub mod diag;
+pub mod init;
+pub mod watch;
 
-pub(crate) fn resolve_project(project_dir: Option<PathBuf>) -> Result<Project> {
+fn resolve_project(project_dir: Option<PathBuf>) -> Result<Project> {
     match project_dir {
         Some(dir) => Project::open(dir),
         None => {

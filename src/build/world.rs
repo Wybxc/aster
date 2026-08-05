@@ -5,7 +5,7 @@ use anyhow::Result;
 use comemo::{Track, Tracked};
 use termcolor::NoColor;
 use typst::diag::{FileError, SourceDiagnostic, SourceResult, Warned};
-use typst::ecow::{EcoString, EcoVec};
+use typst::ecow::EcoString;
 use typst::foundations::{Bytes, Datetime, Dict, Duration};
 use typst::syntax::{FileId, RootedPath, VirtualPath, VirtualRoot};
 use typst::text::{Font, FontBook};
@@ -15,139 +15,69 @@ use typst_kit::datetime::Time;
 use typst_kit::diagnostics::{self, DiagnosticFormat, DiagnosticWorld};
 use typst_kit::fonts::FontStore;
 
-use crate::build::BuildWarning;
+use crate::build::files::ProjectFiles;
+use crate::build::{BuildSession, BuildWarning};
+use crate::foundation::ProjectLayout;
 use crate::foundation::config::FontConfig;
-use crate::foundation::files::{FileAccessError, ProjectFiles, list_typst_files};
-use crate::foundation::{FilesystemDependency, Project, ProjectLayout};
 
-/// A reusable build session bound to one Aster project.
-///
-/// The project invariant, shared resources, input libraries, world construction,
-/// HTML compilation and source-aware diagnostics live here. Callers
-/// never construct or track a Typst world themselves.
-pub struct BuildSession {
-    project: Project,
-    font_config: Option<FontConfig>,
-    fonts: FontStore,
-    files: ProjectFiles,
-    now: Time,
+pub fn configure_fonts(
+    session: &mut BuildSession,
+    config: &FontConfig,
+    layout: &ProjectLayout,
+) -> Result<()> {
+    let directories = layout
+        .font_dirs()
+        .map(|path| session.files.directory(path))
+        .collect::<Result<Vec<_>, _>>()?;
+    if session.font_config.as_ref() != Some(config) || !config.paths.is_empty() {
+        session.fonts = discover_fonts(config, directories.iter().map(PathBuf::as_path));
+        session.font_config = Some(config.clone());
+    }
+    Ok(())
 }
 
-impl BuildSession {
-    /// Create a reusable session bound to a validated project.
-    pub fn new(project: Project) -> Self {
-        let files = ProjectFiles::new(&project);
-        Self {
-            project,
-            font_config: None,
-            fonts: FontStore::new(),
-            files,
-            now: Time::system(),
-        }
-    }
+pub fn library(inputs: Dict) -> LazyHash<Library> {
+    LazyHash::new(
+        Library::builder()
+            .with_inputs(inputs)
+            .with_features([Feature::Html].into_iter().collect())
+            .build(),
+    )
+}
 
-    /// Return the project bound to this session.
-    pub fn project(&self) -> &Project {
-        &self.project
-    }
+pub fn compile_document(
+    session: &BuildSession,
+    entry: &VirtualPath,
+    library: &LazyHash<Library>,
+) -> Result<(typst_html::HtmlDocument, Vec<BuildWarning>)> {
+    let world = world(session, entry, library);
+    let warned = compile_html((&world as &dyn World).track());
+    let document = warned
+        .output
+        .map_err(|diagnostics| diagnostic_error(&world, "compilation failed", &diagnostics))?;
 
-    pub(crate) fn reset(&mut self) {
-        self.files.reset();
-        self.now.reset();
-    }
+    const TYPST_HTML_WARNING: &str = "html export is under active development and incomplete";
+    let warnings = warned
+        .warnings
+        .iter()
+        .filter(|warning| warning.message.as_str() != TYPST_HTML_WARNING)
+        .map(|warning| format_warning(&world, warning))
+        .collect();
+    Ok((document, warnings))
+}
 
-    pub(crate) fn project_files(&self) -> Tracked<'_, ProjectFiles> {
-        self.files.track()
-    }
-
-    pub(crate) fn configure_fonts(
-        &mut self,
-        config: &FontConfig,
-        layout: &ProjectLayout,
-    ) -> Result<()> {
-        let directories = layout
-            .font_dirs()
-            .map(|path| self.files.directory(path))
-            .collect::<Result<Vec<_>, _>>()?;
-        if self.font_config.as_ref() != Some(config) || !config.paths.is_empty() {
-            self.fonts = discover_fonts(config, directories.iter().map(PathBuf::as_path));
-            self.font_config = Some(config.clone());
-        }
-        Ok(())
-    }
-
-    pub(crate) fn observe_watch_paths(
-        &self,
-        layout: &ProjectLayout,
-    ) -> Result<(), FileAccessError> {
-        for path in layout.watch_paths() {
-            self.files.watch(path)?;
-        }
-        Ok(())
-    }
-
-    pub(crate) fn route_templates(
-        &self,
-        layout: &ProjectLayout,
-    ) -> Result<EcoVec<VirtualPath>, FileAccessError> {
-        list_typst_files(self.project_files(), layout.pages(), true)
-    }
-
-    pub(crate) fn content_files(
-        &self,
-        layout: &ProjectLayout,
-    ) -> Result<EcoVec<VirtualPath>, FileAccessError> {
-        list_typst_files(self.project_files(), layout.content(), false)
-    }
-
-    /// Return the inputs observed by the latest build attempt.
-    pub fn dependencies(&mut self) -> Vec<FilesystemDependency> {
-        self.files.dependencies()
-    }
-
-    pub(crate) fn library(&self, inputs: Dict) -> LazyHash<Library> {
-        LazyHash::new(
-            Library::builder()
-                .with_inputs(inputs)
-                .with_features([Feature::Html].into_iter().collect())
-                .build(),
-        )
-    }
-
-    pub(crate) fn compile_document(
-        &self,
-        entry: &VirtualPath,
-        library: &LazyHash<Library>,
-    ) -> Result<(typst_html::HtmlDocument, Vec<BuildWarning>)> {
-        let world = self.world(entry, library);
-        let warned = compile_html((&world as &dyn World).track());
-        let document = warned
-            .output
-            .map_err(|diagnostics| diagnostic_error(&world, "compilation failed", &diagnostics))?;
-
-        const TYPST_HTML_WARNING: &str = "html export is under active development and incomplete";
-        let warnings = warned
-            .warnings
-            .iter()
-            .filter(|warning| warning.message.as_str() != TYPST_HTML_WARNING)
-            .map(|warning| format_warning(&world, warning))
-            .collect();
-        Ok((document, warnings))
-    }
-
-    fn world<'a>(
-        &'a self,
-        entry: &VirtualPath,
-        library: &'a LazyHash<Library>,
-    ) -> CompileWorld<'a> {
-        let main = RootedPath::new(VirtualRoot::Project, entry.clone()).intern();
-        CompileWorld {
-            library,
-            fonts: &self.fonts,
-            files: &self.files,
-            main,
-            now: &self.now,
-        }
+fn world<'a>(
+    session: &'a BuildSession,
+    entry: &VirtualPath,
+    library: &'a LazyHash<Library>,
+) -> CompileWorld<'a> {
+    let main = RootedPath::new(VirtualRoot::Project, entry.clone()).intern();
+    CompileWorld {
+        library,
+        fonts: &session.fonts,
+        files: &session.files,
+        main,
+        now: &session.now,
     }
 }
 

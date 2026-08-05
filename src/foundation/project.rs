@@ -47,11 +47,13 @@ impl Project {
         self.root.join("aster.toml")
     }
 
-    pub(crate) fn config_path(&self) -> VirtualPath {
+    /// Return the manifest path in the project virtual filesystem.
+    pub fn config_path(&self) -> VirtualPath {
         VirtualPath::new("aster.toml").expect("the manifest path is a valid virtual path")
     }
 
-    pub(crate) fn realize(&self, path: &VirtualPath) -> PathBuf {
+    /// Resolve a validated virtual project path lexically against the project root.
+    pub fn realize(&self, path: &VirtualPath) -> PathBuf {
         path.realize(&self.root)
             .expect("validated project path must realize within the project root")
     }
@@ -59,7 +61,7 @@ impl Project {
 
 /// Validated project-relative paths used by one build configuration.
 #[derive(Clone)]
-pub(crate) struct ProjectLayout {
+pub struct ProjectLayout {
     pages: VirtualPath,
     content: VirtualPath,
     public: VirtualPath,
@@ -70,7 +72,8 @@ pub(crate) struct ProjectLayout {
 }
 
 impl ProjectLayout {
-    pub(crate) fn new(config: &AsterConfig) -> Result<Self> {
+    /// Validate the configured project and output paths.
+    pub fn new(config: &AsterConfig) -> Result<Self> {
         let pages = project_directory(&config.paths.pages, "pages")?;
         let content = project_directory(&config.paths.content, "content")?;
         let public = project_directory(&config.paths.public, "public")?;
@@ -120,31 +123,38 @@ impl ProjectLayout {
         })
     }
 
-    pub(crate) fn pages(&self) -> &VirtualPath {
+    /// Return the page template directory.
+    pub fn pages(&self) -> &VirtualPath {
         &self.pages
     }
 
-    pub(crate) fn content(&self) -> &VirtualPath {
+    /// Return the content collection directory.
+    pub fn content(&self) -> &VirtualPath {
         &self.content
     }
 
-    pub(crate) fn public(&self) -> &VirtualPath {
+    /// Return the public file directory.
+    pub fn public(&self) -> &VirtualPath {
         &self.public
     }
 
-    pub(crate) fn generated_assets(&self) -> &VirtualPath {
+    /// Return the generated asset directory within the output tree.
+    pub fn generated_assets(&self) -> &VirtualPath {
         &self.generated_assets
     }
 
-    pub(crate) fn output(&self) -> &VirtualPath {
+    /// Return the generated output directory.
+    pub fn output(&self) -> &VirtualPath {
         &self.output
     }
 
-    pub(crate) fn font_dirs(&self) -> impl Iterator<Item = &VirtualPath> {
+    /// Iterate over configured project font directories.
+    pub fn font_dirs(&self) -> impl Iterator<Item = &VirtualPath> {
         self.fonts.iter()
     }
 
-    pub(crate) fn watch_paths(&self) -> impl Iterator<Item = &VirtualPath> {
+    /// Iterate over additional configured watch paths.
+    pub fn watch_paths(&self) -> impl Iterator<Item = &VirtualPath> {
         self.watch_paths.iter()
     }
 }

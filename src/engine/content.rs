@@ -1,3 +1,5 @@
+//! Construction of Aster's lazy Typst content protocol.
+
 use std::collections::BTreeMap;
 use std::sync::LazyLock;
 
@@ -11,17 +13,23 @@ use typst::syntax::{RootedPath, SyntaxNode, parse_code};
 use typst::{Library, LibraryExt};
 use typst_eval::CapturesVisitor;
 
+/// Content protocol version understood by this Aster release.
 pub const PROTOCOL_VERSION: i64 = 5;
+/// Reserved `sys.inputs` key containing Aster's content protocol.
 pub const INPUT_NAME: &str = "_aster";
 
-pub(crate) struct ContentEntry {
+/// One source entry exposed through Aster's lazy content protocol.
+pub struct ContentEntry {
+    /// Collection containing the entry.
     pub collection: EcoString,
+    /// Entry identifier within its collection.
     pub id: EcoString,
+    /// Typst source loaded by the entry's lazy accessors.
     pub source: RootedPath,
 }
 
 /// Build the `_aster` lazy entry manifest, including the empty state.
-pub(crate) fn protocol(entries: impl IntoIterator<Item = ContentEntry>) -> Value {
+pub fn protocol(entries: impl IntoIterator<Item = ContentEntry>) -> Value {
     let mut collections: BTreeMap<EcoString, Vec<(EcoString, RootedPath)>> = BTreeMap::new();
     for entry in entries {
         collections
@@ -32,6 +40,7 @@ pub(crate) fn protocol(entries: impl IntoIterator<Item = ContentEntry>) -> Value
     protocol_value(collections)
 }
 
+/// Add Aster's content protocol to a project input dictionary.
 pub fn with_protocol(config: Dict, protocol: Value) -> Result<Dict> {
     if config.contains(INPUT_NAME) {
         bail!("`{INPUT_NAME}` is reserved for Aster's content protocol");
@@ -41,6 +50,7 @@ pub fn with_protocol(config: Dict, protocol: Value) -> Result<Dict> {
     Ok(inputs)
 }
 
+/// Add one generated route's parameters to a project input dictionary.
 pub fn with_route_params(base: &Dict, params: &crate::engine::route::ParamSet) -> Result<Dict> {
     let mut inputs = base.clone();
     for (name, value) in params {

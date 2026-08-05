@@ -50,7 +50,7 @@ impl RoutePath {
     }
 
     /// Whether two output paths cannot coexist on a portable filesystem.
-    pub(crate) fn conflicts_with(&self, other: &Self) -> bool {
+    pub fn conflicts_with(&self, other: &Self) -> bool {
         let mut left = self
             .as_virtual_path()
             .get_without_slash()
@@ -215,7 +215,8 @@ impl RouteTemplate {
         RoutePath::new(output)
     }
 
-    pub(crate) fn generate_endpoint(&self, params: &ParamSet) -> Result<RoutePath> {
+    /// Generate an exact output path without appending a page extension.
+    pub fn generate_endpoint(&self, params: &ParamSet) -> Result<RoutePath> {
         RoutePath::new(self.generate_path(params)?)
     }
 
@@ -272,7 +273,7 @@ impl RouteTemplate {
     }
 }
 
-pub(crate) fn valid_segment(value: &str) -> bool {
+fn valid_segment(value: &str) -> bool {
     const WINDOWS_DEVICES: &[&str] = &[
         "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
         "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
@@ -302,7 +303,8 @@ fn join_names(names: &[EcoString]) -> String {
         .join(", ")
 }
 
-pub(crate) fn extract(introspector: &dyn Introspector) -> Result<EcoVec<ParamSet>> {
+/// Extract parameter assignments declared through `<aster-route>` metadata.
+pub fn extract_params(introspector: &dyn Introspector) -> Result<EcoVec<ParamSet>> {
     let selector =
         Selector::Label(Label::construct("aster-route".into()).expect("route label is non-empty"));
     let mut result = EcoVec::new();

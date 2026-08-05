@@ -18,23 +18,20 @@ use typst::foundations::Bytes;
 use typst::syntax::VirtualPath;
 use url::Url;
 
+use crate::build::files::{FileAccessError, ProjectFiles};
 use crate::build::output::PagePublication;
 use crate::foundation::config::CssConfig;
-use crate::foundation::files::{FileAccessError, ProjectFiles};
 
 use super::reference::{UrlReference, classify_url};
 
-pub(super) struct CssPipeline<'a> {
+pub struct CssPipeline<'a> {
     project_files: Tracked<'a, ProjectFiles>,
     config: CssConfig,
     stylesheets: HashMap<StylesheetSource, Bytes>,
 }
 
 impl<'a> CssPipeline<'a> {
-    pub(super) fn new(
-        project_files: Tracked<'a, ProjectFiles>,
-        config: &CssConfig,
-    ) -> Result<Self> {
+    pub fn new(project_files: Tracked<'a, ProjectFiles>, config: &CssConfig) -> Result<Self> {
         resolve_targets(&config.targets).map_err(|error| anyhow::anyhow!("{error:#}"))?;
         Ok(Self {
             project_files,
@@ -44,7 +41,7 @@ impl<'a> CssPipeline<'a> {
     }
 
     /// Build and publish a normal CSS entry point declared by a component.
-    pub(super) fn add_file(
+    pub fn add_file(
         &mut self,
         source: &VirtualPath,
         page: &mut PagePublication<'_>,
@@ -53,7 +50,7 @@ impl<'a> CssPipeline<'a> {
     }
 
     /// Transform raw CSS declared by a component.
-    pub(super) fn add_raw(
+    pub fn add_raw(
         &mut self,
         origin: &VirtualPath,
         code: EcoString,
@@ -66,7 +63,7 @@ impl<'a> CssPipeline<'a> {
         self.resolve_stylesheet(source, page)
     }
 
-    pub(super) fn add_stylesheet(
+    pub fn add_stylesheet(
         &mut self,
         kind: StylesheetKind,
         source: &VirtualPath,
@@ -112,7 +109,7 @@ impl<'a> CssPipeline<'a> {
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub(super) enum StylesheetKind {
+pub enum StylesheetKind {
     Css,
     Tailwind,
 }

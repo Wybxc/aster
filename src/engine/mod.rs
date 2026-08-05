@@ -1,8 +1,9 @@
 //! Pure Aster domain logic with no filesystem access.
 //!
-//! Route patterns and the content protocol operate purely on Typst values and
-//! paths. This layer has no dependencies on the foundation or build layers.
+//! Routes, generated-file endpoints, and the content protocol operate purely
+//! on Typst values and paths. This layer has no dependencies on the foundation
+//! or build layers.
 
-pub(crate) mod content;
-pub(crate) mod endpoint;
+pub mod content;
+pub mod endpoint;
 pub mod route;

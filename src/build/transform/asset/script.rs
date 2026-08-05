@@ -12,20 +12,20 @@ use typst::ecow::{EcoString, eco_format};
 use typst::foundations::Bytes;
 use typst::syntax::VirtualPath;
 
+use crate::build::files::{FileAccessError, ProjectFiles};
 use crate::build::output::PagePublication;
-use crate::foundation::files::{FileAccessError, ProjectFiles};
 
 use super::ScriptKind;
 
 /// Builds and publishes scripts declared by Typst components and HTML elements.
-pub(super) struct ScriptPipeline<'a> {
+pub struct ScriptPipeline<'a> {
     project_files: Tracked<'a, ProjectFiles>,
     project_root: PathBuf,
     modules: HashMap<ModuleSource, Bytes>,
 }
 
 impl<'a> ScriptPipeline<'a> {
-    pub(super) fn new(project_files: Tracked<'a, ProjectFiles>, project_root: &Path) -> Self {
+    pub fn new(project_files: Tracked<'a, ProjectFiles>, project_root: &Path) -> Self {
         Self {
             project_files,
             project_root: project_root.to_owned(),
@@ -33,7 +33,7 @@ impl<'a> ScriptPipeline<'a> {
         }
     }
 
-    pub(super) fn add_file(
+    pub fn add_file(
         &mut self,
         kind: ScriptKind,
         source: &VirtualPath,
@@ -46,7 +46,7 @@ impl<'a> ScriptPipeline<'a> {
         page.add_script(source, content)
     }
 
-    pub(super) fn add_raw(
+    pub fn add_raw(
         &mut self,
         kind: ScriptKind,
         origin: &VirtualPath,

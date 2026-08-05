@@ -1,12 +1,12 @@
 use anyhow::{Context, Result};
 use data_url::{DataUrl, mime::Mime};
 
-pub(super) struct DataAsset {
+pub struct DataAsset {
     pub content: Vec<u8>,
     pub extension: Option<&'static str>,
 }
 
-pub(super) fn decode_data_url(url: &str, inline_threshold: usize) -> Result<Option<DataAsset>> {
+pub fn decode_data_url(url: &str, inline_threshold: usize) -> Result<Option<DataAsset>> {
     let Ok(data_url) = DataUrl::process(url) else {
         return Ok(None);
     };

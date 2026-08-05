@@ -19,35 +19,17 @@ use typst_kit::files::{FileStore, FsRoot, SystemFiles};
 use typst_kit::packages::SystemPackages;
 use walkdir::WalkDir;
 
-use crate::foundation::project::Project;
+use crate::foundation::{FilesystemDependency, Project};
 
 /// The tracked filesystem surface of a Typst build session.
 ///
 /// File content accesses use the upstream `FileStore` slot state machine.
 /// Non-content dependencies use small journals rather than a second cache.
-pub(crate) struct ProjectFiles {
+pub struct ProjectFiles {
     root: PathBuf,
     store: FileStore<SystemFiles>,
     directories: Mutex<HashSet<VirtualPath>>,
     watch_files: Mutex<HashSet<VirtualPath>>,
-}
-
-/// A filesystem input observed or explicitly configured for the current build.
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub enum FilesystemDependency {
-    /// A file whose contents were accessed or whose path was configured.
-    File(PathBuf),
-    /// A directory whose recursive membership was accessed or configured.
-    Tree(PathBuf),
-}
-
-impl FilesystemDependency {
-    /// Return the dependency's filesystem path.
-    pub fn path(&self) -> &Path {
-        match self {
-            Self::File(path) | Self::Tree(path) => path,
-        }
-    }
 }
 
 /// A cheaply cloneable filesystem access error at the memoization seam.
@@ -59,7 +41,7 @@ impl FilesystemDependency {
 /// because comemo records the result hash of every tracked call and clones
 /// cached outputs.
 #[derive(Debug, Clone, Hash, PartialEq, Eq, thiserror::Error)]
-pub(crate) enum FileAccessError {
+pub enum FileAccessError {
     #[error("failed to access {path}: {kind:?} ({message})")]
     Io {
         path: Arc<Path>,
@@ -85,7 +67,7 @@ pub(crate) enum FileAccessError {
 
 impl FileAccessError {
     /// Project the stable classification and message out of an `std::io::Error`.
-    pub(crate) fn io(path: Arc<Path>, error: std::io::Error) -> Self {
+    pub fn io(path: Arc<Path>, error: std::io::Error) -> Self {
         Self::Io {
             path,
             kind: error.kind(),
@@ -95,7 +77,7 @@ impl FileAccessError {
 }
 
 impl ProjectFiles {
-    pub(crate) fn new(project: &Project) -> Self {
+    pub fn new(project: &Project) -> Self {
         let root = project.root().to_owned();
         let downloader = SystemDownloader::new(concat!("aster/", env!("CARGO_PKG_VERSION")));
         let packages = SystemPackages::new(downloader);
@@ -109,13 +91,13 @@ impl ProjectFiles {
         }
     }
 
-    pub(crate) fn reset(&mut self) {
+    pub fn reset(&mut self) {
         self.store.reset();
         self.directories.get_mut().unwrap().clear();
         self.watch_files.get_mut().unwrap().clear();
     }
 
-    pub(crate) fn dependencies(&mut self) -> Vec<FilesystemDependency> {
+    pub fn dependencies(&mut self) -> Vec<FilesystemDependency> {
         let (loader, dependencies) = self.store.dependencies();
         let mut observed = dependencies
             .filter_map(|id| loader.resolve(id).ok().map(FilesystemDependency::File))
@@ -147,15 +129,15 @@ impl ProjectFiles {
         observed
     }
 
-    pub(crate) fn source(&self, id: FileId) -> Result<typst::syntax::Source, FileError> {
+    pub fn source(&self, id: FileId) -> Result<typst::syntax::Source, FileError> {
         self.store.source(id)
     }
 
-    pub(crate) fn file(&self, id: FileId) -> Result<Bytes, FileError> {
+    pub fn file(&self, id: FileId) -> Result<Bytes, FileError> {
         self.store.file(id)
     }
 
-    pub(crate) fn directory(&self, path: &VirtualPath) -> Result<PathBuf, FileAccessError> {
+    pub fn directory(&self, path: &VirtualPath) -> Result<PathBuf, FileAccessError> {
         let directory = path.realize(&self.root).map_err(|error| {
             FileAccessError::Other(eco_format!(
                 "invalid project directory {}: {error}",
@@ -183,7 +165,7 @@ impl ProjectFiles {
 #[comemo::track]
 impl ProjectFiles {
     /// Record a file or recursive directory dependency without reading its contents.
-    pub(crate) fn watch(&self, path: &VirtualPath) -> Result<(), FileAccessError> {
+    pub fn watch(&self, path: &VirtualPath) -> Result<(), FileAccessError> {
         let filesystem_path = path.realize(&self.root).map_err(|error| {
             FileAccessError::Other(eco_format!(
                 "invalid watch path {}: {error}",
@@ -213,7 +195,7 @@ impl ProjectFiles {
         Ok(())
     }
 
-    pub(crate) fn list(
+    pub fn list(
         &self,
         directory: &VirtualPath,
         required: bool,
@@ -264,7 +246,7 @@ impl ProjectFiles {
         Ok(files)
     }
 
-    pub(crate) fn read(&self, path: &VirtualPath) -> Result<Bytes, FileAccessError> {
+    pub fn read(&self, path: &VirtualPath) -> Result<Bytes, FileAccessError> {
         let id = RootedPath::new(VirtualRoot::Project, path.clone()).intern();
         self.store.file(id).map_err(|error| FileAccessError::Io {
             path: path
@@ -292,7 +274,7 @@ fn file_error_kind(error: &FileError) -> std::io::ErrorKind {
 }
 
 #[comemo::memoize]
-pub(crate) fn list_typst_files(
+pub fn list_typst_files(
     project_files: Tracked<ProjectFiles>,
     directory: &VirtualPath,
     required: bool,

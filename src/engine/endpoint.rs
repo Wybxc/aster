@@ -1,3 +1,5 @@
+//! Detection and extraction of generated-file endpoint metadata.
+
 use anyhow::{Result, bail};
 use typst::foundations::{Bytes, Label, Selector, Value};
 use typst::introspection::{Introspector, MetadataElem};
@@ -24,12 +26,12 @@ fn declaration(introspector: &dyn Introspector) -> Result<Option<Value>> {
 }
 
 /// Whether a probe identified this source as an endpoint template.
-pub(crate) fn is_declared(introspector: &dyn Introspector) -> Result<bool> {
+pub fn is_declared(introspector: &dyn Introspector) -> Result<bool> {
     Ok(declaration(introspector)?.is_some())
 }
 
 /// Extract the generated-file payload produced for one endpoint route.
-pub(crate) fn extract(introspector: &dyn Introspector) -> Result<Option<Bytes>> {
+pub fn extract(introspector: &dyn Introspector) -> Result<Option<Bytes>> {
     match declaration(introspector)? {
         None => Ok(None),
         Some(Value::Str(content)) => Ok(Some(Bytes::from_string(content))),

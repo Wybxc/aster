@@ -13,9 +13,9 @@ use typst::syntax::{LinkedNode, Span, SyntaxNode, VirtualPath, parse_code, parse
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 
 use crate::build::BuildWarning;
+use crate::build::files::{FileAccessError, ProjectFiles};
 use crate::build::output::{AssetPath, OutputPublication, PagePublication};
 use crate::foundation::config::HighlightConfig;
-use crate::foundation::files::{FileAccessError, ProjectFiles};
 
 use super::{Processor, WalkControl};
 use crate::build::transform::dom::{HtmlElementExt, append_to_head};
@@ -43,7 +43,7 @@ const TYPST_LANGS: &[&str] = &["typ", "typst", "typc", "typm"];
 
 type HighlightToken = (Option<EcoString>, EcoString);
 
-pub(crate) struct HighlightProcessor {
+pub struct HighlightProcessor {
     enabled: bool,
     stylesheet: Option<AssetPath>,
 }

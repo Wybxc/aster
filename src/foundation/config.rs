@@ -1,3 +1,5 @@
+//! Typed views of the project manifest consumed by Aster.
+
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
@@ -6,7 +8,7 @@ use typst::ecow::{EcoString, EcoVec, eco_vec};
 use typst::foundations::{Dict, Value};
 
 /// Complete `aster.toml` manifest, represented for both Typst and Aster.
-pub(crate) struct ProjectManifest {
+pub struct ProjectManifest {
     /// Complete Typst-friendly manifest dictionary for `sys.inputs`.
     pub inputs: Dict,
     /// Strongly typed fields interpreted by Aster itself.
@@ -16,8 +18,10 @@ pub(crate) struct ProjectManifest {
 /// Highlight theme configuration from `aster.toml`.
 #[derive(Clone, Deserialize)]
 #[serde(default)]
-pub(crate) struct HighlightConfig {
+pub struct HighlightConfig {
+    /// Whether syntax highlighting is enabled.
     pub enabled: bool,
+    /// Light and dark syntax-highlighting themes.
     pub themes: Themes,
 }
 
@@ -30,10 +34,13 @@ impl Default for HighlightConfig {
     }
 }
 
+/// Syntax-highlighting themes selected for light and dark color schemes.
 #[derive(Clone, Deserialize)]
 #[serde(default)]
-pub(crate) struct Themes {
+pub struct Themes {
+    /// Syntect theme used for light color schemes.
     pub light: EcoString,
+    /// Syntect theme used for dark color schemes.
     pub dark: EcoString,
 }
 
@@ -46,12 +53,17 @@ impl Default for Themes {
     }
 }
 
+/// Configured project directories.
 #[derive(Clone, Deserialize)]
 #[serde(default, deny_unknown_fields)]
-pub(crate) struct PathsConfig {
+pub struct PathsConfig {
+    /// Directory containing page and endpoint templates.
     pub pages: EcoString,
+    /// Directory containing content collections.
     pub content: EcoString,
+    /// Directory copied verbatim into the output.
     pub public: EcoString,
+    /// Directory receiving the generated site.
     pub output: EcoString,
 }
 
@@ -66,10 +78,13 @@ impl Default for PathsConfig {
     }
 }
 
+/// Generated-output settings.
 #[derive(Clone, Deserialize)]
 #[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
-pub(crate) struct OutputConfig {
+pub struct OutputConfig {
+    /// Directory for generated resources, relative to the output directory.
     pub assets: EcoString,
+    /// Whether generated HTML is formatted with indentation.
     pub pretty: bool,
 }
 
@@ -82,9 +97,11 @@ impl Default for OutputConfig {
     }
 }
 
+/// Resource processing settings.
 #[derive(Clone, Deserialize)]
 #[serde(default, rename_all = "kebab-case")]
-pub(crate) struct AssetsConfig {
+pub struct AssetsConfig {
+    /// Maximum decoded image size retained as a data URL.
     pub image_inline_threshold: usize,
 }
 
@@ -99,7 +116,7 @@ impl Default for AssetsConfig {
 /// CSS bundling and transformation settings.
 #[derive(Clone, Deserialize, Eq, Hash, PartialEq)]
 #[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
-pub(crate) struct CssConfig {
+pub struct CssConfig {
     /// Serialize generated CSS without unnecessary whitespace.
     pub minify: bool,
     /// Browserslist queries used for syntax lowering and vendor prefixes.
@@ -121,20 +138,26 @@ impl Default for CssConfig {
 /// Additional project paths observed by development commands.
 #[derive(Clone, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
-pub(crate) struct WatchConfig {
+pub struct WatchConfig {
+    /// Additional project-relative files or trees observed by watch commands.
     pub paths: EcoVec<EcoString>,
 }
 
+/// Typst compiler settings.
 #[derive(Clone, Default, Deserialize)]
 #[serde(default)]
-pub(crate) struct TypstConfig {
+pub struct TypstConfig {
+    /// Font discovery settings.
     pub fonts: FontConfig,
 }
 
+/// Font discovery settings for Typst compilation.
 #[derive(Clone, Deserialize, Eq, PartialEq)]
 #[serde(default)]
-pub(crate) struct FontConfig {
+pub struct FontConfig {
+    /// Additional project-relative font directories.
     pub paths: EcoVec<EcoString>,
+    /// Whether fonts installed on the system are discovered.
     pub system: bool,
 }
 
@@ -150,19 +173,26 @@ impl Default for FontConfig {
 /// Aster-owned configuration extracted from the project manifest.
 #[derive(Default, Deserialize)]
 #[serde(default)]
-pub(crate) struct AsterConfig {
+pub struct AsterConfig {
+    /// Project directory layout.
     pub paths: PathsConfig,
+    /// Generated-output settings.
     pub output: OutputConfig,
+    /// Resource processing settings.
     pub assets: AssetsConfig,
+    /// CSS transformation settings.
     pub css: CssConfig,
+    /// Additional development watcher inputs.
     pub watch: WatchConfig,
+    /// Typst compiler settings.
     pub typst: TypstConfig,
+    /// Syntax-highlighting settings.
     pub highlight: HighlightConfig,
 }
 
 impl ProjectManifest {
     /// Parse `aster.toml` into its Typst and typed Aster views.
-    pub(crate) fn parse(content: &[u8], path: &Path) -> Result<Self> {
+    pub fn parse(content: &[u8], path: &Path) -> Result<Self> {
         let content = std::str::from_utf8(content)
             .with_context(|| format!("{} is not valid UTF-8", path.display()))?;
         let table: toml::Table = content
