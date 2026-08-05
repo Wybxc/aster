@@ -11,7 +11,121 @@
 
 #show: site.with(path: "/")
 
-#metadata("./index.css") <aster-style>
+#metadata(
+  ```css
+  main {
+    padding-bottom: 4rem;
+  }
+
+  main > header {
+    min-height: 18rem;
+    padding-block: 2.5rem;
+  }
+
+  main > header h1 {
+    font-size: 2.25rem;
+    font-weight: 700;
+    line-height: 2.5rem;
+  }
+
+  main > header > div {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-block: 1rem;
+  }
+
+  main > header > div > a {
+    display: inline-flex;
+    width: 2.5rem;
+    height: 2.5rem;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  main > header > p:first-of-type {
+    max-width: var(--measure);
+    margin-top: 1.25rem;
+    font-size: 1.125rem;
+    line-height: 2rem;
+  }
+
+  main > header > p:last-of-type {
+    margin-top: 0.5rem;
+  }
+
+  main > header > aside {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 1rem;
+  }
+
+  main > section {
+    border-top-width: 1px;
+    padding-block: 2.25rem;
+  }
+
+  main > section > header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  main > section > header h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    line-height: 2rem;
+  }
+
+  main > nav {
+    margin-block: 2rem;
+    text-align: center;
+  }
+
+  main > nav > a {
+    display: inline-flex;
+    min-height: 2.75rem;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    font-weight: 500;
+    text-decoration: none;
+  }
+
+  main > nav svg {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+
+  @media (min-width: 40rem) {
+    main > header h1 {
+      font-size: 3rem;
+      line-height: 1;
+    }
+
+    main > header > div {
+      margin-block: 2rem;
+    }
+  }
+
+  @media (max-width: 639px) {
+    main > header {
+      min-height: 16rem;
+      padding-block: 2rem;
+    }
+
+    main > header > aside {
+      align-items: flex-start;
+    }
+  }
+  ```
+) <aster-style>
+
 #html.main(id: "main-content")[
   #html.header[
     #html.div[

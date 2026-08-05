@@ -21,7 +21,11 @@
     datePublished: post.date,
     author: (author,),
   )
-  let head = html.script(json.encode(structured), type: "application/ld+json")
+  let head = [
+    #html.script(json.encode(structured), type: "application/ld+json")
+    #html.link(rel: "stylesheet", href: "./article.css")
+    #html.script(src: "./article.js", defer: true)
+  ]
 
   show: site.with(
     title: post.title,
@@ -34,8 +38,6 @@
     extra-head: head,
   )
 
-  [#metadata("./article.css") <aster-style>]
-  [#metadata("./article.js") <aster-module>]
   html.progress(
     id: "reading-progress",
     max: 100,

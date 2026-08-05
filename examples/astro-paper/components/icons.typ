@@ -1,5 +1,12 @@
 #let _styled(icon) = [
-  #metadata("./icons.css") <aster-style>
+  #metadata(
+    ```css
+    svg[aria-hidden="true"] {
+      width: 1.5rem;
+      height: 1.5rem;
+    }
+    ```
+  ) <aster-style>
   #icon
 ]
 

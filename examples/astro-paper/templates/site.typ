@@ -42,9 +42,9 @@
         href: settings.site.url + "rss.xml",
       )
       #html.title(document-title)
+      #html.script(src: "./theme-init.js")
+      #html.link(rel: "stylesheet", href: "./site.css")
       #if extra-head != none { extra-head }
-      #html.script(read("./theme-init.js"))
-      #metadata("./site.css") <aster-style>
     ]
     #html.body[
       #header(active: active)

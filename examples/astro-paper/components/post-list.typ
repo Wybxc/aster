@@ -21,7 +21,51 @@
 }
 
 #let post-list(items, heading-level: 2) = [
-  #metadata("./post-list.css") <aster-style>
+  #metadata(
+    ```css
+    .post-list > li {
+      margin-block: 1.75rem;
+    }
+
+    .post-list article > header > :is(h2, h3) {
+      font-size: 1.125rem;
+      font-weight: 500;
+      line-height: 1.75rem;
+    }
+
+    .post-list article > header > :is(h2, h3) > a {
+      display: inline-block;
+      color: var(--accent);
+      text-decoration: none;
+      text-decoration-style: dashed;
+    }
+
+    .post-list article > header > :is(h2, h3) > a:hover {
+      text-decoration: underline;
+    }
+
+    .post-list article > header > p {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.75rem;
+      margin-top: 0.25rem;
+      color: var(--muted-foreground);
+      font-size: 0.875rem;
+      line-height: 1.25rem;
+    }
+
+    .post-list article > header > p > span::before {
+      content: "|";
+      margin-inline-end: 0.75rem;
+    }
+
+    .post-list article > p {
+      margin-block: 0.5rem;
+      line-height: 1.75rem;
+    }
+    ```
+  ) <aster-style>
   #html.ol(class: "post-list", aria-label: "Posts")[
     #for item in items {
       post-card(item, heading-level: heading-level)

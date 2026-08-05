@@ -19,7 +19,43 @@
   active: "archives",
 )
 
-#metadata("./index.css") <aster-style>
+#metadata(
+  ```css
+  main > section {
+    display: grid;
+    grid-template-columns: 5rem 1fr;
+    border-top-width: 1px;
+    padding-block: 1.25rem;
+  }
+
+  main > section h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1.75rem;
+  }
+
+  main > section li {
+    display: grid;
+    grid-template-columns: 4rem 1fr;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+
+  main > section time {
+    color: var(--muted-foreground);
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+
+  @media (max-width: 639px) {
+    main > section {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.75rem;
+    }
+  }
+  ```
+) <aster-style>
+
 #html.main(id: "main-content")[
   #page-header([Archives], [All published articles grouped by year.])
   #for year in years.keys().sorted().rev() {
