@@ -295,6 +295,32 @@ impl PagePublication<'_> {
         Ok(asset.0.as_virtual_path().relative_from(&page_dir))
     }
 
+    /// Return a browser-facing URL from this page to a site-root path.
+    pub fn site_reference(&self, path: &str) -> EcoString {
+        debug_assert!(path.starts_with('/') && !path.starts_with("//"));
+        let page_dir = self
+            .output
+            .as_virtual_path()
+            .parent()
+            .expect("output page must have a parent");
+        let mut reference = EcoString::new();
+        for _ in page_dir
+            .get_without_slash()
+            .split('/')
+            .filter(|segment| !segment.is_empty())
+        {
+            reference.push_str("../");
+        }
+        reference.push_str(
+            path.strip_prefix('/')
+                .expect("site-root path must begin with a slash"),
+        );
+        if reference.is_empty() {
+            reference.push_str("./");
+        }
+        reference
+    }
+
     /// Add the final serialized page to this publication.
     pub fn add_html(self, html: String) -> Result<()> {
         self.publication

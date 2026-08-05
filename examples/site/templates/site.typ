@@ -1,5 +1,5 @@
 #import "/components/navigation.typ": navigation
-#import "/lib.typ": aster-version, root-prefix, settings
+#import "/lib.typ": aster-version, settings
 
 #let site(
   title: settings.site.title,
@@ -7,7 +7,6 @@
   description: settings.site.description,
   body,
 ) = {
-  let root = root-prefix()
   let generator = if aster-version == none { "Aster" } else { "Aster " + aster-version }
   let document-title = if title == settings.site.title {
     title
@@ -40,7 +39,7 @@
       #html.link(rel: "stylesheet", href: stylesheet)
     ]
     html.body[
-      #navigation(root)
+      #navigation()
       #html.elem("main")[#document]
       #html.elem("footer")[
         #html.elem("p")[This example was written by #settings.author.name.]

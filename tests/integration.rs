@@ -12,6 +12,8 @@ mod dependencies;
 mod endpoint;
 #[path = "integration/highlight.rs"]
 mod highlight;
+#[path = "integration/navigation.rs"]
+mod navigation;
 #[path = "integration/pipeline.rs"]
 mod pipeline;
 #[path = "integration/public.rs"]

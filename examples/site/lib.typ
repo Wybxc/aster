@@ -34,14 +34,3 @@
 }
 
 #let settings = toml("/aster.toml")
-
-#let root-prefix() = {
-  let path = route-path.trim("/")
-  if path == "" {
-    ""
-  } else {
-    let segments = path.split("/").len()
-    let depth = if route-path.ends-with("/") { segments } else { segments - 1 }
-    range(depth).map(_ => "../").join()
-  }
-}

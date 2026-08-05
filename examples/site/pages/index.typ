@@ -29,8 +29,8 @@
   together in one Aster project.
 
   #html.elem("nav", attrs: ("aria-label": "Introduction"))[
-    #link("docs/guides/getting-started/")[Read the complete guide]
-    #link("features/")[Review the Typst examples]
+    #link("/docs/guides/getting-started/")[Read the complete guide]
+    #link("/features/")[Review the Typst examples]
   ]
 ]
 
@@ -57,7 +57,7 @@
       let meta = item.metadata
       html.elem("article")[
         #heading(level: 3)[
-          #link("journal/" + item.entry.id + "/")[#meta.title]
+          #link("/journal/" + item.entry.id + "/")[#meta.title]
         ]
         #html.elem("p")[#meta.summary]
       ]
@@ -75,7 +75,7 @@
       let meta = item.metadata
       html.elem("article")[
         #heading(level: 3)[
-          #link("work/" + parts.first() + "-" + parts.last() + "/")[#meta.title]
+          #link("/work/" + parts.first() + "-" + parts.last() + "/")[#meta.title]
         ]
         #html.elem("p")[#meta.summary]
       ]
@@ -92,7 +92,7 @@
       let meta = item.metadata
       html.elem("article")[
         #heading(level: 3)[
-          #link("docs/" + item.entry.id + "/")[#meta.title]
+          #link("/docs/" + item.entry.id + "/")[#meta.title]
         ]
         #html.elem("p")[#meta.summary]
       ]

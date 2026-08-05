@@ -1,4 +1,4 @@
-#import "/lib.typ": get-collection-ids, get-entry, root-prefix, route-params
+#import "/lib.typ": get-collection-ids, get-entry, route-params
 #import "/templates/site.typ": site
 
 #metadata(
@@ -10,7 +10,6 @@
 
 #if entry != none [
   #let meta = entry.metadata()
-  #let root = root-prefix()
 
   #show: site.with(
     title: meta.title,
@@ -23,6 +22,6 @@
 
   #html.elem("article")[#entry.render()]
   #html.elem("nav", attrs: ("aria-label": "Journal navigation"))[
-    #link(root)[Return to all journal entries]
+    #link("/")[Return to all journal entries]
   ]
 ]

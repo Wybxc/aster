@@ -17,6 +17,12 @@ names. A resource path such as `/assets/logo.svg` resolves from the project root
 not from the website root; protocol URLs and `//` references remain external.
 Use `rel="stylesheet"` for ordinary CSS and `rel="tailwind"` for Tailwind input.
 
+In navigation, a single leading slash denotes the generated site's virtual root.
+Aster rewrites root references in links, image-map areas, and form actions into
+URLs relative to each output page, so the same `dist/` tree can be served from
+the domain root or any subdirectory. Explicit relative URLs, fragments, queries,
+protocol URLs, and `//` references are preserved.
+
 Components and pages can declare managed styles, classic scripts, and ES
 modules with `metadata(path) <aster-style>`, `metadata(path) <aster-script>`, and
 `metadata(path) <aster-module>`. Fenced `css` and `js` raw blocks are accepted in

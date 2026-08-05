@@ -1,6 +1,8 @@
 mod asset;
 mod dom;
 mod highlight;
+mod navigation;
+mod url;
 
 use anyhow::Result;
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
@@ -9,6 +11,7 @@ use crate::build::output::PagePublication;
 
 pub use asset::{AssetProcessor, ComponentResources};
 pub use highlight::HighlightProcessor;
+pub use navigation::NavigationProcessor;
 
 /// One participant in the shared document traversal.
 pub trait Processor {

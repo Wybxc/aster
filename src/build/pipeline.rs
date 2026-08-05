@@ -176,7 +176,9 @@ fn render_page(
     let mut page = publication.page(&job.template, &job.output);
     let (assets, highlight) = processors;
     {
-        let mut processors: [&mut dyn transform::Processor; 2] = [assets, highlight];
+        let mut navigation = transform::NavigationProcessor;
+        let mut processors: [&mut dyn transform::Processor; 3] =
+            [assets, &mut navigation, highlight];
         transform::process_document(&mut document, &mut page, &mut processors)?;
     }
     resources.apply(&mut document, &mut page, assets)?;

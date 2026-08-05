@@ -1,4 +1,4 @@
-#import "/lib.typ": get-collection-ids, get-entry, root-prefix, route-params
+#import "/lib.typ": get-collection-ids, get-entry, route-params
 #import "/templates/site.typ": site
 
 #metadata(
@@ -10,7 +10,6 @@
 
 #if entry != none [
   #let meta = entry.metadata()
-  #let root = root-prefix()
 
   #show: site.with(
     title: meta.title,
@@ -24,10 +23,10 @@
   #html.elem("section", attrs: ("aria-label": "Documentation"))[
     #html.elem("aside")[
       #html.elem("nav", attrs: ("aria-label": "Documentation navigation"))[
-        #link(root + "docs/guides/getting-started/")[Getting started]
-        #link(root + "docs/guides/content-collections/")[Collections]
-        #link(root + "docs/reference/routing/")[Routing]
-        #link(root + "docs/reference/configuration/")[Configuration]
+        #link("/docs/guides/getting-started/")[Getting started]
+        #link("/docs/guides/content-collections/")[Collections]
+        #link("/docs/reference/routing/")[Routing]
+        #link("/docs/reference/configuration/")[Configuration]
       ]
     ]
     #html.elem("article")[#entry.render()]

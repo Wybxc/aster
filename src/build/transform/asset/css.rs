@@ -22,7 +22,7 @@ use crate::build::files::{FileAccessError, ProjectFiles};
 use crate::build::output::PagePublication;
 use crate::foundation::config::CssConfig;
 
-use super::reference::{UrlReference, classify_url};
+use super::super::url::{UrlReference, classify_url};
 
 pub struct CssPipeline<'a> {
     project_files: Tracked<'a, ProjectFiles>,
@@ -537,7 +537,7 @@ fn resolve_file_reference(
     reference: &str,
 ) -> std::result::Result<Option<(PathBuf, EcoString)>, BundleError> {
     let (base, path, suffix) = match classify_url(reference) {
-        UrlReference::ProjectRoot { path, suffix } => (
+        UrlReference::Rooted { path, suffix } => (
             Url::from_directory_path(project_root),
             path.trim_start_matches('/'),
             suffix,

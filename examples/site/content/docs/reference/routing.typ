@@ -52,6 +52,22 @@ exact output path. The same protocol exposes all planned paths through
 `sys.inputs._aster.routes.pages` and `.endpoints`, so generated artifacts such
 as sitemaps do not need to duplicate route discovery.
 
+== Site-root navigation
+
+A single leading slash in navigation denotes the generated site's virtual root:
+
+```typ
+#link("/")[Home]
+#link("/docs/reference/routing/")[Routing]
+#html.elem("form", attrs: (action: "/search/",))[]
+```
+
+Aster rewrites these links, image-map areas, and form actions relative to each
+output page. A nested page may therefore contain `../../docs/reference/routing/`
+in its final HTML. The generated tree remains valid whether it is served from
+the domain root or mounted below a path such as `/notes/`. Explicit relative
+URLs, fragments, queries, protocol URLs, and `//` references remain unchanged.
+
 During development, `aster dev` serves the root `404.html` with a 404 status
 when a requested file does not exist. Define `pages/404.typ` to provide this
 page.

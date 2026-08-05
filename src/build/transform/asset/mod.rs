@@ -20,10 +20,14 @@ use crate::foundation::config::{AssetsConfig, CssConfig};
 use self::{
     css::{CssPipeline, StylesheetKind},
     data_url::decode_data_url,
-    reference::{UrlReference, classify_url, resolve_project_reference, source_origin},
+    reference::{resolve_project_reference, source_origin},
     script::ScriptPipeline,
 };
-use super::{Processor, WalkControl, dom::HtmlElementExt};
+use super::{
+    Processor, WalkControl,
+    dom::HtmlElementExt,
+    url::{UrlReference, classify_url},
+};
 
 pub use self::component::ComponentResources;
 
@@ -352,7 +356,7 @@ impl Processor for AssetProcessor<'_> {
             "meta" if publishes_meta(element) => {
                 self.publish_attribute(element, "content", page)?;
             }
-            "a" if element.get_attr("download").is_some() => {
+            "a" | "area" if element.get_attr("download").is_some() => {
                 self.publish_attribute(element, "href", page)?;
             }
             "image" | "use" | "feImage" => {
