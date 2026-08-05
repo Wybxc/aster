@@ -1,5 +1,5 @@
 #import "@preview/exemel:0.1.0": to-xml
-#import "/lib.typ": get-collection
+#import "/lib.typ": get-collection, settings
 
 #let rss-date(value) = {
   let (year, month, day) = value.split("-").map(int)
@@ -17,7 +17,7 @@
 
 #let items = entries.map(item => {
   let metadata = item.metadata
-  let url = sys.inputs.site.url + "journal/" + item.entry.id + "/"
+  let url = settings.site.url + "journal/" + item.entry.id + "/"
   (
     tag: "item",
     children: (
@@ -37,10 +37,10 @@
     (
       tag: "channel",
       children: (
-        (tag: "title", children: (sys.inputs.site.title,)),
-        (tag: "link", children: (sys.inputs.site.url,)),
-        (tag: "description", children: (sys.inputs.site.description,)),
-        (tag: "language", children: (sys.inputs.site.language,)),
+        (tag: "title", children: (settings.site.title,)),
+        (tag: "link", children: (settings.site.url,)),
+        (tag: "description", children: (settings.site.description,)),
+        (tag: "language", children: (settings.site.language,)),
         (tag: "lastBuildDate", children: (rss-date(entries.first().metadata.date),)),
         ..items,
       ),

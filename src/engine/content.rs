@@ -40,14 +40,11 @@ pub fn protocol(entries: impl IntoIterator<Item = ContentEntry>) -> Value {
     protocol_value(collections)
 }
 
-/// Add Aster's content protocol to a project input dictionary.
-pub fn with_protocol(config: Dict, protocol: Value) -> Result<Dict> {
-    if config.contains(INPUT_NAME) {
-        bail!("`{INPUT_NAME}` is reserved for Aster's content protocol");
-    }
-    let mut inputs = config;
+/// Construct the Typst inputs owned by Aster's content protocol.
+pub fn inputs(protocol: Value) -> Dict {
+    let mut inputs = Dict::new();
     inputs.insert(Str::from(INPUT_NAME), protocol);
-    Ok(inputs)
+    inputs
 }
 
 /// Add one generated route's parameters to a project input dictionary.
@@ -58,7 +55,7 @@ pub fn with_route_params(base: &Dict, params: &crate::engine::route::ParamSet) -
             bail!("route parameter `{INPUT_NAME}` is reserved");
         }
         if inputs.contains(name.as_str()) {
-            bail!("route parameter `{name}` conflicts with configuration input");
+            bail!("route parameter `{name}` conflicts with an existing Typst input");
         }
         inputs.insert(
             Str::from(name.as_str()),
@@ -248,12 +245,15 @@ mod tests {
     }
 
     #[test]
-    fn rejects_reserved_inputs() {
-        let mut config = Dict::new();
-        config.insert(Str::from(INPUT_NAME), Value::Int(0));
-        assert!(with_protocol(config, empty()).is_err());
-
-        let base = with_protocol(Dict::new(), empty()).unwrap();
+    fn rejects_route_parameters_that_replace_existing_inputs() {
+        let base = inputs(empty());
+        assert!(
+            with_route_params(
+                &base,
+                &crate::engine::route::ParamSet::from([("site".into(), "route".into())]),
+            )
+            .is_ok()
+        );
         assert!(
             with_route_params(
                 &base,
@@ -262,11 +262,11 @@ mod tests {
             .is_err()
         );
 
-        let mut configured = base;
-        configured.insert(Str::from("site"), Value::Str(Str::from("Aster")));
+        let mut occupied = base;
+        occupied.insert(Str::from("site"), Value::Str(Str::from("occupied")));
         assert!(
             with_route_params(
-                &configured,
+                &occupied,
                 &crate::engine::route::ParamSet::from([("site".into(), "other".into())]),
             )
             .is_err()

@@ -15,13 +15,15 @@ An **Aster project** is a directory containing `aster.toml`. Its conventional di
 
 Project discovery selects the nearest ancestor containing an `aster.toml` file. A build requires `pages/`; `content/`, `styles/`, `assets/`, and `public/` are optional. The project owns watch-path policy: configuration, structural directories, tracked build dependencies, and project-relative `[watch].paths` are watched while `dist/` is always excluded. An additional watch path is classified as a file or recursive directory from its current filesystem state; missing paths remain dependencies and are reclassified after creation. The project root and paths overlapping the output directory are rejected.
 
+Aster deserializes only its build-owned settings from `aster.toml`. The manifest is not injected into Typst inputs; project Typst code reads the complete value explicitly with `toml("/aster.toml")`. Typst inputs are reserved for Aster's content protocol and per-route parameters.
+
 Like Typst's standard filesystem loader, project paths retain their absolute lexical form instead of being canonicalized. Operating-system absolute paths and `..` paths that escape the project root are rejected, while filesystem access follows symbolic links even when their targets are outside the project root. A leading `/` in a project-source interface denotes the project virtual root; paths within that namespace are computed through Typst's `VirtualPath` model.
 
 ## Content protocol
 
 The **content protocol** is the `_aster` Typst input. Rust owns its version and complete value, including the empty state. It maps each collection and entry id to a lazy entry module. Each module exposes `id`, `collection`, and a Typst `render` closure; it does not expose a source path or contain evaluated content or frontmatter.
 
-`_aster` is reserved. Route parameters also cannot replace configuration inputs.
+`_aster` is reserved. Route parameters cannot replace another existing Typst input.
 
 The non-rendering content helpers in `templates/default/lib.typ` expose the protocol through `get-collection`, `get-collection-ids`, and `get-entry`. The file is imported directly by consumers and does not aggregate components or templates. The helpers return the Rust-provided entry modules unchanged. Calling `entry.metadata()` runs a Rust-constructed Typst user closure that dynamically imports the entry source and extracts `<aster-frontmatter>` metadata; `entry.render()` imports the same source and returns its content. Typst's memoized module evaluation is shared when both are called in one build context. These imports become tracked `World::source` dependencies, so editing an entry invalidates only pages that accessed it. Route declarations use `get-collection-ids` when they only need membership and should not depend on entry bodies. Adding, removing, or renaming an entry changes the shared entry manifest and invalidates all page libraries.
 

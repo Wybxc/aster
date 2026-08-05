@@ -47,6 +47,7 @@ fn build_honors_configured_layout_and_processing_options() {
         root.join("routes/index.typ"),
         concat!(
             "#import \"/lib.typ\": get-entry\n",
+            "#let settings = toml(\"/aster.toml\")\n",
             "#let post = get-entry(\"blog\", \"post\")\n",
             "#let metadata = post.metadata()\n",
             "#html.html({\n",
@@ -54,6 +55,8 @@ fn build_honors_configured_layout_and_processing_options() {
             "    #html.elem(\"link\", attrs: (\"rel\": \"stylesheet\", \"href\": \"/styles/style.css\"))\n",
             "  ]\n",
             "  html.body[\n",
+            "    #html.elem(\"p\")[#settings.site.title]\n",
+            "    #html.elem(\"p\")[#sys.inputs.at(\"site\", default: \"not injected\")]\n",
             "    #html.elem(\"p\", attrs: (class: \"page\"))[#metadata.title #post.render()]\n",
             "    #html.elem(\"code\", attrs: (\"data-lang\": \"rust\"))[let x = 1;]\n",
             "    #html.elem(\"img\", attrs: (src: \"data:image/png;base64,AAAA\"))\n",
@@ -70,6 +73,8 @@ fn build_honors_configured_layout_and_processing_options() {
     assert_eq!(outcome.outputs, [root.join("public/index.html")]);
     let html = std::fs::read_to_string(root.join("public/index.html")).unwrap();
     assert!(html.starts_with("<!DOCTYPE html>\n<html>"));
+    assert!(html.contains("Test Site"));
+    assert!(html.contains("not injected"));
     assert!(html.contains("Configured"));
     assert!(html.contains("Entry body"));
     assert!(html.contains("static/generated/style."));

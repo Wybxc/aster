@@ -12,7 +12,7 @@ use crate::build::transform;
 use crate::engine::content::ContentEntry;
 use crate::engine::{content, endpoint};
 use crate::foundation::ProjectLayout;
-use crate::foundation::config::ProjectManifest;
+use crate::foundation::config::AsterConfig;
 
 mod route_plan;
 
@@ -45,15 +45,15 @@ impl BuildSession {
                 .project_files()
                 .read(&config_path)
                 .context("failed to read aster.toml")?;
-            let manifest = ProjectManifest::parse(content.as_slice(), &config_file)
+            let config = AsterConfig::parse(content.as_slice(), &config_file)
                 .context("failed to parse aster.toml")?;
-            let layout = ProjectLayout::new(&manifest.config).context("invalid project layout")?;
+            let layout = ProjectLayout::new(&config).context("invalid project layout")?;
             for path in layout.watch_paths() {
                 self.files
                     .watch(path)
                     .context("failed to inspect configured watch paths")?;
             }
-            world::configure_fonts(self, &manifest.config.typst.fonts, &layout)?;
+            world::configure_fonts(self, &config.typst.fonts, &layout)?;
 
             let session = &*self;
             let started = Instant::now();
@@ -66,11 +66,11 @@ impl BuildSession {
             let mut assets = transform::AssetProcessor::new(
                 session.project_files(),
                 project.root(),
-                &manifest.config.assets,
-                &manifest.config.css,
+                &config.assets,
+                &config.css,
             )?;
             let (mut highlight, highlight_warning) = transform::HighlightProcessor::new(
-                &manifest.config.highlight,
+                &config.highlight,
                 session.project_files(),
                 &mut publication,
             )?;
@@ -78,7 +78,7 @@ impl BuildSession {
 
             let protocol =
                 load_content(session, &layout).context("failed to load content collections")?;
-            let base_inputs = content::with_protocol(manifest.inputs, protocol)?;
+            let base_inputs = content::inputs(protocol);
             let base_library = world::library(base_inputs.clone());
             let (routes, route_warnings) =
                 plan_routes(session, &layout, &base_inputs, &base_library)?;
@@ -96,7 +96,7 @@ impl BuildSession {
                         &mut publication,
                         &job,
                         &library,
-                        manifest.config.output.pretty,
+                        config.output.pretty,
                         (&mut assets, &mut highlight),
                         &mut warnings,
                     ),

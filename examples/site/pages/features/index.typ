@@ -1,4 +1,5 @@
 #import "@preview/example:0.1.0": add, mul
+#import "/lib.typ": settings
 #import "/templates/site.typ": site
 
 #let rows = (
@@ -11,8 +12,8 @@
     result: [The results are #(str(add(8, 5)) + " and " + str(mul(3, 4)) + ".")],
   ),
   (
-    source: [The source reads #raw("sys.inputs.site.edition") from the configuration.],
-    result: [The configured value is #sys.inputs.site.edition.],
+    source: [The source reads #raw("settings.site.edition") from the configuration.],
+    result: [The configured value is #settings.site.edition.],
   ),
 )
 #let build-steps = (

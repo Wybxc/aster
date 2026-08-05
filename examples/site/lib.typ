@@ -1,6 +1,6 @@
 #let _content_state = sys.inputs.at("_aster", default: none)
 #let _collections = if _content_state == none {
-  // The LSP evaluates files without Aster's injected inputs.
+  // The LSP evaluates files without Aster's injected content protocol.
   (:)
 } else {
   assert(
@@ -22,10 +22,6 @@
   _collections.at(collection, default: (:)).at(id, default: none)
 }
 
-#let settings = if "site" in sys.inputs {
-  sys.inputs
-} else {
-  toml("/aster.toml")
-}
+#let settings = toml("/aster.toml")
 
 #let root-prefix(depth) = range(depth).map(_ => "../").join()

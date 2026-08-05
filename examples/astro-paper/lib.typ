@@ -10,11 +10,7 @@
   _content-state.collections
 }
 
-#let settings = if "site" in sys.inputs {
-  sys.inputs
-} else {
-  toml("/aster.toml")
-}
+#let settings = toml("/aster.toml")
 
 #let get-collection(name) = {
   _collections.at(name, default: (:)).values().sorted(key: entry => entry.id)

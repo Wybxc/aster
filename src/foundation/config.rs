@@ -2,18 +2,9 @@
 
 use std::path::Path;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use serde::Deserialize;
 use typst::ecow::{EcoString, EcoVec, eco_vec};
-use typst::foundations::{Dict, Value};
-
-/// Complete `aster.toml` manifest, represented for both Typst and Aster.
-pub struct ProjectManifest {
-    /// Complete Typst-friendly manifest dictionary for `sys.inputs`.
-    pub inputs: Dict,
-    /// Strongly typed fields interpreted by Aster itself.
-    pub config: AsterConfig,
-}
 
 /// Highlight theme configuration from `aster.toml`.
 #[derive(Clone, Deserialize)]
@@ -190,40 +181,30 @@ pub struct AsterConfig {
     pub highlight: HighlightConfig,
 }
 
-impl ProjectManifest {
-    /// Parse `aster.toml` into its Typst and typed Aster views.
+impl AsterConfig {
+    /// Parse Aster-owned settings from `aster.toml`.
     pub fn parse(content: &[u8], path: &Path) -> Result<Self> {
         let content = std::str::from_utf8(content)
             .with_context(|| format!("{} is not valid UTF-8", path.display()))?;
         let table: toml::Table = content
             .parse()
             .with_context(|| format!("failed to parse {}", path.display()))?;
-        let value = toml::Value::Table(table);
-        let config = AsterConfig::deserialize(value.clone())
-            .with_context(|| format!("failed to extract Aster config from {}", path.display()))?;
-        let value = Value::deserialize(value)
-            .with_context(|| format!("failed to convert {} to Typst inputs", path.display()))?;
-
-        let inputs = match value {
-            Value::Dict(d) => d,
-            _ => bail!("unexpected value type from toml conversion"),
-        };
-        Ok(Self { inputs, config })
+        Self::deserialize(toml::Value::Table(table))
+            .with_context(|| format!("failed to extract Aster config from {}", path.display()))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use typst::foundations::{Str, Value};
 
-    fn load(path: &Path) -> Result<ProjectManifest> {
+    fn load(path: &Path) -> Result<AsterConfig> {
         let content = std::fs::read(path)?;
-        ProjectManifest::parse(&content, path)
+        AsterConfig::parse(&content, path)
     }
 
     #[test]
-    fn loads_typst_inputs_and_highlight_config() {
+    fn loads_aster_config_and_ignores_project_fields() {
         let temp = tempfile::tempdir().unwrap();
         let config_file = temp.path().join("aster.toml");
         std::fs::write(
@@ -240,29 +221,12 @@ mod tests {
         )
         .unwrap();
 
-        let manifest = load(&config_file).unwrap();
+        let config = load(&config_file).unwrap();
 
+        assert_eq!(config.highlight.themes.light, "Solarized (light)");
+        assert_eq!(config.highlight.themes.dark, "Solarized (dark)");
         assert_eq!(
-            manifest.inputs.get("title").unwrap(),
-            &Value::Str(Str::from("Aster"))
-        );
-        assert_eq!(
-            manifest.inputs.get("published").unwrap(),
-            &Value::Str(Str::from("1979-05-27T07:32:00Z"))
-        );
-        let Value::Dict(site) = manifest.inputs.get("site").unwrap() else {
-            panic!("site must be a dictionary");
-        };
-        assert_eq!(site.get("enabled").unwrap(), &Value::Bool(true));
-        assert!(matches!(
-            manifest.inputs.get("highlight"),
-            Ok(Value::Dict(_))
-        ));
-        assert_eq!(manifest.config.highlight.themes.light, "Solarized (light)");
-        assert_eq!(manifest.config.highlight.themes.dark, "Solarized (dark)");
-        assert_eq!(
-            manifest
-                .config
+            config
                 .css
                 .targets
                 .iter()
@@ -270,7 +234,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["defaults"]
         );
-        assert!(manifest.config.watch.paths.is_empty());
+        assert!(config.watch.paths.is_empty());
     }
 
     #[test]
@@ -283,13 +247,10 @@ mod tests {
         )
         .unwrap();
 
-        let manifest = load(&config_file).unwrap();
+        let config = load(&config_file).unwrap();
 
-        assert_eq!(manifest.config.highlight.themes.light, "Solarized (light)");
-        assert_eq!(
-            manifest.config.highlight.themes.dark,
-            "base16-eighties.dark"
-        );
+        assert_eq!(config.highlight.themes.light, "Solarized (light)");
+        assert_eq!(config.highlight.themes.dark, "base16-eighties.dark");
     }
 
     #[test]
@@ -323,7 +284,7 @@ mod tests {
         )
         .unwrap();
 
-        let config = load(&config_file).unwrap().config;
+        let config = load(&config_file).unwrap();
 
         assert_eq!(config.paths.pages, "routes");
         assert_eq!(config.paths.content, "content");

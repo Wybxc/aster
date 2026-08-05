@@ -1,6 +1,6 @@
 #let _content_state = sys.inputs.at("_aster", default: none)
 #let _collections = if _content_state == none {
-  // The LSP evaluates files without Aster's injected inputs.
+  // The LSP evaluates files without Aster's injected content protocol.
   (:)
 } else {
   assert(

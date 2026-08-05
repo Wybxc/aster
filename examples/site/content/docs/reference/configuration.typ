@@ -1,15 +1,16 @@
 #metadata((
-  title: "Aster exposes configuration as Typst input.",
+  title: "Typst reads project configuration from TOML.",
   section: "Reference",
   order: 40,
-  summary: "This reference explains how TOML values become Typst inputs and select the syntax highlighting themes.",
+  summary: "This reference explains how Typst and Aster read their respective settings from the project manifest.",
 )) <aster-frontmatter>
 
-= Aster exposes configuration as Typst input.
+= Typst reads project configuration from TOML.
 
-Aster parses `aster.toml` once and exposes the complete value through
-`sys.inputs`. TOML tables become dictionaries and arrays of tables become Typst
-arrays.
+Aster deserializes the build-owned tables in `aster.toml`, but does not copy the
+manifest into `sys.inputs`. Typst's `toml` function reads the complete project
+configuration directly. TOML tables become dictionaries and arrays of tables
+become Typst arrays.
 
 ```toml
 [site]
@@ -21,12 +22,16 @@ label = "Overview"
 href = "./"
 ```
 
-Templates read the resulting values directly through `sys.inputs`:
+Templates can keep the parsed value in a shared library:
 
 ```typ
-#let site = sys.inputs.site
+#let settings = toml("/aster.toml")
+#let site = settings.site
 #html.title(site.title + " · " + site.edition)
 ```
+
+`sys.inputs` is reserved for Aster's content protocol and dynamic route
+parameters, so project configuration has one explicit source of truth.
 
 The `[highlight.themes]` table selects built-in Syntect themes or project-local
 `.tmTheme` files for generated light and dark syntax styles.

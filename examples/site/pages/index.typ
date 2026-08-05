@@ -1,4 +1,4 @@
-#import "/lib.typ": get-collection
+#import "/lib.typ": get-collection, settings
 #import "/templates/site.typ": site
 
 #let journal = {
@@ -19,7 +19,7 @@
     .sorted(key: item => item.metadata.order)
 }
 
-#show: site.with(description: sys.inputs.site.description)
+#show: site.with(description: settings.site.description)
 
 #html.elem("header")[
   #heading(level: 1)[Aster Field Notes]
