@@ -180,7 +180,7 @@ fn render_endpoint(
     warnings.extend(compiled_warnings);
     let content = endpoint::extract(document.introspector().as_ref())
         .context("invalid endpoint declaration")?
-        .context("endpoint route did not produce <endpoint>")?;
+        .context("endpoint route did not produce <aster-endpoint>")?;
     publication.add_generated_file(job.output.clone(), content)
 }
 

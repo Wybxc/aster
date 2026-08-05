@@ -11,7 +11,7 @@
   } else {
     ()
   }
-) <route>
+) <aster-route>
 
 #let current = int(sys.inputs.at("page", default: "1"))
 

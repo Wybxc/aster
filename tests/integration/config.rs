@@ -39,7 +39,7 @@ fn build_honors_configured_layout_and_processing_options() {
     .unwrap();
     std::fs::write(
         root.join("entries/blog/post.typ"),
-        "#metadata((title: \"Configured\",)) <frontmatter>\n\nEntry body",
+        "#metadata((title: \"Configured\",)) <aster-frontmatter>\n\nEntry body",
     )
     .unwrap();
     std::fs::write(root.join("styles/style.css"), ".page { color: red; }").unwrap();

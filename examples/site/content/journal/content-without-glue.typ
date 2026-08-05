@@ -3,7 +3,7 @@
   date: "2026-07-18",
   summary: "Aster adds a lazy Rust module boundary without changing the Typst files stored in a collection.",
   tags: ("content", "collections", "routing"),
-)) <frontmatter>
+)) <aster-frontmatter>
 
 = Collections remain ordinary Typst files.
 

@@ -11,7 +11,7 @@
     #html.meta(name: "viewport", content: "width=device-width, initial-scale=1")
     #html.meta(name: "description", content: description)
     #html.title(title)
-    #metadata("/styles/site.css") <style>
+    #metadata("/styles/site.css") <aster-style>
   ]
   html.body[
     #navigation()

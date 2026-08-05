@@ -35,8 +35,8 @@ impl ComponentResources {
                 continue;
             };
             let kind = match label.resolve().as_str() {
-                "style" => ResourceKind::Style,
-                "script" => ResourceKind::Script,
+                "aster-style" => ResourceKind::Style,
+                "aster-script" => ResourceKind::Script,
                 _ => continue,
             };
             let span = content.span();

@@ -3,12 +3,12 @@
   section: "Reference",
   order: 30,
   summary: "This reference explains how static, parameterized, mixed, and spread templates define output routes.",
-)) <frontmatter>
+)) <aster-frontmatter>
 
 = Template file names define output routes.
 
 Every `.typ` file under `pages/` is a route template. Templates with
-`<endpoint>` metadata generate arbitrary files; all others generate HTML pages.
+`<aster-endpoint>` metadata generate arbitrary files; all others generate HTML pages.
 Brackets in a template's relative path declare route parameters.
 
 #table(
@@ -30,7 +30,7 @@ Dynamic templates declare their parameter sets through labelled metadata:
 ```typ
 #metadata(
   get-collection-ids("docs").map(path => (path: path))
-) <route>
+) <aster-route>
 ```
 
 Aster validates missing parameters, extra parameters, unsafe segments, and

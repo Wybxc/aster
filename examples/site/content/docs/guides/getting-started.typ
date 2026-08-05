@@ -3,7 +3,7 @@
   section: "Guides",
   order: 10,
   summary: "This guide explains how to build the example once or rebuild it while files change.",
-)) <frontmatter>
+)) <aster-frontmatter>
 
 = An Aster project needs only a few files.
 

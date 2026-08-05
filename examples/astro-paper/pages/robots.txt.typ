@@ -2,4 +2,4 @@
 
 #let content = "User-agent: *\nAllow: /\n\nSitemap: " + settings.site.url + "sitemap.xml\n"
 
-#metadata(content) <endpoint>
+#metadata(content) <aster-endpoint>

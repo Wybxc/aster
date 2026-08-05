@@ -60,7 +60,7 @@ pub(super) fn plan_routes(
                 .with_context(|| format!("invalid route metadata in {}", relative.display()))?;
             if params.is_empty() {
                 warnings.push(BuildWarning::new(eco_format!(
-                    "{} has a dynamic route pattern but no <route> metadata",
+                    "{} has a dynamic route pattern but no <aster-route> metadata",
                     relative.display()
                 )));
             }

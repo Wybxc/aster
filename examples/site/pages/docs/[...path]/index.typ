@@ -3,7 +3,7 @@
 
 #metadata(
   get-collection-ids("docs").map(path => (path: path))
-) <route>
+) <aster-route>
 
 #let path = sys.inputs.at("path", default: "")
 #let entry = get-entry("docs", path)

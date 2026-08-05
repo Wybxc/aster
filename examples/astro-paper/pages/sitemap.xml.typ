@@ -37,4 +37,4 @@
   )),
 )
 
-#metadata(to-xml(sitemap, pretty: true)) <endpoint>
+#metadata(to-xml(sitemap, pretty: true)) <aster-endpoint>

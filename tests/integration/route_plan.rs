@@ -20,7 +20,7 @@ fn fixture(files: &[&str]) -> (tempfile::TempDir, Project) {
 fn write_routes(project: &Project, template: &str, routes: &str) {
     std::fs::write(
         project.root().join("pages").join(template),
-        format!("#metadata({routes}) <route>\n#html.elem(\"p\")[Page]"),
+        format!("#metadata({routes}) <aster-route>\n#html.elem(\"p\")[Page]"),
     )
     .unwrap();
 }
@@ -86,7 +86,7 @@ fn route_plan_rejects_page_endpoint_collision() {
     let (_temp, project) = fixture(&["feed.typ", "feed.html.typ"]);
     std::fs::write(
         project.root().join("pages/feed.html.typ"),
-        "#metadata(\"feed\") <endpoint>",
+        "#metadata(\"feed\") <aster-endpoint>",
     )
     .unwrap();
 
@@ -105,5 +105,9 @@ fn route_plan_reports_missing_dynamic_metadata() {
 
     assert!(outcome.outputs.is_empty());
     assert_eq!(outcome.warnings.len(), 1);
-    assert!(outcome.warnings[0].as_str().contains("no <route> metadata"));
+    assert!(
+        outcome.warnings[0]
+            .as_str()
+            .contains("no <aster-route> metadata")
+    );
 }

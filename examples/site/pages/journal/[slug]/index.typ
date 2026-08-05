@@ -3,7 +3,7 @@
 
 #metadata(
   get-collection-ids("journal").map(slug => (slug: slug))
-) <route>
+) <aster-route>
 
 #let slug = sys.inputs.at("slug", default: "")
 #let entry = get-entry("journal", slug)

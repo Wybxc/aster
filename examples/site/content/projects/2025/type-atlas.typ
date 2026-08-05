@@ -5,7 +5,7 @@
   status: "archive",
   summary: "Type Atlas generates a compact reference site from nested Typst content entries.",
   stack: ("Typst", "HTML", "CSS"),
-)) <frontmatter>
+)) <aster-frontmatter>
 
 = Type Atlas
 

@@ -12,8 +12,8 @@ fn component_file_resources_are_resolved_tracked_and_injected_once() {
         root.join("components/card.typ"),
         concat!(
             "#let card(label) = [\n",
-            "  #metadata(\"./card.css\") <style>\n",
-            "  #metadata(\"./card.js\") <script>\n",
+            "  #metadata(\"./card.css\") <aster-style>\n",
+            "  #metadata(\"./card.js\") <aster-script>\n",
             "  #html.elem(\"div\", attrs: (class: \"card\"))[#label]\n",
             "]\n",
         ),
@@ -76,12 +76,12 @@ fn raw_resources_are_deduplicated_by_component_and_accept_surrounding_whitespace
     @import "./shared.css";
     .same { color: red; background: url("./pixel.bin"); }
     ```
-  ]) <style>
+  ]) <aster-style>
   #metadata([
     ```js
     globalThis.sameComponent = true;
     ```
-  ]) <script>
+  ]) <aster-script>
   #html.elem("div", attrs: (class: "a"))[A]
 ]
 "#,
@@ -95,12 +95,12 @@ fn raw_resources_are_deduplicated_by_component_and_accept_surrounding_whitespace
     @import "./shared.css";
     .same { color: red; background: url("./pixel.bin"); }
     ```
-  ) <style>
+  ) <aster-style>
   #metadata(
     ```js
     globalThis.sameComponent = true;
     ```
-  ) <script>
+  ) <aster-script>
   #html.elem("div", attrs: (class: "b"))[B]
 ]
 "#,
@@ -199,16 +199,16 @@ fn component_resources_preserve_document_order() {
         concat!(
             "#import \"./inner.typ\": inner\n",
             "#let outer() = [\n",
-            "  #metadata(\"./outer-first.css\") <style>\n",
+            "  #metadata(\"./outer-first.css\") <aster-style>\n",
             "  #inner()\n",
-            "  #metadata(\"./outer-last.css\") <style>\n",
+            "  #metadata(\"./outer-last.css\") <aster-style>\n",
             "]\n",
         ),
     )
     .unwrap();
     std::fs::write(
         root.join("components/inner.typ"),
-        "#let inner() = [#metadata(\"./inner.css\") <style>]\n",
+        "#let inner() = [#metadata(\"./inner.css\") <aster-style>]\n",
     )
     .unwrap();
     std::fs::write(
@@ -261,7 +261,7 @@ fn resource_content_rejects_multiple_raw_elements() {
   ```css
   .second {}
   ```
-]) <style>
+]) <aster-style>
 #html.elem("p")[Page]
 "#,
     )

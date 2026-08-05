@@ -6,6 +6,6 @@ to the root of the generated `dist/` site. Route templates live in `pages/`,
 while project styles live in `styles/`.
 
 Components and templates can declare managed styles and classic scripts with
-`metadata(path) <style>` and `metadata(path) <script>`. Fenced `css` and `js`
+`metadata(path) <aster-style>` and `metadata(path) <aster-script>`. Fenced `css` and `js`
 raw blocks are accepted in place of a path and are published as generated files.
 Managed scripts are loaded from the document head with `defer`.

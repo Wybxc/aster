@@ -3,7 +3,7 @@
 
 #metadata(
   published-posts().map(item => (slug: item.entry.id))
-) <route>
+) <aster-route>
 
 #let slug = sys.inputs.at("slug", default: "")
 #let entry = get-entry("posts", slug)

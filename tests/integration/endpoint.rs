@@ -10,7 +10,7 @@ fn build_publishes_endpoint_metadata_at_the_exact_template_path() {
     std::fs::write(root.join("pages/index.typ"), "#html.elem(\"p\")[Page]").unwrap();
     std::fs::write(
         root.join("pages/feed/rss.xml.typ"),
-        "#metadata(\"<?xml version=\\\"1.0\\\"?><rss/>\") <endpoint>",
+        "#metadata(\"<?xml version=\\\"1.0\\\"?><rss/>\") <aster-endpoint>",
     )
     .unwrap();
 
@@ -34,7 +34,7 @@ fn endpoint_bytes_are_tracked_and_refreshed_by_a_reused_session() {
     std::fs::write(&payload, [0, 1, 2]).unwrap();
     std::fs::write(
         root.join("pages/archive.bin.typ"),
-        "#metadata(read(\"/payload.bin\", encoding: none)) <endpoint>",
+        "#metadata(read(\"/payload.bin\", encoding: none)) <aster-endpoint>",
     )
     .unwrap();
 
@@ -68,8 +68,8 @@ fn contextual_dynamic_endpoints_are_compiled_for_each_declared_route() {
         concat!(
             "#let slug = sys.inputs.at(\"slug\", default: none)\n",
             "#context [\n",
-            "  #metadata(((slug: \"alpha\"), (slug: \"beta\"))) <route>\n",
-            "  #metadata(if slug == none { none } else { \"<feed>\" + slug + \"</feed>\" }) <endpoint>\n",
+            "  #metadata(((slug: \"alpha\"), (slug: \"beta\"))) <aster-route>\n",
+            "  #metadata(if slug == none { none } else { \"<feed>\" + slug + \"</feed>\" }) <aster-endpoint>\n",
             "]\n",
         ),
     )
@@ -99,12 +99,12 @@ fn contextual_dynamic_endpoints_are_compiled_for_each_declared_route() {
 fn endpoint_metadata_requires_one_string_or_byte_payload() {
     for (source, expected) in [
         (
-            "#metadata(42) <endpoint>",
+            "#metadata(42) <aster-endpoint>",
             "endpoint metadata must contain a string or bytes",
         ),
         (
-            "#metadata(\"one\") <endpoint>\n#metadata(\"two\") <endpoint>",
-            "endpoint template must contain exactly one <endpoint> declaration",
+            "#metadata(\"one\") <aster-endpoint>\n#metadata(\"two\") <aster-endpoint>",
+            "endpoint template must contain exactly one <aster-endpoint> declaration",
         ),
     ] {
         let temp = tempfile::tempdir().unwrap();

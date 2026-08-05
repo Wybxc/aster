@@ -72,7 +72,7 @@ fn build_exposes_separate_content_and_metadata_accessors() {
     let content_entry = root.join("content/blog/post.typ");
     std::fs::write(
         &content_entry,
-        "#metadata((title: \"First\",)) <frontmatter>\n\nFirst body",
+        "#metadata((title: \"First\",)) <aster-frontmatter>\n\nFirst body",
     )
     .unwrap();
     std::fs::write(
@@ -99,7 +99,7 @@ fn build_exposes_separate_content_and_metadata_accessors() {
 
     std::fs::write(
         &content_entry,
-        "#metadata((title: \"Second\",)) <frontmatter>\n\nSecond body",
+        "#metadata((title: \"Second\",)) <aster-frontmatter>\n\nSecond body",
     )
     .unwrap();
     driver.build().unwrap();

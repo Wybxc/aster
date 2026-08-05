@@ -3,7 +3,7 @@
 #import "/components/post-list.typ": post-list
 #import "/templates/site.typ": site
 
-#metadata(all-tags().map(tag => (tag: tag.slug))) <route>
+#metadata(all-tags().map(tag => (tag: tag.slug))) <aster-route>
 
 #let tag = sys.inputs.at("tag", default: "")
 #let info = all-tags().find(item => item.slug == tag)

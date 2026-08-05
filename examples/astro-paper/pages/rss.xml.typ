@@ -44,4 +44,4 @@
   ),
 )
 
-#metadata(to-xml(feed, pretty: true)) <endpoint>
+#metadata(to-xml(feed, pretty: true)) <aster-endpoint>

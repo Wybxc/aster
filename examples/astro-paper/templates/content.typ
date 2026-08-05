@@ -20,11 +20,11 @@
     tags: tags,
     featured: featured,
     draft: draft,
-  )) <frontmatter>
+  )) <aster-frontmatter>
   #body
 ]
 
 #let page(title: "Untitled", description: "", body) = [
-  #metadata((title: title, description: description)) <frontmatter>
+  #metadata((title: title, description: description)) <aster-frontmatter>
   #body
 ]

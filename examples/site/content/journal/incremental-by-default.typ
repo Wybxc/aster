@@ -3,7 +3,7 @@
   date: "2026-07-30",
   summary: "Tracked Typst imports allow Aster to rebuild only the pages whose inputs have changed.",
   tags: ("comemo", "watch", "architecture"),
-)) <frontmatter>
+)) <aster-frontmatter>
 
 = Tracked imports make incremental builds predictable.
 

@@ -304,7 +304,7 @@ fn join_names(names: &[EcoString]) -> String {
 
 pub(crate) fn extract(introspector: &dyn Introspector) -> Result<EcoVec<ParamSet>> {
     let selector =
-        Selector::Label(Label::construct("route".into()).expect("route label is non-empty"));
+        Selector::Label(Label::construct("aster-route".into()).expect("route label is non-empty"));
     let mut result = EcoVec::new();
     for element in introspector.query(&selector) {
         let Some(metadata) = element.to_packed::<MetadataElem>() else {

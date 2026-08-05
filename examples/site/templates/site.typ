@@ -35,7 +35,7 @@
         title: settings.site.title,
         href: settings.site.url + "rss.xml",
       ))
-      #metadata(stylesheet) <style>
+      #metadata(stylesheet) <aster-style>
     ]
     html.body[
       #navigation(root)

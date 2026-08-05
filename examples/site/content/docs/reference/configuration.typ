@@ -3,7 +3,7 @@
   section: "Reference",
   order: 40,
   summary: "This reference explains how TOML values become Typst inputs and select the syntax highlighting themes.",
-)) <frontmatter>
+)) <aster-frontmatter>
 
 = Aster exposes configuration as Typst input.
 

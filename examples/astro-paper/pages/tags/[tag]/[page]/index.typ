@@ -13,7 +13,7 @@
   }
   values
 }
-#metadata(routes) <route>
+#metadata(routes) <aster-route>
 
 #let tag = sys.inputs.at("tag", default: "")
 #let current = int(sys.inputs.at("page", default: "1"))

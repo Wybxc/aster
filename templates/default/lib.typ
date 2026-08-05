@@ -4,7 +4,7 @@
   (:)
 } else {
   assert(
-    _content_state.protocol == 4,
+    _content_state.protocol == 5,
     message: "incompatible content protocol with the Aster binary",
   )
   _content_state.collections

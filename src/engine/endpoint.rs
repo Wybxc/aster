@@ -3,8 +3,9 @@ use typst::foundations::{Bytes, Label, Selector, Value};
 use typst::introspection::{Introspector, MetadataElem};
 
 fn declaration(introspector: &dyn Introspector) -> Result<Option<Value>> {
-    let selector =
-        Selector::Label(Label::construct("endpoint".into()).expect("endpoint label is non-empty"));
+    let selector = Selector::Label(
+        Label::construct("aster-endpoint".into()).expect("endpoint label is non-empty"),
+    );
     let mut declarations = introspector
         .query(&selector)
         .into_iter()
@@ -16,7 +17,7 @@ fn declaration(introspector: &dyn Introspector) -> Result<Option<Value>> {
     let declaration = declarations.next();
 
     if declarations.next().is_some() {
-        bail!("endpoint template must contain exactly one <endpoint> declaration");
+        bail!("endpoint template must contain exactly one <aster-endpoint> declaration");
     }
 
     Ok(declaration)

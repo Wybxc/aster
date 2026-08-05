@@ -5,7 +5,7 @@
   status: "active",
   summary: "Aster generates static sites from Typst while publishing deterministically and rebuilding pages incrementally.",
   stack: ("Rust", "Typst", "comemo", "Lightning CSS"),
-)) <frontmatter>
+)) <aster-frontmatter>
 
 = Aster
 

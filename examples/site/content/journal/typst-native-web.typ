@@ -3,7 +3,7 @@
   date: "2026-07-24",
   summary: "Typst provides markup, functions, data, mathematics, and HTML elements within one language.",
   tags: ("typst", "html", "templates"),
-)) <frontmatter>
+)) <aster-frontmatter>
 
 = Typst is the template language.
 

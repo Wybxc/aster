@@ -3,7 +3,7 @@
   section: "Guides",
   order: 20,
   summary: "This guide explains how lazy entry modules load metadata and content on demand.",
-)) <frontmatter>
+)) <aster-frontmatter>
 
 = Content collections load entries only when pages need them.
 

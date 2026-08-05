@@ -6,7 +6,7 @@
     let parts = id.split("/")
     (year: parts.first(), slug: parts.last())
   })
-) <route>
+) <aster-route>
 
 #let year = sys.inputs.at("year", default: "")
 #let slug = sys.inputs.at("slug", default: "")

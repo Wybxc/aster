@@ -90,7 +90,7 @@
   ```typ
   #metadata(
     get-collection-ids("docs").map(path => (path: path))
-  ) <route>
+  ) <aster-route>
   ```
 
   ```rust

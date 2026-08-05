@@ -11,7 +11,7 @@ use typst::syntax::{RootedPath, SyntaxNode, parse_code};
 use typst::{Library, LibraryExt};
 use typst_eval::CapturesVisitor;
 
-pub const PROTOCOL_VERSION: i64 = 4;
+pub const PROTOCOL_VERSION: i64 = 5;
 pub const INPUT_NAME: &str = "_aster";
 
 pub(crate) struct ContentEntry {
@@ -93,7 +93,7 @@ fn metadata_closure(source: RootedPath) -> Func {
     const METADATA_CLOSURE_SOURCE: &str = r#"() => {
   let find-frontmatter(node) = {
     let fields = node.fields()
-    if fields.at("label", default: none) == <frontmatter> {
+    if fields.at("label", default: none) == <aster-frontmatter> {
       let value = fields.at("value", default: (:))
       return if type(value) == dictionary { value } else { (:) }
     }
