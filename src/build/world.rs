@@ -5,7 +5,7 @@ use anyhow::Result;
 use comemo::{Track, Tracked};
 use termcolor::NoColor;
 use typst::diag::{FileError, SourceDiagnostic, SourceResult, Warned};
-use typst::ecow::EcoVec;
+use typst::ecow::{EcoString, EcoVec};
 use typst::foundations::{Bytes, Datetime, Dict, Duration};
 use typst::syntax::{FileId, RootedPath, VirtualPath, VirtualRoot};
 use typst::text::{Font, FontBook};
@@ -178,7 +178,15 @@ fn diagnostic_error(
 fn format_diagnostics(
     world: &impl DiagnosticWorld,
     source_diagnostics: &[SourceDiagnostic],
-) -> String {
+) -> EcoString {
+    format_diagnostics_impl(world, source_diagnostics, "")
+}
+
+fn format_diagnostics_impl(
+    world: &impl DiagnosticWorld,
+    source_diagnostics: &[SourceDiagnostic],
+    prefix: &str,
+) -> EcoString {
     let mut buffer = Vec::new();
     {
         let mut writer = NoColor::new(&mut buffer);
@@ -195,12 +203,17 @@ fn format_diagnostics(
             }
         }
     }
-    String::from_utf8_lossy(&buffer).trim_end().to_owned()
+    let output = String::from_utf8_lossy(&buffer);
+    let output = output.trim_end();
+    output.strip_prefix(prefix).unwrap_or(output).into()
 }
 
 fn format_warning(world: &impl DiagnosticWorld, warning: &SourceDiagnostic) -> BuildWarning {
-    let formatted = format_diagnostics(world, std::slice::from_ref(warning));
-    BuildWarning::new(formatted.strip_prefix("warning: ").unwrap_or(&formatted))
+    BuildWarning::new(format_diagnostics_impl(
+        world,
+        std::slice::from_ref(warning),
+        "warning: ",
+    ))
 }
 
 struct CompileWorld<'a> {

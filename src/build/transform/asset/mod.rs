@@ -190,7 +190,7 @@ impl<'a> AssetProcessor<'a> {
                 return Ok(Some(WalkControl::Continue));
             }
             let origin = source_origin(page, element.span)?;
-            let code = element.inner_text().into();
+            let code = element.inner_text();
             self.scripts.add_raw(kind, &origin, code, page)?
         };
 
@@ -250,7 +250,7 @@ impl<'a> AssetProcessor<'a> {
             return Ok(());
         }
 
-        let mut serialized = String::new();
+        let mut serialized = EcoString::new();
         for (index, candidate) in candidates.iter().enumerate() {
             if index > 0 {
                 serialized.push_str(", ");
@@ -266,7 +266,7 @@ impl<'a> AssetProcessor<'a> {
                 write!(serialized, " {density}x")?;
             }
         }
-        element.update_attr(attribute, move |value| *value = serialized.into());
+        element.update_attr(attribute, move |value| *value = serialized);
         Ok(())
     }
 

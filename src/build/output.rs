@@ -82,8 +82,8 @@ impl OutputPublication {
     }
 
     /// Register the generated highlight stylesheet.
-    pub fn add_highlight_stylesheet(&mut self, content: Vec<u8>) -> Result<AssetPath> {
-        self.add_asset(Some("highlight"), Some("css"), Bytes::new(content))
+    pub fn add_highlight_stylesheet(&mut self, content: Bytes) -> Result<AssetPath> {
+        self.add_asset(Some("highlight"), Some("css"), content)
     }
 
     /// Register a file from the project's public directory at the output root.
@@ -360,7 +360,7 @@ mod tests {
         let (_temp, project, layout) = fixture();
         let mut publication = OutputPublication::new(&project, &layout).unwrap();
         let asset = publication
-            .add_highlight_stylesheet(b"body{}".to_vec())
+            .add_highlight_stylesheet(Bytes::from_string("body{}"))
             .unwrap();
         let template = VirtualPath::new("/pages/blog/[slug].typ").unwrap();
         let directory_output = RoutePath::new("blog/post/index.html").unwrap();
@@ -412,10 +412,10 @@ mod tests {
 
         let mut publication = OutputPublication::new(&project, &layout).unwrap();
         let first = publication
-            .add_highlight_stylesheet(b"body{}".to_vec())
+            .add_highlight_stylesheet(Bytes::from_string("body{}"))
             .unwrap();
         let second = publication
-            .add_highlight_stylesheet(b"body{}".to_vec())
+            .add_highlight_stylesheet(Bytes::from_string("body{}"))
             .unwrap();
         assert_eq!(first, second);
 
@@ -436,7 +436,7 @@ mod tests {
         let mut repeated = OutputPublication::new(&project, &layout).unwrap();
         assert_eq!(
             repeated
-                .add_highlight_stylesheet(b"body{}".to_vec())
+                .add_highlight_stylesheet(Bytes::from_string("body{}"))
                 .unwrap(),
             first
         );

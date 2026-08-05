@@ -2,7 +2,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 use typst::Library;
-use typst::ecow::eco_format;
+use typst::ecow::{eco_format, eco_vec};
 use typst::foundations::Dict;
 use typst::syntax::VirtualPath;
 use typst::utils::LazyHash;
@@ -64,9 +64,9 @@ pub(super) fn plan_routes(
                     relative.display()
                 )));
             }
-            params.into_iter().collect::<Vec<_>>()
+            params
         } else {
-            vec![ParamSet::new()]
+            eco_vec![ParamSet::new()]
         };
 
         for params in param_sets {

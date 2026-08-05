@@ -8,6 +8,7 @@ use syntect::easy::ScopeRegionIterator;
 use syntect::highlighting::{Highlighter, Theme, ThemeSet};
 use syntect::parsing::{ParseState, Scope, ScopeStack, SyntaxSet};
 use typst::ecow::{EcoString, EcoVec, eco_format, eco_vec};
+use typst::foundations::Bytes;
 use typst::syntax::{LinkedNode, Span, SyntaxNode, VirtualPath, parse_code, parse_math};
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 
@@ -63,10 +64,7 @@ impl HighlightProcessor {
             ));
         }
         let (stylesheet, warning) = match compute_highlight_css(config, project_files) {
-            Ok(Some(css)) => (
-                Some(publication.add_highlight_stylesheet(css.into_bytes())?),
-                None,
-            ),
+            Ok(Some(css)) => (Some(publication.add_highlight_stylesheet(css)?), None),
             Ok(None) => (None, None),
             Err(error) => {
                 let warning =
@@ -307,7 +305,7 @@ fn load_theme(
 fn compute_highlight_css(
     config: &HighlightConfig,
     project_files: Tracked<ProjectFiles>,
-) -> Result<Option<String>> {
+) -> Result<Option<Bytes>> {
     compute_highlight_css_impl(
         config.themes.light.as_str(),
         config.themes.dark.as_str(),
@@ -321,7 +319,7 @@ fn compute_highlight_css_impl(
     light_theme: &str,
     dark_theme: &str,
     project_files: Tracked<ProjectFiles>,
-) -> std::result::Result<Option<String>, ThemeError> {
+) -> std::result::Result<Option<Bytes>, ThemeError> {
     let light = load_theme(light_theme, project_files)?;
     let dark = load_theme(dark_theme, project_files)?;
     let light_h = Highlighter::new(&light);
@@ -408,7 +406,7 @@ fn compute_highlight_css_impl(
         );
     }
 
-    Ok(Some(css))
+    Ok(Some(Bytes::from_string(css)))
 }
 
 #[cfg(test)]

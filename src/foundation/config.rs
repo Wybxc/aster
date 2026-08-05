@@ -134,14 +134,14 @@ pub(crate) struct TypstConfig {
 #[derive(Clone, Deserialize, Eq, PartialEq)]
 #[serde(default)]
 pub(crate) struct FontConfig {
-    pub paths: Vec<EcoString>,
+    pub paths: EcoVec<EcoString>,
     pub system: bool,
 }
 
 impl Default for FontConfig {
     fn default() -> Self {
         Self {
-            paths: Vec::new(),
+            paths: EcoVec::new(),
             system: true,
         }
     }
@@ -322,7 +322,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["components", "plugins/theme.ts"]
         );
-        assert_eq!(config.typst.fonts.paths, ["fonts"]);
+        assert_eq!(config.typst.fonts.paths, eco_vec!["fonts".into()]);
         assert!(!config.typst.fonts.system);
         assert!(!config.highlight.enabled);
         assert_eq!(config.highlight.themes.light, "InspiredGitHub");

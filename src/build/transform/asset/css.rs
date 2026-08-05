@@ -470,9 +470,9 @@ impl BundledStylesheet {
                     content,
                     suffix,
                 } => {
-                    let mut url = page.add_css_asset(&source, content)?.to_string();
+                    let mut url = page.add_css_asset(&source, content)?;
                     url.push_str(&suffix);
-                    (placeholder, url.into())
+                    (placeholder, url)
                 }
             };
             replacements.push((placeholder, url));

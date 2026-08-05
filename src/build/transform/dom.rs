@@ -22,7 +22,7 @@ pub trait HtmlElementExt {
     /// Collect the text of all descendant `HtmlNode::Text` nodes,
     /// inserting `\n` for `<br>` elements so the result reflects
     /// multi-line content in source order.
-    fn inner_text(&self) -> String;
+    fn inner_text(&self) -> EcoString;
 }
 
 /// Append one generated element to the document head, creating it if needed.
@@ -73,8 +73,8 @@ impl HtmlElementExt for HtmlElement {
         }
     }
 
-    fn inner_text(&self) -> String {
-        fn collect(elem: &HtmlElement, out: &mut String) {
+    fn inner_text(&self) -> EcoString {
+        fn collect(elem: &HtmlElement, out: &mut EcoString) {
             for child in &elem.children {
                 match child {
                     HtmlNode::Text(t, _) => out.push_str(t.as_str()),
@@ -85,7 +85,7 @@ impl HtmlElementExt for HtmlElement {
             }
         }
 
-        let mut out = String::new();
+        let mut out = EcoString::new();
         collect(self, &mut out);
         out
     }
