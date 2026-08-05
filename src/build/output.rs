@@ -10,8 +10,8 @@ use crate::engine::route::RoutePath;
 use crate::foundation::{Project, ProjectLayout};
 
 /// Compute a compact 64-bit content fingerprint for generated asset URLs.
-fn content_hash(data: &[u8]) -> String {
-    format!("{:016x}", seahash::hash(data))
+fn content_hash(data: &[u8]) -> u64 {
+    seahash::hash(data)
 }
 
 /// The stable output location of a generated asset.
@@ -105,10 +105,10 @@ impl OutputPublication {
     ) -> Result<AssetPath> {
         let hash = content_hash(content.as_slice());
         let filename = match (name, extension) {
-            (Some(name), Some(extension)) => format!("{name}.{hash}.{extension}"),
-            (Some(name), None) => format!("{name}.{hash}"),
-            (None, Some(extension)) => format!("{hash}.{extension}"),
-            (None, None) => hash,
+            (Some(name), Some(extension)) => format!("{name}.{hash:016x}.{extension}"),
+            (Some(name), None) => format!("{name}.{hash:016x}"),
+            (None, Some(extension)) => format!("{hash:016x}.{extension}"),
+            (None, None) => format!("{hash:016x}"),
         };
         let path =
             PathBuf::from(self.assets_dir.as_virtual_path().get_without_slash()).join(filename);
