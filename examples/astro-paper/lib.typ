@@ -1,14 +1,26 @@
 #let _content-state = sys.inputs.at("_aster", default: none)
 #let _collections = if _content-state == none {
-  // Tinymist evaluates files without Aster's injected content protocol.
+  // Tinymist evaluates files without Aster's injected runtime protocol.
   (:)
 } else {
   assert(
-    _content-state.protocol == 5,
-    message: "incompatible content protocol with the Aster binary",
+    _content-state.protocol == 6,
+    message: "incompatible runtime protocol with the Aster binary",
   )
   _content-state.collections
 }
+#let _route = if _content-state == none {
+  none
+} else {
+  _content-state.at("route", default: none)
+}
+
+#let aster-version = if _content-state == none { none } else { _content-state.version }
+#let route-path = if _route == none { "/" } else { _route.path }
+#let route-params = if _route == none { (:) } else { _route.params }
+#let route-pages = if _content-state == none { () } else { _content-state.routes.pages }
+#let route-endpoints = if _content-state == none { () } else { _content-state.routes.endpoints }
+#let route-section = route-path.trim("/").split("/").first()
 
 #let settings = toml("/aster.toml")
 
@@ -28,13 +40,7 @@
 
 #let post-url(id) = "/posts/" + id + "/"
 
-#let canonical-url(path) = {
-  if path == "/" {
-    settings.site.url
-  } else {
-    settings.site.url + path.trim("/") + "/"
-  }
-}
+#let canonical-url(path: route-path) = settings.site.url + path.slice(1)
 
 #let date-value(value) = {
   let parts = value.slice(0, 10).split("-").map(int)

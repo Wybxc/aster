@@ -1,4 +1,4 @@
-#import "/lib.typ": get-collection-ids, get-entry
+#import "/lib.typ": get-collection-ids, get-entry, root-prefix, route-params
 #import "/templates/site.typ": site
 
 #metadata(
@@ -8,16 +8,16 @@
   })
 ) <aster-route>
 
-#let year = sys.inputs.at("year", default: "")
-#let slug = sys.inputs.at("slug", default: "")
+#let year = route-params.at("year", default: "")
+#let slug = route-params.at("slug", default: "")
 #let entry = get-entry("projects", year + "/" + slug)
 
 #if entry != none [
   #let meta = entry.metadata()
+  #let root = root-prefix()
 
   #show: site.with(
     title: meta.title,
-    root: "../../",
     description: meta.summary,
   )
   #show heading.where(level: 1): it => html.elem("header")[
@@ -27,6 +27,6 @@
 
   #html.elem("article")[#entry.render()]
   #html.elem("nav", attrs: ("aria-label": "Project navigation"))[
-    #link("../../")[Return to the project list]
+    #link(root)[Return to the project list]
   ]
 ]

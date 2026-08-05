@@ -1,4 +1,4 @@
-#import "/lib.typ": all-tags, page-count, page-items, posts-with-tag
+#import "/lib.typ": all-tags, page-count, page-items, posts-with-tag, route-params
 #import "/components/pagination.typ": pagination
 #import "/components/page-header.typ": page-header
 #import "/components/post-list.typ": post-list
@@ -6,7 +6,7 @@
 
 #metadata(all-tags().map(tag => (tag: tag.slug))) <aster-route>
 
-#let tag = sys.inputs.at("tag", default: "")
+#let tag = route-params.at("tag", default: "")
 #let info = all-tags().find(item => item.slug == tag)
 #let name = if info == none { tag } else { info.name }
 #let posts = posts-with-tag(tag)
@@ -15,8 +15,6 @@
 #show: site.with(
   title: "Tag: " + name,
   description: "Posts tagged " + name + ".",
-  path: "/tags/" + tag + "/",
-  active: "tags",
 )
 
 #html.main(id: "main-content")[

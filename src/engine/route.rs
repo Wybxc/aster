@@ -4,7 +4,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail, ensure};
-use typst::ecow::{EcoString, EcoVec};
+use typst::ecow::{EcoString, EcoVec, eco_format};
 use typst::foundations::{Label, Selector, Value};
 use typst::introspection::{Introspector, MetadataElem};
 use typst::syntax::VirtualPath;
@@ -47,6 +47,23 @@ impl RoutePath {
     /// Return the normalized path within the virtual output root.
     pub fn as_virtual_path(&self) -> &VirtualPath {
         &self.0
+    }
+
+    /// Return the exact output route as a root-relative browser URL.
+    pub fn url_path(&self) -> EcoString {
+        eco_format!("/{}", self.0.get_without_slash())
+    }
+
+    /// Return the preferred browser URL for a generated HTML page.
+    pub fn page_url_path(&self) -> EcoString {
+        let path = self.0.get_without_slash();
+        if path == "index.html" {
+            return "/".into();
+        }
+        if let Some(directory) = path.strip_suffix("/index.html") {
+            return eco_format!("/{directory}/");
+        }
+        self.url_path()
     }
 
     /// Whether two output paths cannot coexist on a portable filesystem.
@@ -489,6 +506,25 @@ mod tests {
                 .as_virtual_path()
                 .get_with_slash(),
             "/feed/latest.xml"
+        );
+    }
+
+    #[test]
+    fn output_routes_determine_browser_url_paths() {
+        assert_eq!(RoutePath::new("index.html").unwrap().page_url_path(), "/");
+        assert_eq!(
+            RoutePath::new("blog/post/index.html")
+                .unwrap()
+                .page_url_path(),
+            "/blog/post/"
+        );
+        assert_eq!(
+            RoutePath::new("about.html").unwrap().page_url_path(),
+            "/about.html"
+        );
+        assert_eq!(
+            RoutePath::new("feed/index.html").unwrap().url_path(),
+            "/feed/index.html"
         );
     }
 

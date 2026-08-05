@@ -1,13 +1,14 @@
 #import "/components/navigation.typ": navigation
-#import "/lib.typ": settings
+#import "/lib.typ": aster-version, root-prefix, settings
 
 #let site(
   title: settings.site.title,
-  root: "",
   stylesheet: "/styles/site.css",
   description: settings.site.description,
   body,
 ) = {
+  let root = root-prefix()
+  let generator = if aster-version == none { "Aster" } else { "Aster " + aster-version }
   let document-title = if title == settings.site.title {
     title
   } else {
@@ -27,6 +28,7 @@
         name: "viewport",
         content: "width=device-width, initial-scale=1",
       )
+      #html.meta(name: "generator", content: generator)
       #html.meta(name: "description", content: description)
       #html.title(document-title)
       #html.elem("link", attrs: (
@@ -35,7 +37,7 @@
         title: settings.site.title,
         href: settings.site.url + "rss.xml",
       ))
-      #metadata(stylesheet) <aster-style>
+      #html.link(rel: "stylesheet", href: stylesheet)
     ]
     html.body[
       #navigation(root)

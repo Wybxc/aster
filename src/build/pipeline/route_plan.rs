@@ -3,13 +3,12 @@ use std::path::Path;
 use anyhow::{Context, Result, bail};
 use typst::Library;
 use typst::ecow::{eco_format, eco_vec};
-use typst::foundations::Dict;
 use typst::syntax::VirtualPath;
 use typst::utils::LazyHash;
 
 use crate::build::{BuildSession, BuildWarning, files, world};
+use crate::engine::endpoint;
 use crate::engine::route::{self, ParamSet, RoutePath};
-use crate::engine::{content, endpoint};
 use crate::foundation::ProjectLayout;
 
 pub struct PlannedRoute {
@@ -29,7 +28,6 @@ pub enum PlannedRouteKind {
 pub fn plan_routes(
     session: &BuildSession,
     layout: &ProjectLayout,
-    base_inputs: &Dict,
     base_library: &LazyHash<Library>,
 ) -> Result<(Vec<PlannedRoute>, Vec<BuildWarning>)> {
     let templates = files::list_typst_files(session.project_files(), layout.pages(), true)?;
@@ -69,9 +67,6 @@ pub fn plan_routes(
         };
 
         for params in param_sets {
-            if !params.is_empty() {
-                content::with_route_params(base_inputs, &params)?;
-            }
             let output = match kind {
                 PlannedRouteKind::Page => pattern.generate(&params)?,
                 PlannedRouteKind::Endpoint => pattern.generate_endpoint(&params)?,

@@ -1,20 +1,19 @@
-#import "/lib.typ": get-collection-ids, get-entry, root-prefix
+#import "/lib.typ": get-collection-ids, get-entry, root-prefix, route-params
 #import "/templates/site.typ": site
 
 #metadata(
   get-collection-ids("docs").map(path => (path: path))
 ) <aster-route>
 
-#let path = sys.inputs.at("path", default: "")
+#let path = route-params.at("path", default: "")
 #let entry = get-entry("docs", path)
 
 #if entry != none [
   #let meta = entry.metadata()
-  #let root = root-prefix(path.split("/").len() + 1)
+  #let root = root-prefix()
 
   #show: site.with(
     title: meta.title,
-    root: root,
     description: meta.summary,
   )
   #show heading.where(level: 1): it => html.elem("header")[

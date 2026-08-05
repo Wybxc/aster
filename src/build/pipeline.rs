@@ -80,16 +80,31 @@ impl BuildSession {
                 load_content(session, &layout).context("failed to load content collections")?;
             let base_inputs = content::inputs(protocol);
             let base_library = world::library(base_inputs.clone());
-            let (routes, route_warnings) =
-                plan_routes(session, &layout, &base_inputs, &base_library)?;
+            let (routes, route_warnings) = plan_routes(session, &layout, &base_library)?;
             warnings.extend(route_warnings);
 
+            let pages = routes
+                .iter()
+                .filter_map(|job| match job.kind {
+                    PlannedRouteKind::Page => Some(job.output.page_url_path()),
+                    PlannedRouteKind::Endpoint => None,
+                })
+                .collect::<Vec<_>>();
+            let endpoints = routes
+                .iter()
+                .filter_map(|job| match job.kind {
+                    PlannedRouteKind::Page => None,
+                    PlannedRouteKind::Endpoint => Some(job.output.url_path()),
+                })
+                .collect::<Vec<_>>();
+            let route_inputs = content::with_routes(&base_inputs, &pages, &endpoints);
+
             for job in routes {
-                let library = if job.params.is_empty() {
-                    base_library.clone()
-                } else {
-                    world::library(content::with_route_params(&base_inputs, &job.params)?)
+                let path = match job.kind {
+                    PlannedRouteKind::Page => job.output.page_url_path(),
+                    PlannedRouteKind::Endpoint => job.output.url_path(),
                 };
+                let library = world::library(content::with_route(&route_inputs, path, &job.params));
                 match job.kind {
                     PlannedRouteKind::Page => render_page(
                         session,

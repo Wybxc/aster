@@ -63,6 +63,58 @@ fn build_provides_current_date_with_local_and_explicit_offsets() {
 }
 
 #[test]
+fn build_injects_namespaced_route_context() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join("pages/blog/[slug]")).unwrap();
+    std::fs::write(root.join("pages/index.typ"), route_context_page()).unwrap();
+    std::fs::write(root.join("pages/about.typ"), route_context_page()).unwrap();
+    std::fs::write(
+        root.join("pages/blog/[slug]/index.typ"),
+        concat!(
+            "#metadata(((slug: \"post\"),)) <aster-route>\n",
+            "#let route = sys.inputs.at(\"_aster\").at(\"route\", default: none)\n",
+            "#if route != none {\n",
+            "  html.elem(\"p\")[#route.path|#route.params.slug]\n",
+            "}\n",
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("pages/feed.xml.typ"),
+        concat!(
+            "#let aster = sys.inputs.at(\"_aster\")\n",
+            "#let route = aster.at(\"route\", default: none)\n",
+            "#metadata(\n",
+            "  if route == none { \"probe\" } else { route.path + \"|\" + aster.version },\n",
+            ") <aster-endpoint>\n",
+        ),
+    )
+    .unwrap();
+
+    BuildSession::new(project(root)).build().unwrap();
+
+    let index = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
+    let about = std::fs::read_to_string(root.join("dist/about.html")).unwrap();
+    let post = std::fs::read_to_string(root.join("dist/blog/post/index.html")).unwrap();
+    let feed = std::fs::read_to_string(root.join("dist/feed.xml")).unwrap();
+    assert!(index.contains(&format!("/|{}|3|1", env!("CARGO_PKG_VERSION"))));
+    assert!(about.contains(&format!("/about.html|{}|3|1", env!("CARGO_PKG_VERSION"))));
+    assert!(post.contains("/blog/post/|post"));
+    assert_eq!(feed, format!("/feed.xml|{}", env!("CARGO_PKG_VERSION")));
+}
+
+fn route_context_page() -> &'static str {
+    concat!(
+        "#let aster = sys.inputs.at(\"_aster\")\n",
+        "#let route = aster.at(\"route\", default: none)\n",
+        "#if route != none {\n",
+        "  html.elem(\"p\")[#route.path|#aster.version|#aster.routes.pages.len()|#aster.routes.endpoints.len()]\n",
+        "}\n",
+    )
+}
+
+#[test]
 fn build_exposes_separate_content_and_metadata_accessors() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();

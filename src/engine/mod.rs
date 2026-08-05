@@ -1,6 +1,6 @@
 //! Pure Aster domain logic with no filesystem access.
 //!
-//! Routes, generated-file endpoints, and the content protocol operate purely
+//! Routes, generated-file endpoints, and the runtime protocol operate purely
 //! on Typst values and paths. This layer has no dependencies on the foundation
 //! or build layers.
 

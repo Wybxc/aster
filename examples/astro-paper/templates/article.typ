@@ -7,7 +7,6 @@
 #let article(body, item: none) = {
   let post = item.metadata
   let adjacent = adjacent-posts(item.entry.id)
-  let path = post-url(item.entry.id)
   let author = ("@type": "Person", name: post.author)
   let profile = settings.site.at("profile", default: none)
   if post.author == settings.site.author and profile != none {
@@ -31,9 +30,7 @@
     title: post.title,
     description: post.description,
     author: post.author,
-    path: path,
     canonical: post.canonical,
-    active: "posts",
     kind: "article",
     extra-head: head,
   )

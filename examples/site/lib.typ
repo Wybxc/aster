@@ -1,14 +1,25 @@
 #let _content_state = sys.inputs.at("_aster", default: none)
 #let _collections = if _content_state == none {
-  // The LSP evaluates files without Aster's injected content protocol.
+  // The LSP evaluates files without Aster's injected runtime protocol.
   (:)
 } else {
   assert(
-    _content_state.protocol == 5,
-    message: "incompatible content protocol with the Aster binary",
+    _content_state.protocol == 6,
+    message: "incompatible runtime protocol with the Aster binary",
   )
   _content_state.collections
 }
+#let _route = if _content_state == none {
+  none
+} else {
+  _content_state.at("route", default: none)
+}
+
+#let aster-version = if _content_state == none { none } else { _content_state.version }
+#let route-path = if _route == none { "/" } else { _route.path }
+#let route-params = if _route == none { (:) } else { _route.params }
+#let route-pages = if _content_state == none { () } else { _content_state.routes.pages }
+#let route-endpoints = if _content_state == none { () } else { _content_state.routes.endpoints }
 
 #let get-collection-ids(name) = {
   _collections.at(name, default: (:)).keys().sorted()
@@ -24,4 +35,13 @@
 
 #let settings = toml("/aster.toml")
 
-#let root-prefix(depth) = range(depth).map(_ => "../").join()
+#let root-prefix() = {
+  let path = route-path.trim("/")
+  if path == "" {
+    ""
+  } else {
+    let segments = path.split("/").len()
+    let depth = if route-path.ends-with("/") { segments } else { segments - 1 }
+    range(depth).map(_ => "../").join()
+  }
+}

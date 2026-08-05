@@ -13,8 +13,6 @@
 #show: site.with(
   title: metadata.title,
   description: metadata.description,
-  path: "/about/",
-  active: "about",
 )
 
 #html.main(id: "main-content")[

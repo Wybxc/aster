@@ -15,8 +15,6 @@
 #show: site.with(
   title: "Archives",
   description: "A chronological archive of every AsterPaper article.",
-  path: "/archives/",
-  active: "archives",
 )
 
 #metadata(

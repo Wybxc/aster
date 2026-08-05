@@ -1,11 +1,11 @@
-#import "/lib.typ": get-entry, published-posts
+#import "/lib.typ": get-entry, published-posts, route-params
 #import "/templates/article.typ": article
 
 #metadata(
   published-posts().map(item => (slug: item.entry.id))
 ) <aster-route>
 
-#let slug = sys.inputs.at("slug", default: "")
+#let slug = route-params.at("slug", default: "")
 #let entry = get-entry("posts", slug)
 
 #if entry != none [

@@ -8,8 +8,6 @@
 #show: site.with(
   title: "Tags",
   description: "Browse AsterPaper articles by topic.",
-  path: "/tags/",
-  active: "tags",
 )
 
 #html.main(id: "main-content")[

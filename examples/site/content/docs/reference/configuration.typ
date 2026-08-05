@@ -30,8 +30,9 @@ Templates can keep the parsed value in a shared library:
 #html.title(site.title + " · " + site.edition)
 ```
 
-`sys.inputs` is reserved for Aster's content protocol and dynamic route
-parameters, so project configuration has one explicit source of truth.
+`sys.inputs._aster` is reserved for Aster's runtime protocol. It exposes lazy
+content collections, the Aster version, and the current route; project
+configuration therefore keeps one explicit source of truth in TOML.
 
 The `[highlight.themes]` table selects built-in Syntect themes or project-local
 `.tmTheme` files for generated light and dark syntax styles.

@@ -1,21 +1,22 @@
-//! Construction of Aster's lazy Typst content protocol.
+//! Construction of Aster's Typst runtime protocol.
 
 use std::collections::BTreeMap;
 use std::sync::LazyLock;
 
-use anyhow::{Result, bail};
 use typst::ecow::{EcoString, eco_format};
 use typst::foundations::{
-    Capturer, Closure, ClosureNode, Dict, Func, Module, Scope, Scopes, Str, Value, dict,
+    Array, Capturer, Closure, ClosureNode, Dict, Func, Module, Scope, Scopes, Str, Value, dict,
 };
 use typst::syntax::ast::{self, AstNode};
 use typst::syntax::{RootedPath, SyntaxNode, parse_code};
 use typst::{Library, LibraryExt};
 use typst_eval::CapturesVisitor;
 
-/// Content protocol version understood by this Aster release.
-pub const PROTOCOL_VERSION: i64 = 5;
-/// Reserved `sys.inputs` key containing Aster's content protocol.
+/// Runtime protocol version understood by this Aster release.
+pub const PROTOCOL_VERSION: i64 = 6;
+/// Version of Aster providing the runtime protocol.
+pub const ASTER_VERSION: &str = env!("CARGO_PKG_VERSION");
+/// Reserved `sys.inputs` key containing Aster's runtime protocol.
 pub const INPUT_NAME: &str = "_aster";
 
 /// One source entry exposed through Aster's lazy content protocol.
@@ -28,7 +29,7 @@ pub struct ContentEntry {
     pub source: RootedPath,
 }
 
-/// Build the `_aster` lazy entry manifest, including the empty state.
+/// Build the base `_aster` protocol used for route probing.
 pub fn protocol(entries: impl IntoIterator<Item = ContentEntry>) -> Value {
     let mut collections: BTreeMap<EcoString, Vec<(EcoString, RootedPath)>> = BTreeMap::new();
     for entry in entries {
@@ -40,29 +41,65 @@ pub fn protocol(entries: impl IntoIterator<Item = ContentEntry>) -> Value {
     protocol_value(collections)
 }
 
-/// Construct the Typst inputs owned by Aster's content protocol.
+/// Construct the Typst inputs owned by Aster's runtime protocol.
 pub fn inputs(protocol: Value) -> Dict {
     let mut inputs = Dict::new();
     inputs.insert(Str::from(INPUT_NAME), protocol);
     inputs
 }
 
-/// Add one generated route's parameters to a project input dictionary.
-pub fn with_route_params(base: &Dict, params: &crate::engine::route::ParamSet) -> Result<Dict> {
-    let mut inputs = base.clone();
+/// Add one generated route's URL and parameters to a project input dictionary.
+pub fn with_route(base: &Dict, path: EcoString, params: &crate::engine::route::ParamSet) -> Dict {
+    let mut route_params = Dict::new();
     for (name, value) in params {
-        if name.as_str() == INPUT_NAME {
-            bail!("route parameter `{INPUT_NAME}` is reserved");
-        }
-        if inputs.contains(name.as_str()) {
-            bail!("route parameter `{name}` conflicts with an existing Typst input");
-        }
-        inputs.insert(
+        route_params.insert(
             Str::from(name.as_str()),
             Value::Str(Str::from(value.as_str())),
         );
     }
-    Ok(inputs)
+
+    with_protocol_field(
+        base,
+        "route",
+        Value::Dict(dict! {
+            "path" => path,
+            "params" => route_params,
+        }),
+    )
+}
+
+/// Add the complete planned page and endpoint URL sets to project inputs.
+pub fn with_routes(base: &Dict, pages: &[EcoString], endpoints: &[EcoString]) -> Dict {
+    let paths = |values: &[EcoString]| {
+        Value::Array(
+            values
+                .iter()
+                .map(|path| Value::Str(Str::from(path.as_str())))
+                .collect::<Array>(),
+        )
+    };
+    with_protocol_field(
+        base,
+        "routes",
+        Value::Dict(dict! {
+            "pages" => paths(pages),
+            "endpoints" => paths(endpoints),
+        }),
+    )
+}
+
+fn with_protocol_field(base: &Dict, name: &str, value: Value) -> Dict {
+    let mut inputs = base.clone();
+    let Value::Dict(mut protocol) = inputs
+        .get(INPUT_NAME)
+        .expect("Aster inputs must contain the runtime protocol")
+        .clone()
+    else {
+        unreachable!("Aster runtime protocol must be a dictionary");
+    };
+    protocol.insert(name.into(), value);
+    inputs.insert(INPUT_NAME.into(), Value::Dict(protocol));
+    inputs
 }
 
 fn protocol_value(collections: BTreeMap<EcoString, Vec<(EcoString, RootedPath)>>) -> Value {
@@ -83,7 +120,13 @@ fn protocol_value(collections: BTreeMap<EcoString, Vec<(EcoString, RootedPath)>>
 
     Value::Dict(dict! {
         "protocol" => PROTOCOL_VERSION,
+        "version" => ASTER_VERSION,
         "collections" => packed_collections,
+        "route" => Value::None,
+        "routes" => dict! {
+            "pages" => Array::new(),
+            "endpoints" => Array::new(),
+        },
     })
 }
 
@@ -242,34 +285,64 @@ mod tests {
             protocol.get("collections").unwrap(),
             &Value::Dict(Dict::new())
         );
+        assert_eq!(
+            protocol.get("version").unwrap(),
+            &Value::Str(Str::from(ASTER_VERSION))
+        );
+        assert!(matches!(protocol.get("route"), Ok(Value::None)));
     }
 
     #[test]
-    fn rejects_route_parameters_that_replace_existing_inputs() {
-        let base = inputs(empty());
-        assert!(
-            with_route_params(
-                &base,
-                &crate::engine::route::ParamSet::from([("site".into(), "route".into())]),
-            )
-            .is_ok()
+    fn route_context_keeps_parameters_inside_aster_protocol() {
+        let base = with_routes(
+            &inputs(empty()),
+            &["/".into(), "/blog/post/".into()],
+            &["/feed.xml".into()],
         );
-        assert!(
-            with_route_params(
-                &base,
-                &crate::engine::route::ParamSet::from([(INPUT_NAME.into(), "bad".into())]),
-            )
-            .is_err()
-        );
+        let params = crate::engine::route::ParamSet::from([
+            ("site".into(), "route".into()),
+            (INPUT_NAME.into(), "nested".into()),
+        ]);
+        let inputs = with_route(&base, "/blog/post/".into(), &params);
 
-        let mut occupied = base;
-        occupied.insert(Str::from("site"), Value::Str(Str::from("occupied")));
-        assert!(
-            with_route_params(
-                &occupied,
-                &crate::engine::route::ParamSet::from([("site".into(), "other".into())]),
-            )
-            .is_err()
+        assert_eq!(inputs.len(), 1);
+        let Value::Dict(protocol) = inputs.get(INPUT_NAME).unwrap() else {
+            panic!("runtime protocol must be a dictionary");
+        };
+        let Value::Dict(route) = protocol.get("route").unwrap() else {
+            panic!("route context must be a dictionary");
+        };
+        assert_eq!(
+            route.get("path").unwrap(),
+            &Value::Str(Str::from("/blog/post/"))
+        );
+        let Value::Dict(params) = route.get("params").unwrap() else {
+            panic!("route parameters must be a dictionary");
+        };
+        assert_eq!(params.get("site").unwrap(), &Value::Str(Str::from("route")));
+        assert_eq!(
+            params.get(INPUT_NAME).unwrap(),
+            &Value::Str(Str::from("nested"))
+        );
+        let Value::Dict(routes) = protocol.get("routes").unwrap() else {
+            panic!("planned routes must be a dictionary");
+        };
+        let Value::Array(pages) = routes.get("pages").unwrap() else {
+            panic!("planned pages must be an array");
+        };
+        let Value::Array(endpoints) = routes.get("endpoints").unwrap() else {
+            panic!("planned endpoints must be an array");
+        };
+        assert_eq!(
+            pages.iter().collect::<Vec<_>>(),
+            [
+                &Value::Str(Str::from("/")),
+                &Value::Str(Str::from("/blog/post/"))
+            ]
+        );
+        assert_eq!(
+            endpoints.iter().collect::<Vec<_>>(),
+            [&Value::Str(Str::from("/feed.xml"))]
         );
     }
 }

@@ -66,7 +66,8 @@ fn contextual_dynamic_endpoints_are_compiled_for_each_declared_route() {
     std::fs::write(
         root.join("pages/feed/[slug].xml.typ"),
         concat!(
-            "#let slug = sys.inputs.at(\"slug\", default: none)\n",
+            "#let route = sys.inputs.at(\"_aster\").at(\"route\", default: none)\n",
+            "#let slug = if route == none { none } else { route.params.at(\"slug\", default: none) }\n",
             "#context [\n",
             "  #metadata(((slug: \"alpha\"), (slug: \"beta\"))) <aster-route>\n",
             "  #metadata(if slug == none { none } else { \"<feed>\" + slug + \"</feed>\" }) <aster-endpoint>\n",

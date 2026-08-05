@@ -10,8 +10,6 @@
 #show: site.with(
   title: "Posts",
   description: "All articles published on AsterPaper.",
-  path: "/posts/",
-  active: "posts",
 )
 
 #html.main(id: "main-content")[

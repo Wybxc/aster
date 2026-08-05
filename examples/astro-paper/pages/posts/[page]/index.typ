@@ -1,4 +1,4 @@
-#import "/lib.typ": page-count, page-items, published-posts
+#import "/lib.typ": page-count, page-items, published-posts, route-params
 #import "/components/pagination.typ": pagination
 #import "/components/page-header.typ": page-header
 #import "/components/post-list.typ": post-list
@@ -14,13 +14,11 @@
   }
 ) <aster-route>
 
-#let current = int(sys.inputs.at("page", default: "1"))
+#let current = int(route-params.at("page", default: "1"))
 
 #show: site.with(
   title: "Posts - Page " + str(current),
   description: "All articles published on AsterPaper.",
-  path: "/posts/" + str(current) + "/",
-  active: "posts",
 )
 
 #html.main(id: "main-content")[

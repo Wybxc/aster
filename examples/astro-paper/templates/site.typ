@@ -1,4 +1,4 @@
-#import "/lib.typ": canonical-url, settings
+#import "/lib.typ": aster-version, canonical-url, route-section, settings
 #import "/components/footer.typ": footer
 #import "/components/header.typ": header
 
@@ -6,9 +6,7 @@
   title: settings.site.title,
   description: settings.site.description,
   author: settings.site.author,
-  path: "/",
   canonical: none,
-  active: "",
   kind: "website",
   extra-head: none,
   body,
@@ -18,13 +16,14 @@
   } else {
     title + " | " + settings.site.title
   }
-  let canonical = if canonical == none { canonical-url(path) } else { canonical }
+  let canonical = if canonical == none { canonical-url() } else { canonical }
+  let generator = if aster-version == none { "Aster" } else { "Aster " + aster-version }
 
   html.html(lang: settings.site.language)[
     #html.head[
       #html.meta(charset: "utf-8")
       #html.meta(name: "viewport", content: "width=device-width, initial-scale=1")
-      #html.meta(name: "generator", content: "Aster 0.1.0")
+      #html.meta(name: "generator", content: generator)
       #html.meta(name: "description", content: description)
       #html.meta(name: "author", content: author)
       #html.meta(name: "theme-color", content: "")
@@ -47,7 +46,7 @@
       #if extra-head != none { extra-head }
     ]
     #html.body[
-      #header(active: active)
+      #header(active: route-section)
       #body
       #footer()
     ]

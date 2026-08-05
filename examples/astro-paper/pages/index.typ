@@ -9,7 +9,7 @@
 #let recent-posts = posts.filter(item => not item.metadata.featured)
 #let recent = recent-posts.slice(0, calc.min(settings.posts.per-index, recent-posts.len()))
 
-#show: site.with(path: "/")
+#show: site
 
 #metadata(
   ```css
