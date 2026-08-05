@@ -34,7 +34,7 @@
       #html.elem("meta", attrs: (property: "og:description", content: description))
       #html.elem("meta", attrs: (property: "og:url", content: canonical))
       #html.elem("link", attrs: (rel: "canonical", href: canonical))
-      #html.elem("link", attrs: (rel: "icon", type: "image/svg+xml", href: "/favicon.svg"))
+      #html.elem("link", attrs: (rel: "icon", type: "image/svg+xml", href: "/assets/favicon.svg"))
       #html.elem("link", attrs: (
         rel: "alternate",
         type: "application/rss+xml",

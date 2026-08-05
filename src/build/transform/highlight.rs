@@ -85,18 +85,6 @@ impl HighlightProcessor {
 }
 
 impl Processor for HighlightProcessor {
-    fn begin_document(
-        &mut self,
-        document: &mut HtmlDocument,
-        page: &mut PagePublication<'_>,
-    ) -> Result<()> {
-        if let Some(stylesheet) = &self.stylesheet {
-            let url = page.reference(stylesheet)?;
-            attach_stylesheet(document, url);
-        }
-        Ok(())
-    }
-
     fn process_element(
         &mut self,
         element: &mut HtmlElement,
@@ -106,6 +94,18 @@ impl Processor for HighlightProcessor {
             return Ok(WalkControl::Continue);
         }
         Ok(process_element(element))
+    }
+
+    fn end_document(
+        &mut self,
+        document: &mut HtmlDocument,
+        page: &mut PagePublication<'_>,
+    ) -> Result<()> {
+        if let Some(stylesheet) = &self.stylesheet {
+            let url = page.reference(stylesheet)?;
+            attach_stylesheet(document, url);
+        }
+        Ok(())
     }
 }
 

@@ -11,9 +11,8 @@ use typst_html::{HtmlDocument, HtmlElement};
 
 use crate::build::output::PagePublication;
 
-use super::css::CssProcessor;
-use super::dom::append_to_head;
-use super::script::{ScriptKind, ScriptProcessor};
+use super::{AssetProcessor, ScriptKind};
+use crate::build::transform::dom::append_to_head;
 
 /// Resources emitted by the component modules used to render one page.
 pub(crate) struct ComponentResources {
@@ -81,8 +80,7 @@ impl ComponentResources {
         self,
         document: &mut HtmlDocument,
         page: &mut PagePublication<'_>,
-        css: &mut CssProcessor<'_>,
-        scripts: &mut ScriptProcessor<'_>,
+        assets: &mut AssetProcessor<'_>,
     ) -> Result<()> {
         for declaration in self.declarations {
             let ResourceDeclaration {
@@ -95,7 +93,7 @@ impl ComponentResources {
                     let url = match source {
                         StyleSource::File(reference) => {
                             let source = resolve_source(page, component, &reference)?;
-                            css.add_file(&source, page)?
+                            assets.add_stylesheet_file(&source, page)?
                         }
                         StyleSource::Inline { code, origin } => {
                             let origin = origin.id().context("raw style has no source file")?;
@@ -103,9 +101,8 @@ impl ComponentResources {
                                 matches!(origin.root(), VirtualRoot::Project),
                                 "raw style originates outside the project"
                             );
-                            let code = css.add_raw(origin.vpath(), code, page)?;
                             let component = component_project_source(&component)?;
-                            page.add_bundled_stylesheet(component, code)?
+                            assets.add_stylesheet_raw(origin.vpath(), component, code, page)?
                         }
                     };
                     let link = HtmlElement::new(typst_html::tag::link)
@@ -118,16 +115,18 @@ impl ComponentResources {
                     let url = match source {
                         ScriptSource::File(reference) => {
                             let source = resolve_source(page, component, &reference)?;
-                            scripts.add_file(kind, &source, page).with_context(|| {
-                                format!(
-                                    "failed to build component script {}",
-                                    source.get_with_slash()
-                                )
-                            })?
+                            assets
+                                .add_script_file(kind, &source, page)
+                                .with_context(|| {
+                                    format!(
+                                        "failed to build component script {}",
+                                        source.get_with_slash()
+                                    )
+                                })?
                         }
                         ScriptSource::Inline(code) => {
                             let component = component_project_source(&component)?;
-                            scripts.add_raw(kind, component, code, page)?
+                            assets.add_script_raw(kind, component, code, page)?
                         }
                     };
                     let mut script = HtmlElement::new(typst_html::tag::script)

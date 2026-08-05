@@ -18,32 +18,6 @@ fn content_hash(data: &[u8]) -> String {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct AssetPath(RoutePath);
 
-/// The file format used for an extracted image asset.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum ImageFormat {
-    Png,
-    Jpeg,
-    Gif,
-    Svg,
-    Webp,
-    Avif,
-    Binary,
-}
-
-impl ImageFormat {
-    fn extension(self) -> &'static str {
-        match self {
-            Self::Png => "png",
-            Self::Jpeg => "jpg",
-            Self::Gif => "gif",
-            Self::Svg => "svg",
-            Self::Webp => "webp",
-            Self::Avif => "avif",
-            Self::Binary => "bin",
-        }
-    }
-}
-
 /// The publication-layer result returned to the build pipeline.
 ///
 /// Publication writes pages, endpoints, and internal assets. Only the two
@@ -275,6 +249,15 @@ impl PagePublication<'_> {
             .relative_from(self.publication.assets_dir.as_virtual_path()))
     }
 
+    /// Register a project resource under its original file name and return its page URL.
+    pub fn add_asset(&mut self, source: &VirtualPath, content: Bytes) -> Result<EcoString> {
+        let name = source.file_stem().context("asset has no file name")?;
+        let asset = self
+            .publication
+            .add_asset(name, source.extension(), content)?;
+        self.reference(&asset)
+    }
+
     /// Register a component script under the source file's name.
     pub fn add_script(&mut self, source: &VirtualPath, content: Bytes) -> Result<EcoString> {
         let name = source
@@ -284,11 +267,16 @@ impl PagePublication<'_> {
         self.reference(&asset)
     }
 
-    /// Register an extracted image and return its browser-facing URL from this page.
-    pub fn add_image(&mut self, format: ImageFormat, content: Vec<u8>) -> Result<EcoString> {
-        let asset =
-            self.publication
-                .add_asset("img", Some(format.extension()), Bytes::new(content))?;
+    /// Register an extracted data URL and return its browser-facing URL from this page.
+    pub fn add_data_asset(
+        &mut self,
+        name: &str,
+        extension: Option<&str>,
+        content: Vec<u8>,
+    ) -> Result<EcoString> {
+        let asset = self
+            .publication
+            .add_asset(name, extension, Bytes::new(content))?;
         self.reference(&asset)
     }
 

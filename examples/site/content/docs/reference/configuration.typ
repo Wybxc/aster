@@ -80,11 +80,11 @@ It defaults to the Browserslist `defaults` query; set it to an empty list to
 preserve modern syntax without assuming a browser support policy. `custom-media`
 enables the draft `@custom-media` syntax; `minify` only controls whether the
 serialized output retains unnecessary whitespace and does not disable target
-transforms. A link with `rel=\"css\"` is standard CSS and goes directly through
-Lightning CSS. A link with `rel=\"tailwind\"` first runs its source through the
+transforms. A standard `rel=\"stylesheet\"` link goes directly through Lightning
+CSS. A link with `rel=\"tailwind\"` first runs its source through the
 external `tailwindcss` CLI and then uses the same Lightning CSS transforms and
-asset publication. Both relations become `rel=\"stylesheet\"` in the published
-HTML. The CLI must be installed separately and available on `PATH`; Aster invokes
+asset publication. The Tailwind relation becomes `rel=\"stylesheet\"` in the
+published HTML. The CLI must be installed separately and available on `PATH`; Aster invokes
 it once per Tailwind entry on each build, while `aster dev` and `aster watch`
 remain responsible for watching source files.
 Project-local pages and content are tracked by the normal build, and Aster also
@@ -94,7 +94,7 @@ imports, and any other sources read only by Tailwind must be declared through
 are watched recursively; missing paths are retained and classified after they
 are created. The project root and paths overlapping the output directory are
 rejected to prevent rebuild loops.
-A leading `/` in a `rel=\"css\"` or `rel=\"tailwind\"` link resolves from the
-project virtual root, so `/styles/site.css` selects that project file. Inside CSS,
-`@import` and `url()` keep standard URL semantics: relative references are
-bundled from the current stylesheet, while `/...` remains a website-root URL.
+A leading `/` in a resource reference resolves from the project virtual root, so
+`/styles/site.css` selects that project file. This applies to stylesheet links,
+scripts, ordinary HTML assets, and CSS `@import` and `url()` dependencies.
+Protocol URLs and `//` references remain browser-managed.

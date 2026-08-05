@@ -24,6 +24,7 @@ lightningcss = { version = "=1.0.0-alpha.72", default-features = false, features
 mime_guess = "2"
 notify-debouncer-full = "0.7"
 poem = { version = "3.1", default-features = false, features = ["server", "sse", "static-files"] }
+parse-srcset = "0.1.1"
 scopeguard = "1.2"
 seahash = "4.1.0"
 serde = { version = "1", features = ["derive"] }

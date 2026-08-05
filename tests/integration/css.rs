@@ -130,7 +130,6 @@ fn preserves_browser_managed_urls() {
         concat!(
             "@import \"https://example.com/theme.css\";",
             ".remote { background: url(\"https://example.com/image.png\"); }",
-            ".root { background: url(\"/images/site.svg\"); }",
             ".inline { background: url(\"data:image/svg+xml,%3Csvg/%3E\"); }",
             ".fragment { filter: url(\"#blur\"); }",
         ),
@@ -142,14 +141,54 @@ fn preserves_browser_managed_urls() {
     let css = generated_asset_containing(root, ".remote").1;
     let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     assert!(
-        html.contains("<link rel=\"stylesheet\" href=\"/site.css\">"),
+        html.contains("<link rel=\"stylesheet\" href=\"https://example.com/site.css\">"),
         "{html}"
     );
     assert!(css.contains("https://example.com/theme.css"), "{css}");
     assert!(css.contains("https://example.com/image.png"), "{css}");
-    assert!(css.contains("/images/site.svg"), "{css}");
     assert!(css.contains("data:image/svg+xml,%3Csvg/%3E"), "{css}");
     assert!(css.contains("#blur"), "{css}");
+}
+
+#[test]
+fn resolves_project_root_stylesheets_imports_and_urls() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join("pages")).unwrap();
+    std::fs::create_dir_all(root.join("styles")).unwrap();
+    std::fs::create_dir_all(root.join("shared")).unwrap();
+    std::fs::create_dir_all(root.join("assets")).unwrap();
+    std::fs::write(
+        root.join("pages/index.typ"),
+        concat!(
+            "#html.html({\n",
+            "  html.head[#html.elem(\"link\", attrs: (rel: \"stylesheet\", href: \"/styles/site.css?v=1#main\"))]\n",
+            "  html.body[Page]\n",
+            "})\n",
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("styles/site.css"),
+        "@import \"/shared/theme.css\"; .root { background: url(\"/assets/site.svg?rev=2#icon\"); }",
+    )
+    .unwrap();
+    std::fs::write(root.join("shared/theme.css"), ".theme { color: green; }").unwrap();
+    std::fs::write(root.join("assets/site.svg"), b"root svg").unwrap();
+
+    BuildSession::new(project(root)).build().unwrap();
+
+    let (css_path, css) = generated_asset_containing(root, ".root");
+    let css_name = css_path.file_name().unwrap().to_string_lossy();
+    let image = generated_asset_with_extension(root, "svg");
+    let image_name = image.file_name().unwrap().to_string_lossy();
+    let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
+    assert!(
+        html.contains(&format!("href=\"_assets/{css_name}?v=1#main\"")),
+        "{html}"
+    );
+    assert!(css.contains(".theme"), "{css}");
+    assert!(css.contains(&format!("{image_name}?rev=2#icon")), "{css}");
 }
 
 #[test]

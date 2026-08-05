@@ -12,7 +12,7 @@ fn write_tailwind_project(root: &Path) {
             "#html.html({\n",
             "  html.head[\n",
             "    #html.elem(\"link\", attrs: (\"rel\": \"tailwind\", \"href\": \"/styles/site.css\"))\n",
-            "    #html.elem(\"link\", attrs: (\"rel\": \"css\", \"href\": \"/styles/plain.css\"))\n",
+            "    #html.elem(\"link\", attrs: (\"rel\": \"stylesheet\", \"href\": \"/styles/plain.css\"))\n",
             "  ]\n",
             "  html.body[Page]\n",
             "})\n",
@@ -47,26 +47,29 @@ fn write_module_project(root: &Path) {
         "export const value = 'dependency';",
     )
     .unwrap();
+    std::fs::create_dir_all(root.join("scripts")).unwrap();
     std::fs::write(
-        root.join("pages/entry.js"),
+        root.join("scripts/entry.js"),
         "import { value } from './dependency.js'; console.log(value);",
     )
     .unwrap();
     std::fs::write(
-        root.join("pages/dependency.js"),
+        root.join("scripts/dependency.js"),
         "export const value = 'page dependency';",
     )
     .unwrap();
+    std::fs::write(root.join("scripts/classic.js"), "console.log('classic');").unwrap();
     std::fs::write(
         root.join("pages/index.typ"),
         concat!(
             "#import \"/components/widget.typ\": widget\n",
             "#html.html({\n",
             "  html.head[\n",
-            "    #html.elem(\"script\", attrs: (\"type\": \"module\", \"src\": \"./entry.js\"))\n",
+            "    #html.elem(\"link\", attrs: (rel: \"modulepreload\", href: \"/scripts/entry.js\"))\n",
+            "    #html.elem(\"script\", attrs: (\"type\": \"module\", \"src\": \"/scripts/entry.js?v=1#main\"))\n",
             "    #html.script(\"console.log('inline module source')\", type: \"module\")\n",
             "    #html.elem(\"script\", attrs: (\"type\": \"module\", \"src\": \"https://example.com/remote.js\"))\n",
-            "    #html.elem(\"script\", attrs: (\"src\": \"./classic.js\"))\n",
+            "    #html.elem(\"script\", attrs: (\"src\": \"/scripts/classic.js\"))\n",
             "  ]\n",
             "  html.body[#widget()]\n",
             "})\n",
@@ -162,7 +165,6 @@ fn build_uses_tailwind_cli_for_tailwind_links() {
     let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     assert_eq!(html.matches("rel=\"stylesheet\"").count(), 2, "{html}");
     assert!(!html.contains("rel=\"tailwind\""), "{html}");
-    assert!(!html.contains("rel=\"css\""), "{html}");
 }
 
 #[test]
@@ -219,7 +221,11 @@ for argument in "$@"; do
   esac
 done
 printf 'console.log("bundled dependency");\n' > "$outfile"
-printf '{"inputs":{"entry.js":{},"dependency.js":{}},"outputs":{"%s":{}}}\n' "$outfile" > "$metafile"
+if [ -z "$entry" ]; then
+  printf '{"inputs":{"<stdin>":{}},"outputs":{"%s":{}}}\n' "$outfile" > "$metafile"
+else
+  printf '{"inputs":{"entry.js":{},"dependency.js":{}},"outputs":{"%s":{}}}\n' "$outfile" > "$metafile"
+fi
 "#,
     )
     .unwrap();
@@ -243,13 +249,24 @@ printf '{"inputs":{"entry.js":{},"dependency.js":{}},"outputs":{"%s":{}}}\n' "$o
     let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     assert!(html.contains("type=\"module\""), "{html}");
     assert!(!html.contains("defer"), "{html}");
-    assert!(!html.contains("src=\"./entry.js\""), "{html}");
+    assert!(!html.contains("src=\"/scripts/entry.js"), "{html}");
     assert!(!html.contains("inline module source"), "{html}");
     assert!(
         html.contains("src=\"https://example.com/remote.js\""),
         "{html}"
     );
-    assert!(html.contains("src=\"./classic.js\""), "{html}");
+    assert!(!html.contains("src=\"/scripts/classic.js\""), "{html}");
+    assert!(html.contains("?v=1#main\""), "{html}");
+    assert!(html.contains("rel=\"modulepreload\""), "{html}");
+    let classic = std::fs::read_dir(root.join("dist/_assets"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .find_map(|path| {
+            let script = std::fs::read_to_string(path).ok()?;
+            script.contains("console.log('classic')").then_some(script)
+        })
+        .expect("published classic script");
+    assert!(classic.contains("console.log('classic')"));
     let script = std::fs::read_dir(root.join("dist/_assets"))
         .unwrap()
         .map(|entry| entry.unwrap().path())

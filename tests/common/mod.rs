@@ -41,8 +41,8 @@ pub fn write_css_page(root: &Path) {
         concat!(
             "#html.html({\n",
             "  html.head[\n",
-            "    #html.elem(\"link\", attrs: (\"rel\": \"css\", \"href\": \"/styles/style.css\"))\n",
-            "    #html.elem(\"link\", attrs: (\"rel\": \"stylesheet\", \"href\": \"/site.css\"))\n",
+            "    #html.elem(\"link\", attrs: (\"rel\": \"stylesheet\", \"href\": \"/styles/style.css\"))\n",
+            "    #html.elem(\"link\", attrs: (\"rel\": \"stylesheet\", \"href\": \"https://example.com/site.css\"))\n",
             "  ]\n",
             "  html.body[Page]\n",
             "})\n",

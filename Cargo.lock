@@ -152,6 +152,7 @@ dependencies = [
  "lightningcss",
  "mime_guess",
  "notify-debouncer-full",
+ "parse-srcset",
  "poem",
  "scopeguard",
  "seahash",
@@ -2358,6 +2359,12 @@ dependencies = [
  "smallvec",
  "windows-link",
 ]
+
+[[package]]
+name = "parse-srcset"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a45ca30f76e4787318b225d86367fc203af4089ce46c87d14a96856222cbf4b0"
 
 [[package]]
 name = "paste"

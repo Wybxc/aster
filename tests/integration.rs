@@ -1,5 +1,7 @@
 mod common;
 
+#[path = "integration/asset.rs"]
+mod asset;
 #[path = "integration/config.rs"]
 mod config;
 #[path = "integration/css.rs"]

@@ -64,12 +64,12 @@ impl BuildSession {
             add_public_files(session, &layout, &mut publication)
                 .context("failed to collect public files")?;
 
-            let mut css =
-                transform::CssProcessor::new(session.project_files(), &manifest.config.css)?;
-            let mut scripts =
-                transform::ScriptProcessor::new(session.project_files(), project.root());
-            let mut image =
-                transform::ImageProcessor::new(manifest.config.assets.image_inline_threshold);
+            let mut assets = transform::AssetProcessor::new(
+                session.project_files(),
+                project.root(),
+                &manifest.config.assets,
+                &manifest.config.css,
+            )?;
             let (mut highlight, highlight_warning) = transform::HighlightProcessor::new(
                 &manifest.config.highlight,
                 session.project_files(),
@@ -98,7 +98,7 @@ impl BuildSession {
                         &job,
                         &library,
                         manifest.config.output.pretty,
-                        (&mut css, &mut scripts, &mut image, &mut highlight),
+                        (&mut assets, &mut highlight),
                         &mut warnings,
                     ),
                     PlannedRouteKind::Endpoint => {
@@ -149,9 +149,7 @@ fn render_page(
     library: &LazyHash<Library>,
     pretty: bool,
     processors: (
-        &mut transform::CssProcessor<'_>,
-        &mut transform::ScriptProcessor<'_>,
-        &mut transform::ImageProcessor,
+        &mut transform::AssetProcessor<'_>,
         &mut transform::HighlightProcessor,
     ),
     warnings: &mut Vec<BuildWarning>,
@@ -161,12 +159,12 @@ fn render_page(
     let resources = transform::ComponentResources::collect(&document)?;
 
     let mut page = publication.page(&job.template, &job.output);
-    let (css, scripts, image, highlight) = processors;
+    let (assets, highlight) = processors;
     {
-        let mut processors: [&mut dyn transform::Processor; 4] = [css, scripts, image, highlight];
+        let mut processors: [&mut dyn transform::Processor; 2] = [assets, highlight];
         transform::process_document(&mut document, &mut page, &mut processors)?;
     }
-    resources.apply(&mut document, &mut page, css, scripts)?;
+    resources.apply(&mut document, &mut page, assets)?;
     let html = typst_html::html(&document, &typst_html::HtmlOptions { pretty })
         .map_err(|error| anyhow::anyhow!("HTML encoding failed: {error:?}"))?;
     page.add_html(html)

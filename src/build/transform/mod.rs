@@ -1,38 +1,32 @@
-mod css;
+mod asset;
 pub(super) mod dom;
 mod highlight;
-mod image;
-mod resource;
-mod script;
 
 use anyhow::Result;
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 
 use crate::build::output::PagePublication;
 
-pub(crate) use css::CssProcessor;
+pub(crate) use asset::{AssetProcessor, ComponentResources};
 pub(crate) use highlight::HighlightProcessor;
-pub(crate) use image::ImageProcessor;
-pub(crate) use resource::ComponentResources;
-pub(crate) use script::ScriptProcessor;
 
 /// One participant in the shared document traversal.
 pub(crate) trait Processor {
-    /// Apply transformations that run once before element traversal.
-    fn begin_document(
-        &mut self,
-        _document: &mut HtmlDocument,
-        _page: &mut PagePublication<'_>,
-    ) -> Result<()> {
-        Ok(())
-    }
-
     /// Process one element and optionally suppress traversal into its children.
     fn process_element(
         &mut self,
         element: &mut HtmlElement,
         page: &mut PagePublication<'_>,
     ) -> Result<WalkControl>;
+
+    /// Apply transformations that must run after element traversal.
+    fn end_document(
+        &mut self,
+        _document: &mut HtmlDocument,
+        _page: &mut PagePublication<'_>,
+    ) -> Result<()> {
+        Ok(())
+    }
 }
 
 /// Run prepared processors over one document in caller-defined order.
@@ -41,10 +35,6 @@ pub(crate) fn process_document(
     page: &mut PagePublication<'_>,
     processors: &mut [&mut dyn Processor],
 ) -> Result<()> {
-    for processor in processors.iter_mut() {
-        processor.begin_document(doc, page)?;
-    }
-
     walk_document(doc.root_mut(), &mut |element| {
         let mut control = WalkControl::Continue;
         for processor in processors.iter_mut() {
@@ -56,7 +46,12 @@ pub(crate) fn process_document(
             }
         }
         Ok(control)
-    })
+    })?;
+
+    for processor in processors {
+        processor.end_document(doc, page)?;
+    }
+    Ok(())
 }
 
 pub(crate) enum WalkControl {

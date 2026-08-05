@@ -39,11 +39,11 @@ A **build session** is the reusable public build interface bound to one Aster pr
 
 The session is reused across builds. The first build compiles directly. Before each later build, it marks loaded files stale; subsequent reads update Typst sources in place so comemo can validate and reuse unchanged compilation and transformation results. After the build attempt, it ages the global comemo cache. Page compilation is memoized through a tracked Typst world.
 
-Callers do not construct or track Typst worlds. Source and content listings are memoized through the session's tracked project-file surface, so directory membership changes invalidate discovery. CSS bundling uses the same surface: path resolution and every entry or transitive import read become comemo constraints. A `rel=\"css\"` link selects standard CSS bundling, while `rel=\"tailwind\"` runs that entry through the one-shot external Tailwind CLI before the same Lightning CSS post-processing. Aster conservatively records each Tailwind entry tree and conventional Tailwind configuration files because arbitrary filesystem reads by the child process cannot enter the tracked dependency graph. Page compilation remains memoized through the tracked Typst world.
+Callers do not construct or track Typst worlds. Source and content listings are memoized through the session's tracked project-file surface, so directory membership changes invalidate discovery. CSS bundling uses the same surface: path resolution and every entry or transitive import read become comemo constraints. A standard `rel=\"stylesheet\"` link selects CSS bundling, while `rel=\"tailwind\"` runs that entry through the one-shot external Tailwind CLI before the same Lightning CSS post-processing. Page compilation remains memoized through the tracked Typst world.
 
 ## Document transform
 
-A **document transform** is the single ordered traversal from a compiled Typst HTML document to a publishable page. It owns CSS-link bundling, large data-image extraction, syntax highlighting, and highlight-stylesheet injection. The transform visits each element once; CSS, image, and highlight implementations remain internal rather than exposing independent passes.
+A **document transform** is the single ordered traversal from a compiled Typst HTML document to a publishable page. It owns CSS and script bundling, project-resource publication, large data-image extraction, syntax highlighting, and highlight-stylesheet injection. The transform visits each element once; concrete processors remain internal rather than exposing independent passes.
 
 ## Output publication
 

@@ -16,22 +16,25 @@ use lightningcss::targets::{Browsers, Targets};
 use typst::ecow::{EcoString, EcoVec, eco_format};
 use typst::foundations::Bytes;
 use typst::syntax::VirtualPath;
-use typst_html::HtmlElement;
 use url::Url;
 
 use crate::build::output::PagePublication;
-use crate::build::transform::{Processor, WalkControl, dom::HtmlElementExt};
 use crate::foundation::config::CssConfig;
 use crate::foundation::files::{FileAccessError, ProjectFiles};
 
-pub(crate) struct CssProcessor<'a> {
+use super::reference::{UrlReference, classify_url};
+
+pub(super) struct CssPipeline<'a> {
     project_files: Tracked<'a, ProjectFiles>,
     config: CssConfig,
     stylesheets: HashMap<StylesheetSource, Bytes>,
 }
 
-impl<'a> CssProcessor<'a> {
-    pub fn new(project_files: Tracked<'a, ProjectFiles>, config: &CssConfig) -> Result<Self> {
+impl<'a> CssPipeline<'a> {
+    pub(super) fn new(
+        project_files: Tracked<'a, ProjectFiles>,
+        config: &CssConfig,
+    ) -> Result<Self> {
         resolve_targets(&config.targets).map_err(|error| anyhow::anyhow!("{error:#}"))?;
         Ok(Self {
             project_files,
@@ -41,7 +44,7 @@ impl<'a> CssProcessor<'a> {
     }
 
     /// Build and publish a normal CSS entry point declared by a component.
-    pub fn add_file(
+    pub(super) fn add_file(
         &mut self,
         source: &VirtualPath,
         page: &mut PagePublication<'_>,
@@ -50,7 +53,7 @@ impl<'a> CssProcessor<'a> {
     }
 
     /// Transform raw CSS declared by a component.
-    pub fn add_raw(
+    pub(super) fn add_raw(
         &mut self,
         origin: &VirtualPath,
         code: EcoString,
@@ -63,7 +66,7 @@ impl<'a> CssProcessor<'a> {
         self.resolve_stylesheet(source, page)
     }
 
-    fn add_stylesheet(
+    pub(super) fn add_stylesheet(
         &mut self,
         kind: StylesheetKind,
         source: &VirtualPath,
@@ -108,40 +111,8 @@ impl<'a> CssProcessor<'a> {
     }
 }
 
-impl Processor for CssProcessor<'_> {
-    fn process_element(
-        &mut self,
-        element: &mut HtmlElement,
-        page: &mut PagePublication<'_>,
-    ) -> Result<WalkControl> {
-        if !element.is_tag(typst_html::tag::link) {
-            return Ok(WalkControl::Continue);
-        }
-        let Some((kind, relation)) = element.get_attr("rel").and_then(|relation| {
-            let kind = match relation.as_str() {
-                "css" => StylesheetKind::Css,
-                "tailwind" => StylesheetKind::Tailwind,
-                _ => return None,
-            };
-            Some((kind, relation))
-        }) else {
-            return Ok(WalkControl::Continue);
-        };
-
-        let href = element.get_attr("href").ok_or_else(|| {
-            anyhow::anyhow!("link element with rel=\"{relation}\" is missing href attribute")
-        })?;
-        let source = page.resolve_source(&href)?;
-        let url = self.add_stylesheet(kind, &source, page)?;
-
-        element.update_attr("href", move |value| *value = url);
-        element.update_attr("rel", |value| *value = "stylesheet".into());
-        Ok(WalkControl::Continue)
-    }
-}
-
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-enum StylesheetKind {
+pub(super) enum StylesheetKind {
     Css,
     Tailwind,
 }
@@ -429,7 +400,9 @@ impl<'a> ConfinedFileProvider<'a> {
         dependency: &UrlDependency,
     ) -> std::result::Result<CssReference, BundleError> {
         let origin = Path::new(&dependency.loc.file_path);
-        let Some((path, suffix)) = resolve_file_reference(origin, &dependency.url)? else {
+        let Some((path, suffix)) =
+            resolve_file_reference(&self.project_root, origin, &dependency.url)?
+        else {
             return Ok(CssReference::Url {
                 placeholder: dependency.placeholder.as_str().into(),
                 url: dependency.url.as_str().into(),
@@ -462,7 +435,9 @@ impl SourceProvider for ConfinedFileProvider<'_> {
         specifier: &str,
         originating_file: &Path,
     ) -> std::result::Result<ResolveResult, Self::Error> {
-        let Some((candidate, _)) = resolve_file_reference(originating_file, specifier)? else {
+        let Some((candidate, _)) =
+            resolve_file_reference(&self.project_root, originating_file, specifier)?
+        else {
             return Ok(ResolveResult::External(specifier.to_owned()));
         };
         let (_, path) = self.confined(&candidate)?;
@@ -560,33 +535,33 @@ fn replace_css_placeholders(
 }
 
 fn resolve_file_reference(
+    project_root: &Path,
     origin: &Path,
     reference: &str,
 ) -> std::result::Result<Option<(PathBuf, EcoString)>, BundleError> {
-    if reference.is_empty() || matches!(reference.chars().next(), Some('/' | '#' | '?')) {
-        return Ok(None);
-    }
-
-    let base = Url::from_file_path(origin).map_err(|()| BundleError::InvalidUrl {
+    let (base, path, suffix) = match classify_url(reference) {
+        UrlReference::ProjectRoot { path, suffix } => (
+            Url::from_directory_path(project_root),
+            path.trim_start_matches('/'),
+            suffix,
+        ),
+        UrlReference::Relative { path, suffix } => (Url::from_file_path(origin), path, suffix),
+        UrlReference::Data { .. } | UrlReference::Browser => return Ok(None),
+    };
+    let base = base.map_err(|()| BundleError::InvalidUrl {
         url: reference.into(),
         source_path: origin.into(),
         message: "source path cannot be represented as a file URL".into(),
     })?;
-    let mut resolved = base
-        .join(reference)
-        .map_err(|error| BundleError::InvalidUrl {
-            url: reference.into(),
-            source_path: origin.into(),
-            message: eco_format!("{error}"),
-        })?;
+    let resolved = base.join(path).map_err(|error| BundleError::InvalidUrl {
+        url: reference.into(),
+        source_path: origin.into(),
+        message: eco_format!("{error}"),
+    })?;
     if resolved.scheme() != "file" {
         return Ok(None);
     }
 
-    let query = resolved.query().map(str::to_owned);
-    let fragment = resolved.fragment().map(str::to_owned);
-    resolved.set_query(None);
-    resolved.set_fragment(None);
     let path = resolved
         .to_file_path()
         .map_err(|()| BundleError::InvalidUrl {
@@ -595,15 +570,6 @@ fn resolve_file_reference(
             message: "resolved URL cannot be represented as a file path".into(),
         })?;
 
-    let mut suffix = String::new();
-    if let Some(query) = query {
-        suffix.push('?');
-        suffix.push_str(&query);
-    }
-    if let Some(fragment) = fragment {
-        suffix.push('#');
-        suffix.push_str(&fragment);
-    }
     Ok(Some((path, suffix.into())))
 }
 

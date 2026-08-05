@@ -51,7 +51,7 @@ fn build_honors_configured_layout_and_processing_options() {
             "#let metadata = post.metadata()\n",
             "#html.html({\n",
             "  html.head[\n",
-            "    #html.elem(\"link\", attrs: (\"rel\": \"css\", \"href\": \"/styles/style.css\"))\n",
+            "    #html.elem(\"link\", attrs: (\"rel\": \"stylesheet\", \"href\": \"/styles/style.css\"))\n",
             "  ]\n",
             "  html.body[\n",
             "    #html.elem(\"p\", attrs: (class: \"page\"))[#metadata.title #post.render()]\n",

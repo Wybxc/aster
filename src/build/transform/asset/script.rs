@@ -5,35 +5,27 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use comemo::Tracked;
 use serde::Deserialize;
 use typst::ecow::{EcoString, eco_format};
 use typst::foundations::Bytes;
 use typst::syntax::VirtualPath;
-use typst_html::HtmlElement;
-use url::Url;
 
 use crate::build::output::PagePublication;
 use crate::foundation::files::{FileAccessError, ProjectFiles};
 
-use super::{Processor, WalkControl, dom::HtmlElementExt};
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub(crate) enum ScriptKind {
-    Classic,
-    Module,
-}
+use super::ScriptKind;
 
 /// Builds and publishes scripts declared by Typst components and HTML elements.
-pub(crate) struct ScriptProcessor<'a> {
+pub(super) struct ScriptPipeline<'a> {
     project_files: Tracked<'a, ProjectFiles>,
     project_root: PathBuf,
     modules: HashMap<ModuleSource, Bytes>,
 }
 
-impl<'a> ScriptProcessor<'a> {
-    pub fn new(project_files: Tracked<'a, ProjectFiles>, project_root: &Path) -> Self {
+impl<'a> ScriptPipeline<'a> {
+    pub(super) fn new(project_files: Tracked<'a, ProjectFiles>, project_root: &Path) -> Self {
         Self {
             project_files,
             project_root: project_root.to_owned(),
@@ -41,7 +33,7 @@ impl<'a> ScriptProcessor<'a> {
         }
     }
 
-    pub fn add_file(
+    pub(super) fn add_file(
         &mut self,
         kind: ScriptKind,
         source: &VirtualPath,
@@ -54,7 +46,7 @@ impl<'a> ScriptProcessor<'a> {
         page.add_script(source, content)
     }
 
-    pub fn add_raw(
+    pub(super) fn add_raw(
         &mut self,
         kind: ScriptKind,
         origin: &VirtualPath,
@@ -84,80 +76,6 @@ impl<'a> ScriptProcessor<'a> {
         .map_err(|error| anyhow::anyhow!("{error:#}"))?;
         self.modules.insert(source, module.clone());
         Ok(module)
-    }
-}
-
-impl Processor for ScriptProcessor<'_> {
-    fn process_element(
-        &mut self,
-        element: &mut HtmlElement,
-        page: &mut PagePublication<'_>,
-    ) -> Result<WalkControl> {
-        if !element.is_tag(typst_html::tag::script)
-            || !element
-                .get_attr("type")
-                .is_some_and(|kind| kind.eq_ignore_ascii_case("module"))
-        {
-            return Ok(WalkControl::Continue);
-        }
-
-        let url = if let Some(reference) = element.get_attr("src") {
-            let Some(reference) = local_module_reference(&reference) else {
-                return Ok(WalkControl::Continue);
-            };
-            let source = page
-                .resolve_source(reference)
-                .with_context(|| format!("invalid module script source {reference}"))?;
-            self.add_file(ScriptKind::Module, &source, page)?
-        } else {
-            let origin = page.template().clone();
-            let code = element.inner_text().into();
-            self.add_raw(ScriptKind::Module, &origin, code, page)?
-        };
-
-        if element.get_attr("src").is_some() {
-            element.update_attr("src", move |value| *value = url);
-            Ok(WalkControl::Continue)
-        } else {
-            element.attrs.push(typst_html::attr::src, url);
-            element.children.clear();
-            Ok(WalkControl::SkipChildren)
-        }
-    }
-}
-
-fn local_module_reference(reference: &str) -> Option<&str> {
-    if reference.is_empty() || matches!(reference.chars().next(), Some('/' | '#' | '?')) {
-        return None;
-    }
-    if Url::parse(reference).is_ok() {
-        return None;
-    }
-    let end = reference.find(['?', '#']).unwrap_or(reference.len());
-    Some(&reference[..end])
-}
-
-#[cfg(test)]
-mod reference_tests {
-    use super::local_module_reference;
-
-    #[test]
-    fn bundles_only_local_relative_module_references() {
-        assert_eq!(
-            local_module_reference("./entry.js?version=1#main"),
-            Some("./entry.js")
-        );
-        assert_eq!(
-            local_module_reference("scripts/entry.js"),
-            Some("scripts/entry.js")
-        );
-        assert_eq!(local_module_reference("/scripts/entry.js"), None);
-        assert_eq!(local_module_reference("//cdn.example.com/entry.js"), None);
-        assert_eq!(local_module_reference("https://example.com/entry.js"), None);
-        assert_eq!(
-            local_module_reference("data:text/javascript,export{}"),
-            None
-        );
     }
 }
 
