@@ -1,7 +1,15 @@
 [package]
-name = "aster"
+name = "aster-ssg"
 version = "0.1.0"
 edition = "2024"
+
+[lib]
+name = "aster"
+path = "src/lib.rs"
+
+[[bin]]
+name = "aster"
+path = "src/main.rs"
 
 [dependencies]
 aho-corasick = "1"
