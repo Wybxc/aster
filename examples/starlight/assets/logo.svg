@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-labelledby="title">
+  <title id="title">Aster Docs</title>
+  <rect width="48" height="48" rx="10" fill="#6366f1"/>
+  <path d="M24 7c1.6 10.4 6.6 15.4 17 17-10.4 1.6-15.4 6.6-17 17-1.6-10.4-6.6-15.4-17-17C17.4 22.4 22.4 17.4 24 7Z" fill="white"/>
+  <circle cx="35" cy="12" r="3" fill="#f4c95d"/>
+</svg>
