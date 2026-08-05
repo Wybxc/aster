@@ -44,7 +44,7 @@
       #html.title(document-title)
       #if extra-head != none { extra-head }
       #html.script(read("./theme-init.js"))
-      #html.elem("link", attrs: (rel: "stylesheet", href: "/styles/site.css"))
+      #metadata("./site.css") <aster-style>
     ]
     #html.body[
       #header(active: active)

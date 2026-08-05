@@ -2,7 +2,6 @@
   const root = document.documentElement;
   const themeButton = document.querySelector("#theme-button");
   const menuButton = document.querySelector("#menu-button");
-  const menuItems = document.querySelector("#menu-items");
 
   const reflectTheme = () => {
     const theme = root.dataset.theme === "dark" ? "dark" : "light";
@@ -27,6 +26,5 @@
     const open = menuButton.getAttribute("aria-expanded") === "true";
     menuButton.setAttribute("aria-expanded", String(!open));
     menuButton.setAttribute("aria-label", open ? "Open menu" : "Close menu");
-    menuItems?.classList.toggle("open", !open);
   });
 })();

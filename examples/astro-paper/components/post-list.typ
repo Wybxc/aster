@@ -1,34 +1,31 @@
-#import "/lib.typ": date-label, post-url, tag-slug
+#import "/lib.typ": date-label, post-url
+#import "tags.typ": tag-list
 
 #let post-card(item, heading-level: 2) = {
-  let metadata = item.metadata
+  let post = item.metadata
   let heading-tag = "h" + str(heading-level)
-  html.elem("li", attrs: (class: "post-card"))[
-    #html.elem("a", attrs: (class: "post-card-link", href: post-url(item.entry.id)))[
-      #html.elem(heading-tag)[#metadata.title]
-    ]
-    #html.elem("div", attrs: (class: "post-meta"))[
-      #html.elem("time", attrs: (datetime: metadata.date))[#date-label(metadata.date)]
-      #if metadata.modified != none [
-        #html.elem("span", attrs: (class: "updated"))[Updated]
-      ]
-    ]
-    #html.elem("p")[#metadata.description]
-    #html.elem("ul", attrs: (class: "tag-row", "aria-label": "Tags"))[
-      #for tag in metadata.tags {
-        html.elem("li")[
-          #html.elem("a", attrs: (
-            class: "tag-link",
-            href: "/tags/" + tag-slug(tag) + "/",
-          ))[#tag]
+  html.elem("li")[
+    #html.elem("article")[
+      #html.elem("header")[
+        #html.elem(heading-tag)[
+          #html.elem("a", attrs: (href: post-url(item.entry.id)))[#post.title]
         ]
-      }
+        #html.elem("p")[
+          #html.elem("time", attrs: (datetime: post.date))[#date-label(post.date)]
+          #if post.modified != none [#html.elem("span")[Updated]]
+        ]
+      ]
+      #html.elem("p")[#post.description]
+      #tag-list(post.tags)
     ]
   ]
 }
 
-#let post-list(items, heading-level: 2) = html.elem("ul", attrs: (class: "post-list"))[
-  #for item in items {
-    post-card(item, heading-level: heading-level)
-  }
+#let post-list(items, heading-level: 2) = [
+  #metadata("./post-list.css") <aster-style>
+  #html.elem("ol", attrs: ("aria-label": "Posts"))[
+    #for item in items {
+      post-card(item, heading-level: heading-level)
+    }
+  ]
 ]

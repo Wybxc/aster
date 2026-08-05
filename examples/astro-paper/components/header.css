@@ -1,0 +1,157 @@
+#skip-to-content {
+  position: fixed;
+  inset-inline-start: 1rem;
+  top: 0;
+  z-index: 50;
+  translate: 0 -100%;
+  background-color: var(--background);
+  padding: 0.5rem 0.75rem;
+  color: var(--accent);
+  transition: translate 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#skip-to-content:focus {
+  translate: 0 1rem;
+}
+
+body > nav[aria-label="Skip links"] {
+  position: absolute;
+}
+
+body > header {
+  width: 100%;
+  max-width: var(--content-width);
+  margin-inline: auto;
+  padding-inline: 1rem;
+}
+
+body > header > div {
+  position: relative;
+  display: flex;
+  min-height: 5rem;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom-width: 1px;
+}
+
+body > header > div > a {
+  padding-block: 0.25rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 2rem;
+  text-decoration: none;
+}
+
+body > header > div > nav,
+#menu-items {
+  display: flex;
+  align-items: center;
+}
+
+#menu-items {
+  gap: 0.75rem;
+}
+
+#menu-items > li > a:not([aria-label]) {
+  display: block;
+  padding: 0.5rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+#menu-items > li > a[aria-current="page"] {
+  color: var(--accent);
+  text-decoration: underline wavy 2px;
+  text-underline-offset: 8px;
+}
+
+:is(#menu-button, #theme-button, #menu-items a[aria-label]) {
+  position: relative;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  background-color: transparent;
+  padding: 0.5rem;
+  color: var(--foreground);
+  text-decoration: none;
+}
+
+#theme-button,
+#menu-items a[aria-label] {
+  display: inline-flex;
+}
+
+:is(#menu-button, #theme-button, #menu-items a[aria-label]):hover {
+  color: var(--accent);
+}
+
+#menu-button,
+#menu-button > span:last-child,
+#theme-button > span:last-child,
+[data-theme="dark"] #theme-button > span:first-child {
+  display: none;
+}
+
+[data-theme="dark"] #theme-button > span:last-child {
+  display: block;
+}
+
+@media (max-width: 639px) {
+  body > header > div {
+    min-height: 4rem;
+    align-items: flex-start;
+    padding-block: 0.75rem;
+  }
+
+  body > header > div > a {
+    padding-block: 0.5rem;
+    font-size: 1.25rem;
+    line-height: 1.75rem;
+  }
+
+  body > header > div > nav {
+    flex-direction: column;
+    align-items: flex-end;
+  }
+
+  #menu-button {
+    display: inline-flex;
+  }
+
+  #menu-items {
+    display: none;
+    width: 11rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    padding-top: 0.75rem;
+  }
+
+  #menu-button[aria-expanded="true"] + #menu-items {
+    display: grid;
+  }
+
+  #menu-items li {
+    grid-column: span 2 / span 2;
+  }
+
+  #menu-items li:has(#theme-button),
+  #menu-items li:has(a[aria-label="Archives"]) {
+    grid-column: span 1 / span 1;
+    display: flex;
+    justify-content: center;
+  }
+
+  #menu-items > li > a:not([aria-label]) {
+    text-align: center;
+  }
+
+  #menu-button[aria-expanded="true"] > span:first-child {
+    display: none;
+  }
+
+  #menu-button[aria-expanded="true"] > span:last-child {
+    display: block;
+  }
+}

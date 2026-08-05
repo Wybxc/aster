@@ -19,7 +19,6 @@
     usedIds.add(id);
 
     const anchor = document.createElement("a");
-    anchor.className = "heading-link";
     anchor.href = `#${id}`;
     anchor.setAttribute("aria-label", `Link to ${heading.textContent}`);
     anchor.textContent = "#";
@@ -29,7 +28,6 @@
   document.querySelectorAll("#article pre").forEach(block => {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "copy-code";
     button.textContent = "Copy";
     button.addEventListener("click", async () => {
       const text = block.querySelector("code")?.textContent || "";
@@ -47,8 +45,8 @@
   const updateScroll = () => {
     const height = root.scrollHeight - root.clientHeight;
     const ratio = height > 0 ? root.scrollTop / height : 0;
-    if (progress) progress.style.width = `${Math.min(100, ratio * 100)}%`;
-    backToTop?.classList.toggle("visible", root.scrollTop > 480);
+    if (progress) progress.value = Math.min(100, ratio * 100);
+    if (backToTop) backToTop.hidden = root.scrollTop <= 480;
   };
   document.addEventListener("scroll", updateScroll, { passive: true });
   updateScroll();
@@ -59,17 +57,13 @@
     const image = event.target.closest("img");
     if (!image || image.closest("a")) return;
 
-    const dialog = document.createElement("div");
-    dialog.className = "lightbox";
-    dialog.setAttribute("role", "dialog");
-    dialog.setAttribute("aria-modal", "true");
+    const dialog = document.createElement("dialog");
     dialog.setAttribute("aria-label", image.alt ? `Image preview: ${image.alt}` : "Image preview");
 
     const preview = image.cloneNode();
     preview.alt = "";
     const close = document.createElement("button");
     close.type = "button";
-    close.className = "lightbox-close";
     close.title = "Close image preview";
     close.setAttribute("aria-label", "Close image preview");
     close.textContent = "\u00d7";
@@ -90,6 +84,7 @@
     image.tabIndex = 0;
     dialog.append(preview, close);
     document.body.append(dialog);
+    dialog.showModal();
     document.body.style.overflow = "hidden";
     close.focus();
   });

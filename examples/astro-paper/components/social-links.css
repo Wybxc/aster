@@ -1,0 +1,22 @@
+nav[aria-label="Social links"] > ul {
+  display: flex;
+  gap: 0.25rem;
+}
+
+nav[aria-label="Social links"] a {
+  position: relative;
+  display: inline-flex;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  background-color: transparent;
+  padding: 0.5rem;
+  color: var(--foreground);
+  text-decoration: none;
+}
+
+nav[aria-label="Social links"] a:hover {
+  color: var(--accent);
+}

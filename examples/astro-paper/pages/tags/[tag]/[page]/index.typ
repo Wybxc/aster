@@ -1,5 +1,6 @@
 #import "/lib.typ": all-tags, page-count, page-items, posts-with-tag
 #import "/components/pagination.typ": pagination
+#import "/components/page-header.typ": page-header
 #import "/components/post-list.typ": post-list
 #import "/templates/site.typ": site
 
@@ -29,9 +30,8 @@
   active: "tags",
 )
 
-#html.elem("main", attrs: (id: "main-content", class: "app-main listing-page"))[
-  #html.elem("h1")[Tag: #name]
-  #html.elem("p", attrs: (class: "page-description"))[Page #current of #total.]
+#html.elem("main", attrs: (id: "main-content"))[
+  #page-header([Tag: #name], [Page #current of #total.])
   #post-list(page-items(posts, current))
   #pagination(current, total, "/tags/" + tag + "/")
 ]

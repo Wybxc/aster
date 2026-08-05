@@ -1,4 +1,6 @@
 #import "/lib.typ": all-tags
+#import "/components/page-header.typ": page-header
+#import "/components/tags.typ": tag-list
 #import "/templates/site.typ": site
 
 #let tags = all-tags()
@@ -10,16 +12,7 @@
   active: "tags",
 )
 
-#html.elem("main", attrs: (id: "main-content", class: "app-main standard-page"))[
-  #html.elem("h1")[Tags]
-  #html.elem("p", attrs: (class: "page-description"))[All topics used across published articles.]
-  #html.elem("ul", attrs: (class: "tag-cloud"))[
-    #for tag in tags {
-      html.elem("li")[
-        #html.elem("a", attrs: (class: "tag-link large", href: "/tags/" + tag.slug + "/"))[
-          #tag.name #html.elem("span", attrs: (class: "tag-count"))[(#tag.count)]
-        ]
-      ]
-    }
-  ]
+#html.elem("main", attrs: (id: "main-content"))[
+  #page-header([Tags], [All topics used across published articles.])
+  #tag-list(tags, counts: true)
 ]

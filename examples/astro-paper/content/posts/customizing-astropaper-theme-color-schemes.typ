@@ -12,7 +12,7 @@
 AstroPaper expresses its palette through a small set of semantic CSS variables.
 Components refer to roles such as background, foreground, accent, and border,
 so a new scheme does not require editing every selector. The complete palette
-lives in `styles/theme.css`.
+lives next to the site template in `templates/theme.css`.
 
 = Light theme values
 

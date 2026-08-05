@@ -1,0 +1,27 @@
+body > footer {
+  width: 100%;
+  max-width: var(--content-width);
+  margin: auto auto 0;
+  padding-inline: 1rem;
+}
+
+body > footer > div {
+  display: flex;
+  min-height: 5rem;
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-top-width: 1px;
+  padding-block: 1rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+@media (max-width: 639px) {
+  body > footer > div {
+    flex-direction: column;
+    padding-block: 1.5rem;
+    text-align: center;
+  }
+}

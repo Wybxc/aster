@@ -1,5 +1,6 @@
 #import "/lib.typ": page-count, page-items, published-posts
 #import "/components/pagination.typ": pagination
+#import "/components/page-header.typ": page-header
 #import "/components/post-list.typ": post-list
 #import "/templates/site.typ": site
 
@@ -22,9 +23,8 @@
   active: "posts",
 )
 
-#html.elem("main", attrs: (id: "main-content", class: "app-main listing-page"))[
-  #html.elem("h1")[Posts]
-  #html.elem("p", attrs: (class: "page-description"))[Page #current of #total.]
+#html.elem("main", attrs: (id: "main-content"))[
+  #page-header([Posts], [Page #current of #total.])
   #post-list(page-items(posts, current))
   #pagination(current, total, "/posts/")
 ]

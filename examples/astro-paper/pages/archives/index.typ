@@ -1,4 +1,5 @@
 #import "/lib.typ": published-posts
+#import "/components/page-header.typ": page-header
 #import "/templates/site.typ": site
 
 #let posts = published-posts()
@@ -18,21 +19,21 @@
   active: "archives",
 )
 
-#html.elem("main", attrs: (id: "main-content", class: "app-main standard-page"))[
-  #html.elem("h1")[Archives]
-  #html.elem("p", attrs: (class: "page-description"))[All published articles grouped by year.]
+#metadata("./index.css") <aster-style>
+#html.elem("main", attrs: (id: "main-content"))[
+  #page-header([Archives], [All published articles grouped by year.])
   #for year in years.keys().sorted().rev() {
-    html.elem("section", attrs: (class: "archive-year"))[
+    html.elem("section")[
       #html.elem("h2")[#year]
       #html.elem("ul")[
         #for item in years.at(year) {
           html.elem("li")[
-          #html.elem("time", attrs: (datetime: item.metadata.date))[
-            #item.metadata.date.slice(5, 10)
-          ]
-          #html.elem("a", attrs: (href: "/posts/" + item.entry.id + "/"))[
-            #item.metadata.title
-          ]
+            #html.elem("time", attrs: (datetime: item.metadata.date))[
+              #item.metadata.date.slice(5, 10)
+            ]
+            #html.elem("a", attrs: (href: "/posts/" + item.entry.id + "/"))[
+              #item.metadata.title
+            ]
           ]
         }
       ]

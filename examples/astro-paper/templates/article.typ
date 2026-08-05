@@ -1,5 +1,7 @@
-#import "/lib.typ": adjacent-posts, canonical-url, date-label, post-url, settings, tag-slug
+#import "/lib.typ": adjacent-posts, canonical-url, date-label, post-url, settings
 #import "/components/icons.typ": arrow-left-icon, arrow-right-icon, arrow-up-icon
+#import "/components/prose.typ": prose
+#import "/components/tags.typ": tag-list
 #import "site.typ": site
 
 #let article(body, item: none) = {
@@ -32,48 +34,49 @@
     extra-head: head,
   )
 
+  [#metadata("./article.css") <aster-style>]
   [#metadata("./article.js") <aster-module>]
-  html.elem("div", attrs: (id: "reading-progress", class: "reading-progress"))[]
-  html.elem("main", attrs: (id: "main-content", class: "app-main article-main"))[
-    #html.elem("a", attrs: (class: "back-link", href: "/posts/"))[#arrow-left-icon Back to posts]
-    #html.elem("header", attrs: (class: "article-header"))[
+  html.elem("progress", attrs: (
+    id: "reading-progress",
+    max: "100",
+    value: "0",
+    "aria-label": "Reading progress",
+  ))[]
+  html.elem("main", attrs: (id: "main-content"))[
+    #html.elem("a", attrs: (href: "/posts/"))[#arrow-left-icon Back to posts]
+    #html.elem("header")[
       #html.elem("h1")[#post.title]
-      #html.elem("div", attrs: (class: "post-meta"))[
+      #html.elem("p")[
         #html.elem("time", attrs: (datetime: post.date))[#date-label(post.date)]
         #if post.modified != none [
           #html.elem("span")[Updated #date-label(post.modified)]
         ]
       ]
     ]
-    #html.elem("article", attrs: (id: "article", class: "article-prose"))[
-      #body
-    ]
+    #prose(body, id: "article")
     #html.elem("button", attrs: (
       id: "back-to-top",
-      class: "back-to-top icon-button",
       type: "button",
       title: "Back to top",
       "aria-label": "Back to top",
+      hidden: "",
     ))[#arrow-up-icon]
-    #html.elem("ul", attrs: (class: "article-tags", "aria-label": "Tags"))[
-      #for tag in post.tags {
-        html.elem("li")[
-          #html.elem("a", attrs: (
-            class: "tag-link",
-            href: "/tags/" + tag-slug(tag) + "/",
-          ))[#tag]
-        ]
-      }
-    ]
-    #html.elem("nav", attrs: (class: "adjacent-posts", "aria-label": "Adjacent posts"))[
+    #tag-list(post.tags)
+    #html.elem("nav", attrs: ("aria-label": "Adjacent posts"))[
       #if adjacent.older != none {
-        html.elem("a", attrs: (href: post-url(adjacent.older.entry.id), class: "adjacent-link older"))[
+        html.elem("a", attrs: (
+          href: post-url(adjacent.older.entry.id),
+          rel: "prev",
+        ))[
           #arrow-left-icon
           #html.elem("span")[#html.elem("small")[Older post]#adjacent.older.metadata.title]
         ]
-      } else { html.elem("span")[] }
+      }
       #if adjacent.newer != none {
-        html.elem("a", attrs: (href: post-url(adjacent.newer.entry.id), class: "adjacent-link newer"))[
+        html.elem("a", attrs: (
+          href: post-url(adjacent.newer.entry.id),
+          rel: "next",
+        ))[
           #html.elem("span")[#html.elem("small")[Newer post]#adjacent.newer.metadata.title]
           #arrow-right-icon
         ]

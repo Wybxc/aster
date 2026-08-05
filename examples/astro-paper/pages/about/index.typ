@@ -1,4 +1,6 @@
 #import "/lib.typ": get-entry
+#import "/components/page-header.typ": page-header
+#import "/components/prose.typ": prose
 #import "/templates/site.typ": site
 
 #let entry = get-entry("pages", "about")
@@ -15,10 +17,9 @@
   active: "about",
 )
 
-#html.elem("main", attrs: (id: "main-content", class: "app-main standard-page"))[
-  #html.elem("h1")[#metadata.title]
-  #html.elem("p", attrs: (class: "page-description"))[#metadata.description]
+#html.elem("main", attrs: (id: "main-content"))[
+  #page-header(metadata.title, metadata.description)
   #if entry != none {
-    html.elem("article", attrs: (class: "article-prose"))[#entry.render()]
+    prose(entry.render())
   }
 ]

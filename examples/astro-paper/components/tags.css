@@ -1,0 +1,35 @@
+nav[aria-label="Tags"] > ul,
+nav[aria-label="All tags"] > ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+nav[aria-label="Tags"] a,
+nav[aria-label="All tags"] a {
+  color: var(--accent);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  text-decoration-style: dashed;
+}
+
+nav[aria-label="Tags"] a::before,
+nav[aria-label="All tags"] a::before {
+  content: "#";
+}
+
+nav[aria-label="All tags"] a {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: 0.5rem;
+  border-width: 1px;
+  padding: 0.5rem 0.75rem;
+  font-size: 1rem;
+  line-height: 1.5rem;
+  text-decoration: none;
+}
+
+nav[aria-label="All tags"] span {
+  color: var(--muted-foreground);
+}

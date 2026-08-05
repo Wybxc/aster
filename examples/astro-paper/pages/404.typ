@@ -6,9 +6,10 @@
   path: "/404.html",
 )
 
-#html.elem("main", attrs: (id: "main-content", class: "app-main not-found"))[
-  #html.elem("p", attrs: (class: "error-code"))[404]
+#metadata("./404.css") <aster-style>
+#html.elem("main", attrs: (id: "main-content"))[
+  #html.elem("p")[404]
   #html.elem("h1")[Page not found]
   #html.elem("p")[The page may have moved, or the address may be incorrect.]
-  #html.elem("a", attrs: (class: "primary-link", href: "/"))[Return home]
+  #html.elem("a", attrs: (href: "/"))[Return home]
 ]

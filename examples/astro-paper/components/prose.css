@@ -1,4 +1,4 @@
-.article-prose {
+body > main > article {
   --prose-body: var(--foreground);
   --prose-headings: var(--foreground);
   --prose-links: var(--foreground);
@@ -17,104 +17,97 @@
   line-height: 1.75;
 }
 
-.article-prose :where(p) {
+body > main > article :where(p) {
   margin-block: 1.25em;
 }
 
-.article-prose :where(.lead) {
-  margin-block: 1.2em;
-  color: var(--prose-body);
-  font-size: 1.25em;
-  line-height: 1.6;
-}
-
-.article-prose :where(a) {
+body > main > article :where(a) {
   color: var(--prose-links);
   font-weight: 500;
   text-decoration: underline dashed;
 }
 
-.article-prose :where(strong) {
+body > main > article :where(strong) {
   color: var(--prose-bold);
   font-weight: 600;
 }
 
-.article-prose :where(a strong, blockquote strong, thead th strong) {
+body > main > article :where(a strong, blockquote strong, thead th strong) {
   color: inherit;
 }
 
-.article-prose :where(ol, ul) {
+body > main > article :where(ol, ul) {
   margin-block: 1.25em;
   padding-inline-start: 1.625em;
 }
 
-.article-prose :where(ol) {
+body > main > article :where(ol) {
   list-style-type: decimal;
 }
 
-.article-prose :where(ol[type="A"], ol[type="A" s]) {
+body > main > article :where(ol[type="A"], ol[type="A" s]) {
   list-style-type: upper-alpha;
 }
 
-.article-prose :where(ol[type="a"], ol[type="a" s]) {
+body > main > article :where(ol[type="a"], ol[type="a" s]) {
   list-style-type: lower-alpha;
 }
 
-.article-prose :where(ol[type="I"], ol[type="I" s]) {
+body > main > article :where(ol[type="I"], ol[type="I" s]) {
   list-style-type: upper-roman;
 }
 
-.article-prose :where(ol[type="i"], ol[type="i" s]) {
+body > main > article :where(ol[type="i"], ol[type="i" s]) {
   list-style-type: lower-roman;
 }
 
-.article-prose :where(ul) {
+body > main > article :where(ul) {
   list-style-type: disc;
 }
 
-.article-prose :where(li) {
+body > main > article :where(li) {
   margin-block: 0.5em;
 }
 
-.article-prose :where(ol > li, ul > li) {
+body > main > article :where(ol > li, ul > li) {
   padding-inline-start: 0.375em;
 }
 
-.article-prose :where(ol > li)::marker {
+body > main > article :where(ol > li)::marker {
   color: var(--prose-counters);
   font-weight: 400;
 }
 
-.article-prose :where(ul > li)::marker {
+body > main > article :where(ul > li)::marker {
   color: var(--prose-bullets);
 }
 
-.article-prose :where(ul ul, ul ol, ol ul, ol ol) {
+body > main > article :where(ul ul, ul ol, ol ul, ol ol) {
   margin-block: 0.75em;
 }
 
-.article-prose :where(dl) {
+body > main > article :where(dl) {
   margin-block: 1.25em;
 }
 
-.article-prose :where(dt) {
+body > main > article :where(dt) {
   margin-top: 1.25em;
   color: var(--prose-headings);
   font-weight: 600;
 }
 
-.article-prose :where(dd) {
+body > main > article :where(dd) {
   margin-top: 0.5em;
   padding-inline-start: 1.625em;
 }
 
-.article-prose :where(hr) {
+body > main > article :where(hr) {
   margin-block: 3em;
   border-color: var(--prose-rule);
   border-top-width: 1px;
 }
 
-.article-prose :where(blockquote) {
+body > main > article :where(blockquote) {
   margin-block: 1.6em;
   border-inline-start-width: 0.25rem;
   border-inline-start-color: var(--prose-quote-border);
@@ -125,20 +118,20 @@
   quotes: "\201C" "\201D" "\2018" "\2019";
 }
 
-.article-prose :where(blockquote p:first-of-type)::before {
+body > main > article :where(blockquote p:first-of-type)::before {
   content: open-quote;
 }
 
-.article-prose :where(blockquote p:last-of-type)::after {
+body > main > article :where(blockquote p:last-of-type)::after {
   content: close-quote;
 }
 
-.article-prose :where(h1, h2, h3, h4) {
+body > main > article :where(h1, h2, h3, h4) {
   color: var(--prose-headings);
   scroll-margin-top: 1rem;
 }
 
-.article-prose :where(h1) {
+body > main > article :where(h1) {
   margin-top: 0;
   margin-bottom: 0.8888889em;
   font-size: 2.25em;
@@ -146,12 +139,12 @@
   line-height: 1.1111111;
 }
 
-.article-prose :where(h1 strong) {
+body > main > article :where(h1 strong) {
   color: inherit;
   font-weight: 900;
 }
 
-.article-prose :where(h2) {
+body > main > article :where(h2) {
   margin-top: 2em;
   margin-bottom: 1em;
   font-size: 1.5em;
@@ -159,12 +152,12 @@
   line-height: 1.3333333;
 }
 
-.article-prose :where(h2 strong) {
+body > main > article :where(h2 strong) {
   color: inherit;
   font-weight: 800;
 }
 
-.article-prose :where(h3) {
+body > main > article :where(h3) {
   margin-top: 1.6em;
   margin-bottom: 0.6em;
   font-size: 1.25em;
@@ -172,35 +165,35 @@
   line-height: 1.6;
 }
 
-.article-prose :where(h3 strong, h4 strong) {
+body > main > article :where(h3 strong, h4 strong) {
   color: inherit;
   font-weight: 700;
 }
 
-.article-prose :where(h4) {
+body > main > article :where(h4) {
   margin-top: 1.5em;
   margin-bottom: 0.5em;
   font-weight: 600;
   line-height: 1.5;
 }
 
-.article-prose :where(h2 + *, h3 + *, h4 + *, hr + *) {
+body > main > article :where(h2 + *, h3 + *, h4 + *, hr + *) {
   margin-top: 0;
 }
 
-.article-prose :where(img, picture, video) {
+body > main > article :where(img, picture, video) {
   margin-block: 2em;
 }
 
-.article-prose :where(picture) {
+body > main > article :where(picture) {
   display: block;
 }
 
-.article-prose :where(picture > img) {
+body > main > article :where(picture > img) {
   margin-block: 0;
 }
 
-.article-prose :where(kbd) {
+body > main > article :where(kbd) {
   border-radius: 0.3125rem;
   box-shadow: 0 0 0 1px rgb(0 0 0 / 0.1), 0 3px 0 rgb(0 0 0 / 0.1);
   padding: 0.1875em 0.375em;
@@ -210,30 +203,30 @@
   font-weight: 500;
 }
 
-.article-prose :where(code) {
+body > main > article :where(code) {
   color: var(--prose-code);
   font-size: 0.875em;
   font-weight: 600;
 }
 
-.article-prose :where(code)::before,
-.article-prose :where(code)::after {
+body > main > article :where(code)::before,
+body > main > article :where(code)::after {
   content: "`";
 }
 
-.article-prose :where(a code, h1 code, h2 code, h3 code, h4 code, blockquote code, thead th code) {
+body > main > article :where(a code, h1 code, h2 code, h3 code, h4 code, blockquote code, thead th code) {
   color: inherit;
 }
 
-.article-prose :where(h2 code) {
+body > main > article :where(h2 code) {
   font-size: 0.875em;
 }
 
-.article-prose :where(h3 code) {
+body > main > article :where(h3 code) {
   font-size: 0.9em;
 }
 
-.article-prose :where(pre) {
+body > main > article :where(pre) {
   position: relative;
   overflow-x: auto;
   margin-block: 1.7142857em;
@@ -247,7 +240,7 @@
   line-height: 1.7142857;
 }
 
-.article-prose :where(pre code) {
+body > main > article :where(pre code) {
   border-width: 0;
   border-radius: 0;
   background-color: transparent;
@@ -259,12 +252,12 @@
   line-height: inherit;
 }
 
-.article-prose :where(pre code)::before,
-.article-prose :where(pre code)::after {
+body > main > article :where(pre code)::before,
+body > main > article :where(pre code)::after {
   content: none;
 }
 
-.article-prose :where(table) {
+body > main > article :where(table) {
   width: 100%;
   margin-block: 2em;
   table-layout: auto;
@@ -272,11 +265,11 @@
   line-height: 1.7142857;
 }
 
-.article-prose :where(thead) {
+body > main > article :where(thead) {
   border-bottom: 1px solid var(--border);
 }
 
-.article-prose :where(thead th) {
+body > main > article :where(thead th) {
   padding-inline: 0.5714286em;
   padding-bottom: 0.5714286em;
   color: var(--prose-headings);
@@ -284,51 +277,51 @@
   vertical-align: bottom;
 }
 
-.article-prose :where(tbody tr) {
+body > main > article :where(tbody tr) {
   border-bottom: 1px solid var(--border);
 }
 
-.article-prose :where(tbody tr:last-child) {
+body > main > article :where(tbody tr:last-child) {
   border-bottom-width: 0;
 }
 
-.article-prose :where(tbody td, tfoot td) {
+body > main > article :where(tbody td, tfoot td) {
   padding: 0.5714286em;
 }
 
-.article-prose :where(tbody td) {
+body > main > article :where(tbody td) {
   vertical-align: baseline;
 }
 
-.article-prose :where(tfoot) {
+body > main > article :where(tfoot) {
   border-top: 1px solid var(--border);
 }
 
-.article-prose :where(tfoot td) {
+body > main > article :where(tfoot td) {
   vertical-align: top;
 }
 
-.article-prose :where(th, td) {
+body > main > article :where(th, td) {
   text-align: start;
 }
 
-.article-prose :where(thead th:first-child, tbody td:first-child, tfoot td:first-child) {
+body > main > article :where(thead th:first-child, tbody td:first-child, tfoot td:first-child) {
   padding-inline-start: 0;
 }
 
-.article-prose :where(thead th:last-child, tbody td:last-child, tfoot td:last-child) {
+body > main > article :where(thead th:last-child, tbody td:last-child, tfoot td:last-child) {
   padding-inline-end: 0;
 }
 
-.article-prose :where(figure) {
+body > main > article :where(figure) {
   margin-block: 2em;
 }
 
-.article-prose :where(figure > *) {
+body > main > article :where(figure > *) {
   margin-block: 0;
 }
 
-.article-prose :where(figcaption) {
+body > main > article :where(figcaption) {
   margin-top: 0.8571429em;
   color: var(--prose-captions);
   font-size: 0.875em;
@@ -336,14 +329,14 @@
   text-align: center;
 }
 
-.heading-link {
+body > main > article a[aria-label^="Link to "] {
   margin-inline-start: 0.5rem;
   color: var(--accent);
   text-decoration: none;
   opacity: 0.6;
 }
 
-.copy-code {
+body > main > article pre > button {
   position: absolute;
   inset-inline-end: 0.75rem;
   top: 0.75rem;
@@ -357,30 +350,11 @@
   line-height: 1rem;
 }
 
-.callout {
-  display: block;
-  margin-block: 1.5rem;
-  border-inline-start-width: 4px;
-  border-color: var(--accent);
-  background-color: var(--muted);
-  padding: 0.75rem 1rem;
-}
-
-.callout strong {
-  display: block;
-  margin-bottom: 0.25rem;
-}
-
-.table-scroll {
-  width: 100%;
-  overflow-x: auto;
-}
-
-.article-prose figure img {
+body > main > article figure img {
   width: 100%;
   border-width: 1px;
 }
 
-.article-prose img:not(a img) {
+body > main > article img:not(a img) {
   cursor: zoom-in;
 }
