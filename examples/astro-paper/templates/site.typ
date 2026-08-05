@@ -33,14 +33,14 @@
       #html.elem("meta", attrs: (property: "og:title", content: document-title))
       #html.elem("meta", attrs: (property: "og:description", content: description))
       #html.elem("meta", attrs: (property: "og:url", content: canonical))
-      #html.elem("link", attrs: (rel: "canonical", href: canonical))
-      #html.elem("link", attrs: (rel: "icon", type: "image/svg+xml", href: "/assets/favicon.svg"))
-      #html.elem("link", attrs: (
+      #html.link(rel: "canonical", href: canonical)
+      #html.link(rel: "icon", type: "image/svg+xml", href: "/assets/favicon.svg")
+      #html.link(
         rel: "alternate",
         type: "application/rss+xml",
         title: settings.site.title,
         href: settings.site.url + "rss.xml",
-      ))
+      )
       #html.title(document-title)
       #if extra-head != none { extra-head }
       #html.script(read("./theme-init.js"))

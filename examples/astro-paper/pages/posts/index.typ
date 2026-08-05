@@ -14,7 +14,7 @@
   active: "posts",
 )
 
-#html.elem("main", attrs: (id: "main-content"))[
+#html.main(id: "main-content")[
   #page-header([Posts], [All articles in reverse chronological order.])
   #post-list(page-items(posts, 1))
   #pagination(1, total, "/posts/")

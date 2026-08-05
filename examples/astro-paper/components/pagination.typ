@@ -5,23 +5,23 @@
 #let pagination(page, total, base) = {
   if total > 1 [
     #metadata("./pagination.css") <aster-style>
-    #html.elem("nav", attrs: ("aria-label": "Pagination"))[
+    #html.nav(class: "pagination", aria-label: "Pagination")[
       #if page > 1 {
-        html.elem("a", attrs: (
+        html.a(
           href: _href(base, page - 1),
-          "aria-label": "Previous page",
-        ))[#arrow-left-icon Previous]
+          aria-label: "Previous page",
+        )[#arrow-left-icon Previous]
       } else {
-        html.elem("span", attrs: ("aria-disabled": "true"))[#arrow-left-icon Previous]
+        html.span(aria-disabled: true)[#arrow-left-icon Previous]
       }
-      #html.elem("span", attrs: ("aria-current": "page"))[#page / #total]
+      #html.span(aria-current: "page")[#page / #total]
       #if page < total {
-        html.elem("a", attrs: (
+        html.a(
           href: _href(base, page + 1),
-          "aria-label": "Next page",
-        ))[Next #arrow-right-icon]
+          aria-label: "Next page",
+        )[Next #arrow-right-icon]
       } else {
-        html.elem("span", attrs: ("aria-disabled": "true"))[Next #arrow-right-icon]
+        html.span(aria-disabled: true)[Next #arrow-right-icon]
       }
     ]
   ]

@@ -30,7 +30,7 @@
   active: "tags",
 )
 
-#html.elem("main", attrs: (id: "main-content"))[
+#html.main(id: "main-content")[
   #page-header([Tag: #name], [Page #current of #total.])
   #post-list(page-items(posts, current))
   #pagination(current, total, "/tags/" + tag + "/")

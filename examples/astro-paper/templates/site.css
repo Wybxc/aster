@@ -30,7 +30,7 @@ body {
   letter-spacing: 0;
 }
 
-body > main {
+main {
   width: 100%;
   max-width: var(--content-width);
   margin-inline: auto;

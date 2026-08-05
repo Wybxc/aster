@@ -7,9 +7,11 @@
 )
 
 #metadata("./404.css") <aster-style>
-#html.elem("main", attrs: (id: "main-content"))[
-  #html.elem("p")[404]
-  #html.elem("h1")[Page not found]
-  #html.elem("p")[The page may have moved, or the address may be incorrect.]
-  #html.elem("a", attrs: (href: "/"))[Return home]
+#html.main(id: "main-content")[
+  #html.p[404]
+  #html.h1[Page not found]
+
+  The page may have moved, or the address may be incorrect.
+
+  #html.a(href: "/")[Return home]
 ]

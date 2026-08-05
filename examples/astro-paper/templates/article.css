@@ -1,8 +1,8 @@
-body > main:has(> #article) {
+main {
   position: relative;
 }
 
-body > main:has(> #article) > a:first-child {
+main > a:first-child {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
@@ -13,22 +13,22 @@ body > main:has(> #article) > a:first-child {
   text-decoration: none;
 }
 
-body > main:has(> #article) > a:first-child svg {
+main > a:first-child svg {
   width: 1rem;
   height: 1rem;
 }
 
-body > main:has(> #article) > header {
+main > header {
   margin-bottom: 2rem;
 }
 
-body > main:has(> #article) > header h1 {
+main > header h1 {
   font-size: 1.875rem;
   font-weight: 600;
   line-height: 2.25rem;
 }
 
-body > main:has(> #article) > header p {
+main > header > p {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -39,13 +39,13 @@ body > main:has(> #article) > header p {
   line-height: 1.25rem;
 }
 
-body > main:has(> #article) > nav[aria-label="Tags"] {
+.article-tags {
   margin-top: 2.5rem;
   border-top-width: 1px;
   padding-top: 1.75rem;
 }
 
-nav[aria-label="Adjacent posts"] {
+main > nav:last-child {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1.25rem;
@@ -54,7 +54,7 @@ nav[aria-label="Adjacent posts"] {
   padding-top: 2rem;
 }
 
-nav[aria-label="Adjacent posts"] > a {
+main > nav:last-child > a {
   display: flex;
   min-height: 5rem;
   align-items: center;
@@ -62,31 +62,31 @@ nav[aria-label="Adjacent posts"] > a {
   text-decoration: none;
 }
 
-nav[aria-label="Adjacent posts"] > a[rel="next"] {
+main > nav:last-child > [rel="next"] {
   grid-column: 2;
   justify-content: flex-end;
   text-align: right;
 }
 
-nav[aria-label="Adjacent posts"]:not(:has(a[rel="prev"]))::before {
+main > nav:last-child:not(:has([rel="prev"]))::before {
   content: "";
   grid-column: 1;
   grid-row: 1;
   height: 1.5rem;
 }
 
-nav[aria-label="Adjacent posts"]:not(:has(a[rel="prev"])) > a[rel="next"] {
+main > nav:last-child:not(:has([rel="prev"])) > [rel="next"] {
   grid-column: 1;
   grid-row: 2;
 }
 
-nav[aria-label="Adjacent posts"] small {
+main > nav:last-child small {
   display: block;
   margin-bottom: 0.25rem;
   color: var(--muted-foreground);
 }
 
-nav[aria-label="Adjacent posts"] svg {
+main > nav:last-child svg {
   width: 1.25rem;
   height: 1.25rem;
   flex-shrink: 0;
@@ -176,11 +176,11 @@ dialog[open] > button {
 }
 
 @media (max-width: 639px) {
-  nav[aria-label="Adjacent posts"] {
+  main > nav:last-child {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  nav[aria-label="Adjacent posts"] > a[rel="next"] {
+  main > nav:last-child > [rel="next"] {
     grid-column: 1;
     justify-content: flex-start;
     text-align: left;

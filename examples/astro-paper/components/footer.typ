@@ -3,10 +3,11 @@
 
 #let footer() = [
   #metadata("./footer.css") <aster-style>
-  #html.elem("footer")[
-    #html.elem("div")[
+  #html.footer(class: "site-footer")[
+    #html.div[
       #social-links()
-      #html.elem("p")[Copyright #datetime.today().display("[year]") #settings.site.author. All rights reserved.]
+
+      Copyright #datetime.today().display("[year]") #settings.site.author. All rights reserved.
     ]
   ]
 ]

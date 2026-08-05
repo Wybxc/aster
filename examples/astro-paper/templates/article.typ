@@ -1,4 +1,4 @@
-#import "/lib.typ": adjacent-posts, canonical-url, date-label, post-url, settings
+#import "/lib.typ": adjacent-posts, canonical-url, date-label, date-value, post-url, settings
 #import "/components/icons.typ": arrow-left-icon, arrow-right-icon, arrow-up-icon
 #import "/components/prose.typ": prose
 #import "/components/tags.typ": tag-list
@@ -36,48 +36,48 @@
 
   [#metadata("./article.css") <aster-style>]
   [#metadata("./article.js") <aster-module>]
-  html.elem("progress", attrs: (
+  html.progress(
     id: "reading-progress",
-    max: "100",
-    value: "0",
-    "aria-label": "Reading progress",
-  ))[]
-  html.elem("main", attrs: (id: "main-content"))[
-    #html.elem("a", attrs: (href: "/posts/"))[#arrow-left-icon Back to posts]
-    #html.elem("header")[
-      #html.elem("h1")[#post.title]
-      #html.elem("p")[
-        #html.elem("time", attrs: (datetime: post.date))[#date-label(post.date)]
+    max: 100,
+    value: 0,
+    aria-label: "Reading progress",
+  )[]
+  html.main(id: "main-content")[
+    #html.a(href: "/posts/")[#arrow-left-icon Back to posts]
+    #html.header[
+      #html.h1[#post.title]
+      #html.p[
+        #html.time(datetime: date-value(post.date))[#date-label(post.date)]
         #if post.modified != none [
-          #html.elem("span")[Updated #date-label(post.modified)]
+          #html.span[Updated #date-label(post.modified)]
         ]
       ]
     ]
-    #prose(body, id: "article")
-    #html.elem("button", attrs: (
+    #html.article(id: "article")[#prose(body)]
+    #html.button(
       id: "back-to-top",
       type: "button",
       title: "Back to top",
-      "aria-label": "Back to top",
-      hidden: "",
-    ))[#arrow-up-icon]
-    #tag-list(post.tags)
-    #html.elem("nav", attrs: ("aria-label": "Adjacent posts"))[
+      aria-label: "Back to top",
+      hidden: true,
+    )[#arrow-up-icon]
+    #tag-list(post.tags, extra-class: "article-tags")
+    #html.nav(aria-label: "Adjacent posts")[
       #if adjacent.older != none {
-        html.elem("a", attrs: (
+        html.a(
           href: post-url(adjacent.older.entry.id),
           rel: "prev",
-        ))[
+        )[
           #arrow-left-icon
-          #html.elem("span")[#html.elem("small")[Older post]#adjacent.older.metadata.title]
+          #html.span[#html.small[Older post]#adjacent.older.metadata.title]
         ]
       }
       #if adjacent.newer != none {
-        html.elem("a", attrs: (
+        html.a(
           href: post-url(adjacent.newer.entry.id),
           rel: "next",
-        ))[
-          #html.elem("span")[#html.elem("small")[Newer post]#adjacent.newer.metadata.title]
+        )[
+          #html.span[#html.small[Newer post]#adjacent.newer.metadata.title]
           #arrow-right-icon
         ]
       }

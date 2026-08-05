@@ -1,4 +1,4 @@
-body > main > article {
+main > article {
   --prose-body: var(--foreground);
   --prose-headings: var(--foreground);
   --prose-links: var(--foreground);
@@ -17,97 +17,97 @@ body > main > article {
   line-height: 1.75;
 }
 
-body > main > article :where(p) {
+main > article :where(p) {
   margin-block: 1.25em;
 }
 
-body > main > article :where(a) {
+main > article :where(a) {
   color: var(--prose-links);
   font-weight: 500;
   text-decoration: underline dashed;
 }
 
-body > main > article :where(strong) {
+main > article :where(strong) {
   color: var(--prose-bold);
   font-weight: 600;
 }
 
-body > main > article :where(a strong, blockquote strong, thead th strong) {
+main > article :where(a strong, blockquote strong, thead th strong) {
   color: inherit;
 }
 
-body > main > article :where(ol, ul) {
+main > article :where(ol, ul) {
   margin-block: 1.25em;
   padding-inline-start: 1.625em;
 }
 
-body > main > article :where(ol) {
+main > article :where(ol) {
   list-style-type: decimal;
 }
 
-body > main > article :where(ol[type="A"], ol[type="A" s]) {
+main > article :where(ol[type="A"], ol[type="A" s]) {
   list-style-type: upper-alpha;
 }
 
-body > main > article :where(ol[type="a"], ol[type="a" s]) {
+main > article :where(ol[type="a"], ol[type="a" s]) {
   list-style-type: lower-alpha;
 }
 
-body > main > article :where(ol[type="I"], ol[type="I" s]) {
+main > article :where(ol[type="I"], ol[type="I" s]) {
   list-style-type: upper-roman;
 }
 
-body > main > article :where(ol[type="i"], ol[type="i" s]) {
+main > article :where(ol[type="i"], ol[type="i" s]) {
   list-style-type: lower-roman;
 }
 
-body > main > article :where(ul) {
+main > article :where(ul) {
   list-style-type: disc;
 }
 
-body > main > article :where(li) {
+main > article :where(li) {
   margin-block: 0.5em;
 }
 
-body > main > article :where(ol > li, ul > li) {
+main > article :where(ol > li, ul > li) {
   padding-inline-start: 0.375em;
 }
 
-body > main > article :where(ol > li)::marker {
+main > article :where(ol > li)::marker {
   color: var(--prose-counters);
   font-weight: 400;
 }
 
-body > main > article :where(ul > li)::marker {
+main > article :where(ul > li)::marker {
   color: var(--prose-bullets);
 }
 
-body > main > article :where(ul ul, ul ol, ol ul, ol ol) {
+main > article :where(ul ul, ul ol, ol ul, ol ol) {
   margin-block: 0.75em;
 }
 
-body > main > article :where(dl) {
+main > article :where(dl) {
   margin-block: 1.25em;
 }
 
-body > main > article :where(dt) {
+main > article :where(dt) {
   margin-top: 1.25em;
   color: var(--prose-headings);
   font-weight: 600;
 }
 
-body > main > article :where(dd) {
+main > article :where(dd) {
   margin-top: 0.5em;
   padding-inline-start: 1.625em;
 }
 
-body > main > article :where(hr) {
+main > article :where(hr) {
   margin-block: 3em;
   border-color: var(--prose-rule);
   border-top-width: 1px;
 }
 
-body > main > article :where(blockquote) {
+main > article :where(blockquote) {
   margin-block: 1.6em;
   border-inline-start-width: 0.25rem;
   border-inline-start-color: var(--prose-quote-border);
@@ -118,20 +118,20 @@ body > main > article :where(blockquote) {
   quotes: "\201C" "\201D" "\2018" "\2019";
 }
 
-body > main > article :where(blockquote p:first-of-type)::before {
+main > article :where(blockquote p:first-of-type)::before {
   content: open-quote;
 }
 
-body > main > article :where(blockquote p:last-of-type)::after {
+main > article :where(blockquote p:last-of-type)::after {
   content: close-quote;
 }
 
-body > main > article :where(h1, h2, h3, h4) {
+main > article :where(h1, h2, h3, h4) {
   color: var(--prose-headings);
   scroll-margin-top: 1rem;
 }
 
-body > main > article :where(h1) {
+main > article :where(h1) {
   margin-top: 0;
   margin-bottom: 0.8888889em;
   font-size: 2.25em;
@@ -139,12 +139,12 @@ body > main > article :where(h1) {
   line-height: 1.1111111;
 }
 
-body > main > article :where(h1 strong) {
+main > article :where(h1 strong) {
   color: inherit;
   font-weight: 900;
 }
 
-body > main > article :where(h2) {
+main > article :where(h2) {
   margin-top: 2em;
   margin-bottom: 1em;
   font-size: 1.5em;
@@ -152,12 +152,12 @@ body > main > article :where(h2) {
   line-height: 1.3333333;
 }
 
-body > main > article :where(h2 strong) {
+main > article :where(h2 strong) {
   color: inherit;
   font-weight: 800;
 }
 
-body > main > article :where(h3) {
+main > article :where(h3) {
   margin-top: 1.6em;
   margin-bottom: 0.6em;
   font-size: 1.25em;
@@ -165,35 +165,35 @@ body > main > article :where(h3) {
   line-height: 1.6;
 }
 
-body > main > article :where(h3 strong, h4 strong) {
+main > article :where(h3 strong, h4 strong) {
   color: inherit;
   font-weight: 700;
 }
 
-body > main > article :where(h4) {
+main > article :where(h4) {
   margin-top: 1.5em;
   margin-bottom: 0.5em;
   font-weight: 600;
   line-height: 1.5;
 }
 
-body > main > article :where(h2 + *, h3 + *, h4 + *, hr + *) {
+main > article :where(h2 + *, h3 + *, h4 + *, hr + *) {
   margin-top: 0;
 }
 
-body > main > article :where(img, picture, video) {
+main > article :where(img, picture, video) {
   margin-block: 2em;
 }
 
-body > main > article :where(picture) {
+main > article :where(picture) {
   display: block;
 }
 
-body > main > article :where(picture > img) {
+main > article :where(picture > img) {
   margin-block: 0;
 }
 
-body > main > article :where(kbd) {
+main > article :where(kbd) {
   border-radius: 0.3125rem;
   box-shadow: 0 0 0 1px rgb(0 0 0 / 0.1), 0 3px 0 rgb(0 0 0 / 0.1);
   padding: 0.1875em 0.375em;
@@ -203,30 +203,30 @@ body > main > article :where(kbd) {
   font-weight: 500;
 }
 
-body > main > article :where(code) {
+main > article :where(code) {
   color: var(--prose-code);
   font-size: 0.875em;
   font-weight: 600;
 }
 
-body > main > article :where(code)::before,
-body > main > article :where(code)::after {
+main > article :where(code)::before,
+main > article :where(code)::after {
   content: "`";
 }
 
-body > main > article :where(a code, h1 code, h2 code, h3 code, h4 code, blockquote code, thead th code) {
+main > article :where(a code, h1 code, h2 code, h3 code, h4 code, blockquote code, thead th code) {
   color: inherit;
 }
 
-body > main > article :where(h2 code) {
+main > article :where(h2 code) {
   font-size: 0.875em;
 }
 
-body > main > article :where(h3 code) {
+main > article :where(h3 code) {
   font-size: 0.9em;
 }
 
-body > main > article :where(pre) {
+main > article :where(pre) {
   position: relative;
   overflow-x: auto;
   margin-block: 1.7142857em;
@@ -240,7 +240,7 @@ body > main > article :where(pre) {
   line-height: 1.7142857;
 }
 
-body > main > article :where(pre code) {
+main > article :where(pre code) {
   border-width: 0;
   border-radius: 0;
   background-color: transparent;
@@ -252,12 +252,12 @@ body > main > article :where(pre code) {
   line-height: inherit;
 }
 
-body > main > article :where(pre code)::before,
-body > main > article :where(pre code)::after {
+main > article :where(pre code)::before,
+main > article :where(pre code)::after {
   content: none;
 }
 
-body > main > article :where(table) {
+main > article :where(table) {
   width: 100%;
   margin-block: 2em;
   table-layout: auto;
@@ -265,11 +265,11 @@ body > main > article :where(table) {
   line-height: 1.7142857;
 }
 
-body > main > article :where(thead) {
+main > article :where(thead) {
   border-bottom: 1px solid var(--border);
 }
 
-body > main > article :where(thead th) {
+main > article :where(thead th) {
   padding-inline: 0.5714286em;
   padding-bottom: 0.5714286em;
   color: var(--prose-headings);
@@ -277,51 +277,51 @@ body > main > article :where(thead th) {
   vertical-align: bottom;
 }
 
-body > main > article :where(tbody tr) {
+main > article :where(tbody tr) {
   border-bottom: 1px solid var(--border);
 }
 
-body > main > article :where(tbody tr:last-child) {
+main > article :where(tbody tr:last-child) {
   border-bottom-width: 0;
 }
 
-body > main > article :where(tbody td, tfoot td) {
+main > article :where(tbody td, tfoot td) {
   padding: 0.5714286em;
 }
 
-body > main > article :where(tbody td) {
+main > article :where(tbody td) {
   vertical-align: baseline;
 }
 
-body > main > article :where(tfoot) {
+main > article :where(tfoot) {
   border-top: 1px solid var(--border);
 }
 
-body > main > article :where(tfoot td) {
+main > article :where(tfoot td) {
   vertical-align: top;
 }
 
-body > main > article :where(th, td) {
+main > article :where(th, td) {
   text-align: start;
 }
 
-body > main > article :where(thead th:first-child, tbody td:first-child, tfoot td:first-child) {
+main > article :where(thead th:first-child, tbody td:first-child, tfoot td:first-child) {
   padding-inline-start: 0;
 }
 
-body > main > article :where(thead th:last-child, tbody td:last-child, tfoot td:last-child) {
+main > article :where(thead th:last-child, tbody td:last-child, tfoot td:last-child) {
   padding-inline-end: 0;
 }
 
-body > main > article :where(figure) {
+main > article :where(figure) {
   margin-block: 2em;
 }
 
-body > main > article :where(figure > *) {
+main > article :where(figure > *) {
   margin-block: 0;
 }
 
-body > main > article :where(figcaption) {
+main > article :where(figcaption) {
   margin-top: 0.8571429em;
   color: var(--prose-captions);
   font-size: 0.875em;
@@ -329,14 +329,14 @@ body > main > article :where(figcaption) {
   text-align: center;
 }
 
-body > main > article a[aria-label^="Link to "] {
+main > article a[aria-label^="Link to "] {
   margin-inline-start: 0.5rem;
   color: var(--accent);
   text-decoration: none;
   opacity: 0.6;
 }
 
-body > main > article pre > button {
+main > article pre > button {
   position: absolute;
   inset-inline-end: 0.75rem;
   top: 0.75rem;
@@ -350,11 +350,11 @@ body > main > article pre > button {
   line-height: 1rem;
 }
 
-body > main > article figure img {
+main > article figure img {
   width: 100%;
   border-width: 1px;
 }
 
-body > main > article img:not(a img) {
+main > article img:not(a img) {
   cursor: zoom-in;
 }

@@ -12,7 +12,7 @@
   active: "tags",
 )
 
-#html.elem("main", attrs: (id: "main-content"))[
+#html.main(id: "main-content")[
   #page-header([Tags], [All topics used across published articles.])
   #tag-list(tags, counts: true)
 ]

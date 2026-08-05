@@ -1,9 +1,9 @@
-nav[aria-label="Social links"] > ul {
+.social-links ul {
   display: flex;
   gap: 0.25rem;
 }
 
-nav[aria-label="Social links"] a {
+.social-links a {
   position: relative;
   display: inline-flex;
   width: 2.5rem;
@@ -17,6 +17,6 @@ nav[aria-label="Social links"] a {
   text-decoration: none;
 }
 
-nav[aria-label="Social links"] a:hover {
+.social-links a:hover {
   color: var(--accent);
 }

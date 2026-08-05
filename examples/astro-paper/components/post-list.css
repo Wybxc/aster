@@ -1,25 +1,25 @@
-ol[aria-label="Posts"] > li {
+.post-list > li {
   margin-block: 1.75rem;
 }
 
-ol[aria-label="Posts"] article > header > :is(h2, h3) {
+.post-list article > header > :is(h2, h3) {
   font-size: 1.125rem;
   font-weight: 500;
   line-height: 1.75rem;
 }
 
-ol[aria-label="Posts"] article > header > :is(h2, h3) > a {
+.post-list article > header > :is(h2, h3) > a {
   display: inline-block;
   color: var(--accent);
   text-decoration: none;
   text-decoration-style: dashed;
 }
 
-ol[aria-label="Posts"] article > header > :is(h2, h3) > a:hover {
+.post-list article > header > :is(h2, h3) > a:hover {
   text-decoration: underline;
 }
 
-ol[aria-label="Posts"] article > header > p {
+.post-list article > header > p {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -30,12 +30,12 @@ ol[aria-label="Posts"] article > header > p {
   line-height: 1.25rem;
 }
 
-ol[aria-label="Posts"] article > header > p > span::before {
+.post-list article > header > p > span::before {
   content: "|";
   margin-inline-end: 0.75rem;
 }
 
-ol[aria-label="Posts"] article > p {
+.post-list article > p {
   margin-block: 0.5rem;
   line-height: 1.75rem;
 }

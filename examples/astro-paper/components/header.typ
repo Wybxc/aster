@@ -1,59 +1,68 @@
 #import "/lib.typ": settings
 #import "icons.typ": archive-icon, close-icon, menu-icon, moon-icon, sun-icon
 
-#let _nav-link(label, href, active, key) = {
-  let attrs = (href: href)
-  if active == key {
-    attrs.insert("aria-current", "page")
+#let _nav-link(label, href, active, key) = html.li[
+  #if active == key {
+    html.a(class: "menu-link", href: href, aria-current: "page")[#label]
+  } else {
+    html.a(class: "menu-link", href: href)[#label]
   }
-  html.elem("li")[#html.elem("a", attrs: attrs)[#label]]
-}
+]
 
 #let header(active: "") = [
   #metadata("./header.css") <aster-style>
   #metadata("./header.js") <aster-module>
-  #html.elem("nav", attrs: ("aria-label": "Skip links"))[
-    #html.elem("a", attrs: (id: "skip-to-content", href: "#main-content"))[Skip to content]
+  #html.nav(class: "skip-links", aria-label: "Skip links")[
+    #html.a(id: "skip-to-content", href: "#main-content")[Skip to content]
   ]
-  #html.elem("header")[
-    #html.elem("div")[
-      #html.elem("a", attrs: (href: "/"))[#settings.site.title]
-      #html.elem("nav", attrs: ("aria-label": "Primary navigation"))[
-        #html.elem("button", attrs: (
+  #html.header(class: "site-header")[
+    #html.div[
+      #html.a(href: "/")[#settings.site.title]
+      #html.nav(aria-label: "Primary navigation")[
+        #html.button(
+          class: "icon-button",
           id: "menu-button",
           type: "button",
-          "aria-label": "Open menu",
-          "aria-expanded": "false",
-          "aria-controls": "menu-items",
-        ))[
-          #html.elem("span")[#menu-icon]
-          #html.elem("span")[#close-icon]
+          aria-label: "Open menu",
+          aria-expanded: false,
+          aria-controls: "menu-items",
+        )[
+          #html.span(class: "menu-open-icon")[#menu-icon]
+          #html.span(class: "menu-close-icon")[#close-icon]
         ]
-        #html.elem("ul", attrs: (id: "menu-items"))[
+        #html.ul(id: "menu-items")[
           #_nav-link("Posts", "/posts/", active, "posts")
           #_nav-link("Tags", "/tags/", active, "tags")
           #_nav-link("About", "/about/", active, "about")
-          #html.elem("li")[
-            #let attrs = (
-              href: "/archives/",
-              title: "Archives",
-              "aria-label": "Archives",
-            )
+          #html.li(class: "icon-item")[
             #if active == "archives" {
-              attrs.insert("aria-current", "page")
+              html.a(
+                class: "icon-button",
+                href: "/archives/",
+                title: "Archives",
+                aria-label: "Archives",
+                aria-current: "page",
+              )[#archive-icon]
+            } else {
+              html.a(
+                class: "icon-button",
+                href: "/archives/",
+                title: "Archives",
+                aria-label: "Archives",
+              )[#archive-icon]
             }
-            #html.elem("a", attrs: attrs)[#archive-icon]
           ]
           #if settings.features.theme-toggle {
-            html.elem("li")[
-              #html.elem("button", attrs: (
+            html.li(class: "icon-item")[
+              #html.button(
+                class: "icon-button",
                 id: "theme-button",
                 type: "button",
                 title: "Toggle theme",
-                "aria-label": "Toggle theme",
-              ))[
-                #html.elem("span")[#moon-icon]
-                #html.elem("span")[#sun-icon]
+                aria-label: "Toggle theme",
+              )[
+                #html.span(class: "theme-moon-icon")[#moon-icon]
+                #html.span(class: "theme-sun-icon")[#sun-icon]
               ]
             ]
           }

@@ -1,24 +1,21 @@
-nav[aria-label="Tags"] > ul,
-nav[aria-label="All tags"] > ul {
+.tag-list ul {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
 }
 
-nav[aria-label="Tags"] a,
-nav[aria-label="All tags"] a {
+.tag-list a {
   color: var(--accent);
   font-size: 0.875rem;
   line-height: 1.25rem;
   text-decoration-style: dashed;
 }
 
-nav[aria-label="Tags"] a::before,
-nav[aria-label="All tags"] a::before {
+.tag-list a::before {
   content: "#";
 }
 
-nav[aria-label="All tags"] a {
+.tag-cloud a {
   display: inline-flex;
   min-height: 2.75rem;
   align-items: center;
@@ -30,6 +27,6 @@ nav[aria-label="All tags"] a {
   text-decoration: none;
 }
 
-nav[aria-label="All tags"] span {
+.tag-cloud span {
   color: var(--muted-foreground);
 }

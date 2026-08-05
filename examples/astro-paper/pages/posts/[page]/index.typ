@@ -23,7 +23,7 @@
   active: "posts",
 )
 
-#html.elem("main", attrs: (id: "main-content"))[
+#html.main(id: "main-content")[
   #page-header([Posts], [Page #current of #total.])
   #post-list(page-items(posts, current))
   #pagination(current, total, "/posts/")

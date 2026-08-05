@@ -17,9 +17,9 @@
   active: "about",
 )
 
-#html.elem("main", attrs: (id: "main-content"))[
+#html.main(id: "main-content")[
   #page-header(metadata.title, metadata.description)
   #if entry != none {
-    prose(entry.render())
+    html.article[#prose(entry.render())]
   }
 ]

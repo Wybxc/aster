@@ -1,4 +1,4 @@
-nav[aria-label="Pagination"] {
+.pagination {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -6,7 +6,7 @@ nav[aria-label="Pagination"] {
   margin-top: 3rem;
 }
 
-nav[aria-label="Pagination"] > :is(a, span[aria-disabled="true"]) {
+.pagination > :is(a, span[aria-disabled="true"]) {
   display: inline-flex;
   min-width: 7rem;
   min-height: 2.75rem;
@@ -18,19 +18,19 @@ nav[aria-label="Pagination"] > :is(a, span[aria-disabled="true"]) {
   text-decoration: none;
 }
 
-nav[aria-label="Pagination"] > span {
+.pagination span {
   color: var(--muted-foreground);
 }
 
-nav[aria-label="Pagination"] > span[aria-disabled="true"] {
+.pagination > span[aria-disabled="true"] {
   opacity: 0.5;
 }
 
-nav[aria-label="Pagination"] svg {
+.pagination svg {
   width: 1.25rem;
   height: 1.25rem;
 }
 
-nav[aria-label="Pagination"] > span[aria-current="page"] {
+.pagination > span[aria-current="page"] {
   white-space: nowrap;
 }

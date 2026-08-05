@@ -13,19 +13,20 @@
   }
 }
 
-#let social-links() = [
-  #metadata("./social-links.css") <aster-style>
-  #html.elem("nav", attrs: ("aria-label": "Social links"))[
-    #html.elem("ul")[
-      #for social in settings.socials {
-        html.elem("li")[
-          #html.elem("a", attrs: (
-            href: social.href,
-            title: social.name,
-            "aria-label": social.name,
-          ))[#_icon(social.name)]
-        ]
-      }
+#let social-links() = {
+  let items = settings.socials.map(social => {
+    list.item(
+      html.a(
+        href: social.href,
+        title: social.name,
+        aria-label: social.name,
+      )[#_icon(social.name)],
+    )
+  })
+  [
+    #metadata("./social-links.css") <aster-style>
+    #html.nav(class: "social-links", aria-label: "Social links")[
+      #list(..items)
     ]
   ]
-]
+}
