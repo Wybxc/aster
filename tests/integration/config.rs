@@ -73,7 +73,6 @@ fn build_honors_configured_layout_and_processing_options() {
     assert!(html.contains("Configured"));
     assert!(html.contains("Entry body"));
     assert!(html.contains("static/generated/style."));
-    assert!(html.contains("static/generated/img."));
     assert!(!html.contains("static/generated/highlight."));
     assert!(!html.contains("class=\"hl-"));
 
@@ -82,6 +81,15 @@ fn build_honors_configured_layout_and_processing_options() {
         .map(|entry| entry.unwrap().path())
         .collect::<Vec<_>>();
     assert_eq!(assets.len(), 2);
+    let image = assets
+        .iter()
+        .find(|path| path.extension().is_some_and(|extension| extension == "png"))
+        .unwrap();
+    let image_name = image.file_name().unwrap().to_string_lossy();
+    let image_hash = image.file_stem().unwrap().to_string_lossy();
+    assert_eq!(image_hash.len(), 16);
+    assert!(image_hash.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    assert!(html.contains(&format!("static/generated/{image_name}")));
     let css = assets
         .iter()
         .find(|path| path.extension().is_some_and(|extension| extension == "css"))

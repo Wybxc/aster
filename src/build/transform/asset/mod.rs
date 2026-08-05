@@ -282,7 +282,7 @@ impl<'a> AssetProcessor<'a> {
                 return Ok(None);
             };
             return page
-                .add_data_asset(asset.name, asset.extension, asset.content)
+                .add_data_asset(asset.extension, asset.content)
                 .map(Some);
         }
 

@@ -3,7 +3,6 @@ use data_url::{DataUrl, mime::Mime};
 
 pub(super) struct DataAsset {
     pub content: Vec<u8>,
-    pub name: &'static str,
     pub extension: Option<&'static str>,
 }
 
@@ -20,13 +19,6 @@ pub(super) fn decode_data_url(url: &str, inline_threshold: usize) -> Result<Opti
     let mime = data_url.mime_type();
     Ok(Some(DataAsset {
         content,
-        name: match mime.type_.as_str() {
-            "image" => "img",
-            "audio" => "audio",
-            "video" => "video",
-            "font" => "font",
-            _ => "asset",
-        },
         extension: mime_extension(mime),
     }))
 }
@@ -65,7 +57,6 @@ mod tests {
             .unwrap();
 
         assert_eq!(asset.content.len(), 1026);
-        assert_eq!(asset.name, "img");
         assert_eq!(asset.extension, Some("png"));
     }
 
@@ -81,7 +72,6 @@ mod tests {
             .unwrap();
 
         assert_eq!(asset.content, vec![b'x'; DEFAULT_INLINE_THRESHOLD]);
-        assert_eq!(asset.name, "img");
         assert_eq!(asset.extension, Some("svg"));
     }
 
@@ -112,12 +102,11 @@ mod tests {
     }
 
     #[test]
-    fn derives_non_image_asset_names_and_extensions_from_mime() {
+    fn derives_non_image_extensions_from_mime() {
         let asset = decode_data_url("data:audio/mpeg;base64,AAAA", 3)
             .unwrap()
             .unwrap();
 
-        assert_eq!(asset.name, "audio");
         assert_eq!(asset.extension, Some("mp3"));
     }
 }

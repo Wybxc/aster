@@ -83,7 +83,7 @@ impl OutputPublication {
 
     /// Register the generated highlight stylesheet.
     pub fn add_highlight_stylesheet(&mut self, content: Vec<u8>) -> Result<AssetPath> {
-        self.add_asset("highlight", Some("css"), Bytes::new(content))
+        self.add_asset(Some("highlight"), Some("css"), Bytes::new(content))
     }
 
     /// Register a file from the project's public directory at the output root.
@@ -99,14 +99,16 @@ impl OutputPublication {
 
     fn add_asset(
         &mut self,
-        name: &str,
+        name: Option<&str>,
         extension: Option<&str>,
         content: Bytes,
     ) -> Result<AssetPath> {
         let hash = content_hash(content.as_slice());
-        let filename = match extension {
-            Some(extension) => format!("{name}.{hash}.{extension}"),
-            None => format!("{name}.{hash}"),
+        let filename = match (name, extension) {
+            (Some(name), Some(extension)) => format!("{name}.{hash}.{extension}"),
+            (Some(name), None) => format!("{name}.{hash}"),
+            (None, Some(extension)) => format!("{hash}.{extension}"),
+            (None, None) => hash,
         };
         let path =
             PathBuf::from(self.assets_dir.as_virtual_path().get_without_slash()).join(filename);
@@ -233,7 +235,9 @@ impl PagePublication<'_> {
         let name = entry
             .file_stem()
             .context("stylesheet entry has no file name")?;
-        let asset = self.publication.add_asset(name, Some("css"), content)?;
+        let asset = self
+            .publication
+            .add_asset(Some(name), Some("css"), content)?;
         self.reference(&asset)
     }
 
@@ -242,7 +246,7 @@ impl PagePublication<'_> {
         let name = source.file_stem().context("CSS asset has no file name")?;
         let asset = self
             .publication
-            .add_asset(name, source.extension(), content)?;
+            .add_asset(Some(name), source.extension(), content)?;
         Ok(asset
             .0
             .as_virtual_path()
@@ -254,7 +258,7 @@ impl PagePublication<'_> {
         let name = source.file_stem().context("asset has no file name")?;
         let asset = self
             .publication
-            .add_asset(name, source.extension(), content)?;
+            .add_asset(Some(name), source.extension(), content)?;
         self.reference(&asset)
     }
 
@@ -263,20 +267,21 @@ impl PagePublication<'_> {
         let name = source
             .file_stem()
             .context("script entry has no file name")?;
-        let asset = self.publication.add_asset(name, Some("js"), content)?;
+        let asset = self
+            .publication
+            .add_asset(Some(name), Some("js"), content)?;
         self.reference(&asset)
     }
 
     /// Register an extracted data URL and return its browser-facing URL from this page.
     pub fn add_data_asset(
         &mut self,
-        name: &str,
         extension: Option<&str>,
         content: Vec<u8>,
     ) -> Result<EcoString> {
         let asset = self
             .publication
-            .add_asset(name, extension, Bytes::new(content))?;
+            .add_asset(None, extension, Bytes::new(content))?;
         self.reference(&asset)
     }
 
