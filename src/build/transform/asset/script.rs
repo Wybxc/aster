@@ -115,11 +115,22 @@ fn bundle_module(
             path: PathBuf::from(origin.get_with_slash()).into(),
             message: eco_format!("{error}"),
         })?;
-    let working_dir = origin_path
-        .parent()
+    let working_path = origin.parent().ok_or_else(|| BundleError::InvalidPath {
+        path: origin_path.clone().into(),
+        message: "module source has no parent directory".into(),
+    })?;
+    let working_dir =
+        working_path
+            .realize(project_root)
+            .map_err(|error| BundleError::InvalidPath {
+                path: PathBuf::from(working_path.get_with_slash()).into(),
+                message: eco_format!("{error}"),
+            })?;
+    let entry_name = origin_path
+        .file_name()
         .ok_or_else(|| BundleError::InvalidPath {
             path: origin_path.clone().into(),
-            message: "module source has no parent directory".into(),
+            message: "module source has no file name".into(),
         })?;
 
     if let ModuleSource::File(path) = source {
@@ -146,17 +157,17 @@ fn bundle_module(
         .arg("--external:https://*")
         .arg(path_option("--outfile=", &output_path))
         .arg(path_option("--metafile=", &metafile_path))
-        .current_dir(working_dir)
+        .current_dir(&working_dir)
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
 
     let inline_sourcefile = match source {
         ModuleSource::File(_) => {
-            command.arg(&origin_path);
+            command.arg(entry_name);
             None
         }
         ModuleSource::Memory { .. } => {
-            let sourcefile = origin_path.with_extension("aster-module.js");
+            let sourcefile = PathBuf::from(entry_name).with_extension("aster-module.js");
             command
                 .arg("--loader=js")
                 .arg(path_option("--sourcefile=", &sourcefile))
@@ -222,23 +233,27 @@ fn bundle_module(
             continue;
         }
         let path = Path::new(input);
-        let path = if path.is_absolute() {
-            path.to_owned()
-        } else {
-            working_dir.join(path)
-        };
         if inline_sourcefile
             .as_ref()
-            .is_some_and(|source| source == &path)
+            .is_some_and(|source| source == path)
         {
             continue;
         }
-        let virtual_path =
-            VirtualPath::virtualize(project_root, &path).map_err(|error| BundleError::Escapes {
-                path: path.clone().into(),
+        let virtual_path = if path.is_absolute() {
+            VirtualPath::virtualize(project_root, path).map_err(|error| BundleError::Escapes {
+                path: path.into(),
                 project_root: project_root.into(),
                 message: eco_format!("{error}"),
-            })?;
+            })?
+        } else {
+            working_path
+                .join(input)
+                .map_err(|error| BundleError::Escapes {
+                    path: working_dir.join(path).into(),
+                    project_root: project_root.into(),
+                    message: eco_format!("{error}"),
+                })?
+        };
         project_files.read(&virtual_path)?;
     }
 
@@ -320,9 +335,10 @@ mod tests {
         let root = temp.path();
         std::fs::write(root.join("aster.toml"), "").unwrap();
         std::fs::create_dir(root.join("modules")).unwrap();
+        std::fs::create_dir(root.join("shared")).unwrap();
         let entry = root.join("modules/entry.js");
-        let dependency = root.join("modules/dependency.js");
-        std::fs::write(&entry, "import './dependency.js';").unwrap();
+        let dependency = root.join("shared/dependency.js");
+        std::fs::write(&entry, "import '../shared/dependency.js';").unwrap();
         std::fs::write(&dependency, "first dependency").unwrap();
 
         let executable = root.join("esbuild");
@@ -340,12 +356,16 @@ for argument in "$@"; do
     *) entry=$argument ;;
   esac
 done
+[ "$entry" = "entry.js" ] || {
+  printf 'expected a working-directory-relative entry, got %s\n' "$entry" >&2
+  exit 1
+}
 content=
 while IFS= read -r line || [ -n "$line" ]; do
   content="${content}${line}"
-done < "$PWD/dependency.js"
+done < "$PWD/../shared/dependency.js"
 printf '%s\n' "$content" > "$outfile"
-printf '{"inputs":{"entry.js":{},"dependency.js":{}},"outputs":{"%s":{}}}\n' "$outfile" > "$metafile"
+printf '{"inputs":{"entry.js":{},"../shared/dependency.js":{}},"outputs":{"%s":{}}}\n' "$outfile" > "$metafile"
 "#,
         )
         .unwrap();
