@@ -44,7 +44,7 @@
       #html.title(document-title)
       #if extra-head != none { extra-head }
       #html.script(read("./theme-init.js"))
-      #html.elem("link", attrs: (rel: "tailwind", href: "/styles/site.css"))
+      #html.elem("link", attrs: (rel: "stylesheet", href: "/styles/site.css"))
     ]
     #html.body[
       #header(active: active)

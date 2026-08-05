@@ -16,13 +16,13 @@ compare the generated site before accepting the change.
 
 ```sh
 aster --version
-tailwindcss --help
+esbuild --version
 typst --version
 ```
 
-This port uses the standalone Tailwind executable, so it does not require a
-JavaScript package manifest. A build still verifies that Tailwind output can be
-parsed and optimized before publication.
+This port uses Aster's built-in CSS pipeline and the standalone esbuild
+executable for JavaScript modules, so it does not require a JavaScript package
+manifest. A build still verifies all transformed assets before publication.
 
 = Rebuild every route
 

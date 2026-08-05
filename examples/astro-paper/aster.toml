@@ -16,9 +16,6 @@ per-index = 4
 [features]
 theme-toggle = true
 
-[watch]
-paths = ["styles"]
-
 [[socials]]
 name = "GitHub"
 href = "https://github.com/satnaing/astro-paper"

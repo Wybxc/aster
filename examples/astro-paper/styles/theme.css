@@ -1,11 +1,6 @@
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-border: var(--border);
+:root {
+  --content-width: 48rem;
+  --measure: 42rem;
   --font-app: ui-monospace, "SFMono-Regular", "Cascadia Code", "Roboto Mono", monospace;
 }
 
