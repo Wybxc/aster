@@ -1,4 +1,4 @@
-#import "/components/content.typ": aside, doc-heading, tabs
+#import "/components/content.typ": aside, tabs
 
 #metadata((
   title: "Authoring Content",
@@ -6,17 +6,12 @@
   section: "Guides",
   section_order: 20,
   order: 10,
-  toc: (
-    (id: "typst-markup", title: "Typst markup", level: 2),
-    (id: "code-blocks", title: "Code blocks", level: 2),
-    (id: "links-and-assets", title: "Links and assets", level: 2),
-  ),
 )) <aster-frontmatter>
 
 Documentation entries are ordinary Typst modules. Each entry exposes metadata
 for navigation and renders its content only when a route needs it.
 
-#doc-heading(id: "typst-markup")[Typst markup]
+= Typst markup
 
 Use *strong emphasis*, _emphasis_, `inline code`, lists, links, math such as
 $e^(i pi) + 1 = 0$, and other Typst markup directly.
@@ -30,7 +25,7 @@ $e^(i pi) + 1 = 0$, and other Typst markup directly.
   styles and scripts from `<aster-style>` and `<aster-script>` metadata.
 ]
 
-#doc-heading(id: "code-blocks")[Code blocks]
+= Code blocks
 
 Fenced raw blocks retain their language identifier. Aster highlights supported
 languages and publishes the generated theme stylesheet once.
@@ -57,7 +52,7 @@ languages and publishes the generated theme stylesheet once.
   ),
 ))
 
-#doc-heading(id: "links-and-assets")[Links and assets]
+= Links and assets
 
 A leading slash in a navigation link refers to the generated site root. Aster
 rewrites it relative to the current output page, which keeps the same build

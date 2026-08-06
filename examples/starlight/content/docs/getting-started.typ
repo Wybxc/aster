@@ -1,4 +1,4 @@
-#import "/components/content.typ": aside, doc-heading, steps
+#import "/components/content.typ": aside, steps
 
 #metadata((
   title: "Getting Started",
@@ -6,23 +6,18 @@
   section: "Start Here",
   section_order: 10,
   order: 20,
-  toc: (
-    (id: "prerequisites", title: "Prerequisites", level: 2),
-    (id: "create-a-project", title: "Create a project", level: 2),
-    (id: "project-structure", title: "Project structure", level: 2),
-  ),
 )) <aster-frontmatter>
 
 This guide covers the shortest path from a checked-out Aster repository to a
 locally served documentation site.
 
-#doc-heading(id: "prerequisites")[Prerequisites]
+= Prerequisites
 
 You need a Rust toolchain capable of building the workspace. Aster includes the
 development server and CSS processing pipeline, so the basic documentation
 example does not require Node.js.
 
-#doc-heading(id: "create-a-project")[Create a project]
+= Create a project
 
 #steps((
   (
@@ -49,7 +44,7 @@ cargo run -- dev -p examples/starlight
   output under `examples/starlight/dist/`.
 ]
 
-#doc-heading(id: "project-structure")[Project structure]
+= Project structure
 
 ```text
 starlight/

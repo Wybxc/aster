@@ -1,4 +1,4 @@
-#import "/components/content.typ": aside, card-grid, doc-heading, steps
+#import "/components/content.typ": aside, card-grid, steps
 
 #metadata((
   title: "Components",
@@ -7,17 +7,12 @@
   section_order: 20,
   order: 20,
   badge: "UI",
-  toc: (
-    (id: "callouts", title: "Callouts", level: 2),
-    (id: "cards", title: "Cards", level: 2),
-    (id: "steps", title: "Steps", level: 2),
-  ),
 )) <aster-frontmatter>
 
 Components accept structured values and return content. Their styles and scripts
 remain next to the rendering function and are deduplicated per page.
 
-#doc-heading(id: "callouts")[Callouts]
+= Callouts
 
 #aside(kind: "note")[Use notes for useful context that is not part of the main instruction.]
 
@@ -27,7 +22,7 @@ remain next to the rendering function and are deduplicated per page.
 
 #aside(kind: "danger")[Use danger notices for actions that can lose data or break a deployment.]
 
-#doc-heading(id: "cards")[Cards]
+= Cards
 
 #card-grid((
   (title: "Content", body: [Write the document with Typst markup and functions.]),
@@ -35,7 +30,7 @@ remain next to the rendering function and are deduplicated per page.
   (title: "Resources", body: [Attach component CSS and JavaScript through metadata.]),
 ))
 
-#doc-heading(id: "steps")[Steps]
+= Steps
 
 #steps((
   (title: "Define the API", body: [Choose explicit arguments that encode the component invariant.]),

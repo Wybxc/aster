@@ -1,50 +1,113 @@
 #import "icons.typ": info-icon, link-icon, spark-icon, warning-icon
 
-#let doc-heading(body, id: none, level: 2) = [
-  #metadata(
-    ```css
-    .sl-heading-wrapper {
-      --anchor-size: 0.8275em;
-      --anchor-gap: 0.3em;
-      line-height: 1.2;
-    }
+// ---------------------------------------------------------------------------
+// Heading ids and tables of contents
+// ---------------------------------------------------------------------------
 
-    .sl-heading-wrapper > :first-child {
-      display: inline;
-      padding-inline-end: calc(var(--anchor-size) + var(--anchor-gap));
-    }
-
-    .sl-anchor-link {
-      position: relative;
-      display: inline-flex;
-      margin-inline-start: calc(-1 * var(--anchor-size));
-      color: var(--sl-color-text-accent);
-      text-decoration: none;
-    }
-
-    .sl-anchor-link .sl-icon {
-      width: var(--anchor-size);
-      height: var(--anchor-size);
-      translate: 0 0.16em;
-    }
-
-    @media (hover: hover) {
-      .sl-anchor-link {
-        opacity: 0;
-      }
-
-      .sl-anchor-link:focus,
-      .sl-heading-wrapper:hover .sl-anchor-link {
-        opacity: 1;
+/// Extract the plain text of a heading body for slug generation.
+#let heading-text(content) = {
+  if type(content) == str {
+    content
+  } else if repr(content) == "[ ]" {
+    " "
+  } else {
+    let fields = content.fields()
+    let text = fields.at("text", default: none)
+    if text != none {
+      text
+    } else {
+      let children = fields.at("children", default: none)
+      if children != none {
+        children.map(heading-text).join("")
+      } else {
+        let body = fields.at("body", default: none)
+        if body != none { heading-text(body) } else { "" }
       }
     }
-    ```
-  ) <aster-style>
+  }
+}
+
+/// Derive an HTML fragment id from a heading title.
+///
+/// The slug keeps letters, numbers, spaces, underscores, and hyphens, and
+/// collapses runs of spaces and separators into single hyphens. CJK and other
+/// Unicode letters are preserved so anchors stay readable.
+#let heading-id(title) = {
+  let slug = lower(title)
+    .replace(regex("[^\\p{L}\\p{N} _-]"), "")
+    .replace(regex("[ _]+"), "-")
+    .replace(regex("-+"), "-")
+  slug.trim(regex("[- ]"))
+}
+
+/// Render a heading element with a generated id and anchor link.
+///
+/// The heading carries a `<toc-heading>` label so `collect-toc` can find it.
+/// The `show heading` rule in `templates/docs.typ` routes native heading
+/// markup through this function.
+#let heading-element(body, id, level) = [
   #html.div(class: "sl-heading-wrapper level-h" + str(level))[
-    #html.elem("h" + str(level), attrs: (id: id))[#body]
+    #html.elem("h" + str(level), attrs: (id: id))[#body] <toc-heading>
     #html.a(class: "sl-anchor-link", href: "#" + id, aria-label: "Link to this section")[#link-icon]
   ]
 ]
+
+/// Collect the headings of the rendered document and pass them to `use-toc`.
+///
+/// `query` observes the complete document regardless of the call site, so the
+/// collected entries can be rendered anywhere in a page template. The callback
+/// receives the entries as an array of `(id, title, level)` dictionaries and
+/// must return content.
+#let collect-toc(use-toc) = context {
+  use-toc(query(<toc-heading>).map(heading => {
+    let attrs = heading.attrs
+    (
+      id: attrs.at("id", default: none),
+      title: heading-text(heading.body),
+      level: int(heading.tag.slice(1)),
+    )
+  }))
+}
+
+#metadata(
+  ```css
+  .sl-heading-wrapper {
+    --anchor-size: 0.8275em;
+    --anchor-gap: 0.3em;
+    line-height: 1.2;
+  }
+
+  .sl-heading-wrapper > :first-child {
+    display: inline;
+    padding-inline-end: calc(var(--anchor-size) + var(--anchor-gap));
+  }
+
+  .sl-anchor-link {
+    position: relative;
+    display: inline-flex;
+    margin-inline-start: calc(-1 * var(--anchor-size));
+    color: var(--sl-color-text-accent);
+    text-decoration: none;
+  }
+
+  .sl-anchor-link .sl-icon {
+    width: var(--anchor-size);
+    height: var(--anchor-size);
+    translate: 0 0.16em;
+  }
+
+  @media (hover: hover) {
+    .sl-anchor-link {
+      opacity: 0;
+    }
+
+    .sl-anchor-link:focus,
+    .sl-heading-wrapper:hover .sl-anchor-link {
+      opacity: 1;
+    }
+  }
+  ```
+) <aster-style>
 
 #let aside(body, kind: "note", title: none) = {
   let title = if title == none {

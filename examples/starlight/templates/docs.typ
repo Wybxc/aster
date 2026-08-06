@@ -1,12 +1,25 @@
 #import "/lib.typ": adjacent-docs, aster-version, settings
+#import "/components/content.typ": collect-toc, heading-element, heading-id, heading-text
 #import "/components/header.typ": header
 #import "/components/pagination.typ": pagination
 #import "/components/sidebar.typ": sidebar
 #import "/components/toc.typ": mobile-table-of-contents, table-of-contents
 
+// Render every native Typst heading with a generated id and toc-heading label.
+//
+// The rule must be applied inside the function that receives `entry.render()`
+// content: show rules are lexical, so they only affect content produced within
+// their scope. `entry.render()` includes each entry's source in its own module
+// scope, so the rule is wrapped around the rendered body here instead.
+#let with-heading-rules(body) = {
+  show heading: it => {
+    heading-element(it.body, heading-id(heading-text(it.body)), it.level + 1)
+  }
+  body
+}
+
 #let docs-page(entry) = {
   let meta = entry.metadata()
-  let toc = meta.at("toc", default: ())
   let title = meta.title + " | " + settings.site.title
   let generator = if aster-version == none { "Aster" } else { "Aster " + aster-version }
   [
@@ -137,26 +150,28 @@
         #header()
         #sidebar(entry.id)
         #html.main(class: "main-frame", id: "main-content")[
-          #if toc.len() > 0 { mobile-table-of-contents(toc) }
-          #html.div(class: "content-shell")[
-            #html.div(class: "content-grid")[
-              #html.div(class: "doc-panel")[
-                #html.article(class: "sl-markdown-content")[
-                  #html.header(class: "doc-header")[
-                    #html.h1[#meta.title]
-                    #html.p[#meta.description]
+          #collect-toc(toc => [
+            #if toc.len() > 0 { mobile-table-of-contents(toc) }
+            #html.div(class: "content-shell")[
+              #html.div(class: "content-grid")[
+                #html.div(class: "doc-panel")[
+                  #html.article(class: "sl-markdown-content")[
+                    #html.header(class: "doc-header")[
+                      #html.h1[#meta.title]
+                      #html.p[#meta.description]
+                    ]
+                    #with-heading-rules(entry.render())
                   ]
-                  #entry.render()
+                  #html.footer(class: "doc-footer print-hidden")[
+                    #html.a(href: settings.docs.edit-base + entry.id + ".typ")[Edit this page]
+                    #html.span[Built with Aster and Typst]
+                  ]
+                  #pagination(adjacent-docs(entry.id))
                 ]
-                #html.footer(class: "doc-footer print-hidden")[
-                  #html.a(href: settings.docs.edit-base + entry.id + ".typ")[Edit this page]
-                  #html.span[Built with Aster and Typst]
-                ]
-                #pagination(adjacent-docs(entry.id))
+                #if toc.len() > 0 { table-of-contents(toc) }
               ]
-              #if toc.len() > 0 { table-of-contents(toc) }
             ]
-          ]
+          ])
         ]
       ]
     ]

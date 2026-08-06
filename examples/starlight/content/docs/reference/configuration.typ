@@ -1,4 +1,4 @@
-#import "/components/content.typ": aside, doc-heading
+#import "/components/content.typ": aside
 
 #metadata((
   title: "Configuration Reference",
@@ -6,17 +6,12 @@
   section: "Reference",
   section_order: 30,
   order: 20,
-  toc: (
-    (id: "manifest", title: "Project manifest", level: 2),
-    (id: "build-settings", title: "Build settings", level: 2),
-    (id: "site-settings", title: "Site settings", level: 2),
-  ),
 )) <aster-frontmatter>
 
 The `aster.toml` manifest has two readers. Aster deserializes build-owned tables,
 while Typst templates read project-specific values directly with `toml`.
 
-#doc-heading(id: "manifest")[Project manifest]
+= Project manifest
 
 ```toml
 [project]
@@ -27,7 +22,7 @@ title = "Aster Docs"
 language = "en"
 ```
 
-#doc-heading(id: "build-settings")[Build settings]
+= Build settings
 
 The standard path layout uses `pages`, `content`, `public`, and `dist`. CSS is
 processed through Lightning CSS and generated assets are written below
@@ -47,7 +42,7 @@ themes = { light = "InspiredGitHub", dark = "base16-eighties.dark" }
   focused on values that differ from Aster's conventional behavior.
 ]
 
-#doc-heading(id: "site-settings")[Site settings]
+= Site settings
 
 Tables unknown to Aster remain available to Typst. The template reads the site
 title, language, repository URL, and edit-link base from the same TOML file, so

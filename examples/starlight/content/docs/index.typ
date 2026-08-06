@@ -1,4 +1,4 @@
-#import "/components/content.typ": aside, card-grid, doc-heading
+#import "/components/content.typ": aside, card-grid
 
 #metadata((
   title: "Welcome to Aster Docs",
@@ -7,10 +7,6 @@
   section_order: 10,
   order: 10,
   badge: "New",
-  toc: (
-    (id: "overview", title: "Overview", level: 2),
-    (id: "where-to-next", title: "Where to next?", level: 2),
-  ),
 )) <aster-frontmatter>
 
 Aster combines file-based routes, lazy content collections, and Typst's content
@@ -22,7 +18,7 @@ presentation in the same language.
   structure makes the document easier to read.
 ]
 
-#doc-heading(id: "overview")[Overview]
+= Overview
 
 Use familiar Typst markup for prose and switch to functions when a documentation
 component needs structure or behavior.
@@ -45,7 +41,7 @@ component needs structure or behavior.
   ),
 ))
 
-#doc-heading(id: "where-to-next")[Where to next?]
+= Where to next?
 
 Begin with the setup guide if this is your first Aster project. If the site is
 already running, continue with content authoring and component composition.
