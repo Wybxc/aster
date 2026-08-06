@@ -1,4 +1,4 @@
-#import "/components/content.typ": aside, card-grid
+#import "/components/content.typ": callout, card-grid
 
 #metadata((
   title: "Welcome to Aster Docs",
@@ -13,7 +13,7 @@ Aster combines file-based routes, lazy content collections, and Typst's content
 model. The result is a static documentation site that keeps authoring and
 presentation in the same language.
 
-#aside(kind: "tip", title: "A small core")[
+#callout(kind: "tip", title: "A small core")[
   Start with ordinary Typst files. Add specialized components only where their
   structure makes the document easier to read.
 ]
@@ -46,7 +46,7 @@ component needs structure or behavior.
 Begin with the setup guide if this is your first Aster project. If the site is
 already running, continue with content authoring and component composition.
 
-#aside(kind: "note", title: "Static by default")[
+#callout(kind: "note", title: "Static by default")[
   Every documentation route is rendered during the build. The generated site
   can be deployed at a domain root or below a path prefix without rebuilding it.
 ]

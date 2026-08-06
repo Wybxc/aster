@@ -109,7 +109,7 @@
   ```
 ) <aster-style>
 
-#let aside(body, kind: "note", title: none) = {
+#let callout(body, kind: "note", title: none) = {
   let title = if title == none {
     (note: "Note", tip: "Tip", caution: "Caution", danger: "Danger").at(kind)
   } else {
@@ -119,60 +119,60 @@
   [
     #metadata(
       ```css
-      .starlight-aside {
-        --aside-border: var(--sl-color-blue);
-        --aside-accent: var(--sl-color-blue-high);
-        --aside-bg: var(--sl-color-blue-low);
-        border-inline-start: 0.25rem solid var(--aside-border);
+      .sl-callout {
+        --callout-border: var(--sl-color-blue);
+        --callout-accent: var(--sl-color-blue-high);
+        --callout-bg: var(--sl-color-blue-low);
+        border-inline-start: 0.25rem solid var(--callout-border);
         padding: 1rem;
-        background: var(--aside-bg);
+        background: var(--callout-bg);
         color: var(--sl-color-white);
       }
 
-      .starlight-aside--tip {
-        --aside-border: var(--sl-color-purple);
-        --aside-accent: var(--sl-color-purple-high);
-        --aside-bg: var(--sl-color-purple-low);
+      .sl-callout--tip {
+        --callout-border: var(--sl-color-purple);
+        --callout-accent: var(--sl-color-purple-high);
+        --callout-bg: var(--sl-color-purple-low);
       }
 
-      .starlight-aside--caution {
-        --aside-border: var(--sl-color-orange);
-        --aside-accent: var(--sl-color-orange-high);
-        --aside-bg: var(--sl-color-orange-low);
+      .sl-callout--caution {
+        --callout-border: var(--sl-color-orange);
+        --callout-accent: var(--sl-color-orange-high);
+        --callout-bg: var(--sl-color-orange-low);
       }
 
-      .starlight-aside--danger {
-        --aside-border: var(--sl-color-red);
-        --aside-accent: var(--sl-color-red-high);
-        --aside-bg: var(--sl-color-red-low);
+      .sl-callout--danger {
+        --callout-border: var(--sl-color-red);
+        --callout-accent: var(--sl-color-red-high);
+        --callout-bg: var(--sl-color-red-low);
       }
 
-      .starlight-aside__title {
+      .sl-callout__title {
         display: flex;
         align-items: center;
         gap: 0.5rem;
-        color: var(--aside-accent);
+        color: var(--callout-accent);
         font-weight: 600;
         line-height: 1.2;
       }
 
-      .starlight-aside__title .sl-icon {
+      .sl-callout__title .sl-icon {
         width: 1.25rem;
         height: 1.25rem;
       }
 
-      .starlight-aside__content {
+      .sl-callout__content {
         margin-top: 0.5rem;
       }
 
-      .starlight-aside__content > * + * {
+      .sl-callout__content > * + * {
         margin-top: 0.65rem;
       }
       ```
     ) <aster-style>
-    #html.aside(class: "starlight-aside starlight-aside--" + kind)[
-      #html.div(class: "starlight-aside__title")[#icon #title]
-      #html.div(class: "starlight-aside__content")[#body]
+    #html.aside(class: "sl-callout sl-callout--" + kind)[
+      #html.div(class: "sl-callout__title")[#icon #title]
+      #html.div(class: "sl-callout__content")[#body]
     ]
   ]
 }

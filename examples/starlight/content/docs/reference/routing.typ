@@ -1,4 +1,4 @@
-#import "/components/content.typ": aside
+#import "/components/content.typ": callout
 
 #metadata((
   title: "Routing Reference",
@@ -37,7 +37,7 @@ parameter dictionary.
 `[...slug]` accepts nested values such as `guides/installation`. This example
 uses one spread template to render all non-root documentation entries.
 
-#aside(kind: "caution")[
+#callout(kind: "caution")[
   Generated parameter values remain URL path segments. Do not use them as
   unchecked native filesystem paths.
 ]

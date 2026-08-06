@@ -1,4 +1,4 @@
-#import "/components/content.typ": aside, steps
+#import "/components/content.typ": callout, steps
 
 #metadata((
   title: "Getting Started",
@@ -39,7 +39,7 @@ cargo build
 cargo run -- dev -p examples/starlight
 ```
 
-#aside(kind: "note")[
+#callout(kind: "note")[
   Use `cargo run -- build -p examples/starlight` when you only need the static
   output under `examples/starlight/dist/`.
 ]

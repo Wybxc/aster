@@ -1,4 +1,4 @@
-#import "/components/content.typ": aside, tabs
+#import "/components/content.typ": callout, tabs
 
 #metadata((
   title: "Authoring Content",
@@ -20,7 +20,7 @@ $e^(i pi) + 1 = 0$, and other Typst markup directly.
 - Use content functions for dynamic headings, tabs, and repeated UI.
 - Use typed `html` elements when browser semantics matter.
 
-#aside(kind: "tip")[
+#callout(kind: "tip")[
   A content entry can import only the components it uses. Aster discovers their
   styles and scripts from `<aster-style>` and `<aster-script>` metadata.
 ]

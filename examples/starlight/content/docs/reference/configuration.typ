@@ -1,4 +1,4 @@
-#import "/components/content.typ": aside
+#import "/components/content.typ": callout
 
 #metadata((
   title: "Configuration Reference",
@@ -37,7 +37,7 @@ targets = ["defaults"]
 themes = { light = "InspiredGitHub", dark = "base16-eighties.dark" }
 ```
 
-#aside(kind: "note")[
+#callout(kind: "note")[
   These defaults are omitted from this example manifest. Configuration remains
   focused on values that differ from Aster's conventional behavior.
 ]

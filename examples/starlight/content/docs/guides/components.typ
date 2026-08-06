@@ -1,4 +1,4 @@
-#import "/components/content.typ": aside, card-grid, steps
+#import "/components/content.typ": callout, card-grid, steps
 
 #metadata((
   title: "Components",
@@ -14,13 +14,13 @@ remain next to the rendering function and are deduplicated per page.
 
 = Callouts
 
-#aside(kind: "note")[Use notes for useful context that is not part of the main instruction.]
+#callout(kind: "note")[Use notes for useful context that is not part of the main instruction.]
 
-#aside(kind: "tip")[Use tips for an optional technique that can improve a workflow.]
+#callout(kind: "tip")[Use tips for an optional technique that can improve a workflow.]
 
-#aside(kind: "caution")[Use cautions when a choice may have surprising consequences.]
+#callout(kind: "caution")[Use cautions when a choice may have surprising consequences.]
 
-#aside(kind: "danger")[Use danger notices for actions that can lose data or break a deployment.]
+#callout(kind: "danger")[Use danger notices for actions that can lose data or break a deployment.]
 
 = Cards
 
