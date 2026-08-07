@@ -1,0 +1,10 @@
+[project]
+name = "aster-portfolio"
+
+[site]
+title = "Jeanine White"
+description = "The personal site of Jeanine White."
+language = "en"
+
+[highlight]
+themes = { light = "InspiredGitHub", dark = "base16-eighties.dark" }

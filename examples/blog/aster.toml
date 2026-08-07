@@ -1,0 +1,16 @@
+[project]
+name = "aster-blog"
+
+[site]
+title = "Astro Blog"
+description = "A clean, approachable blog starter."
+url = "https://example.com/"
+language = "en"
+author = "Your name here"
+
+[typst.fonts]
+paths = ["assets/fonts"]
+system = true
+
+[highlight]
+themes = { light = "InspiredGitHub", dark = "base16-eighties.dark" }
