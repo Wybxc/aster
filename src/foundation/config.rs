@@ -29,9 +29,9 @@ impl Default for HighlightConfig {
 #[derive(Clone, Deserialize)]
 #[serde(default)]
 pub struct Themes {
-    /// Syntect theme used for light color schemes.
+    /// Two-face theme used for light color schemes.
     pub light: EcoString,
-    /// Syntect theme used for dark color schemes.
+    /// Two-face theme used for dark color schemes.
     pub dark: EcoString,
 }
 

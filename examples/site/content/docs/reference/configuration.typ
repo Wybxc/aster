@@ -34,7 +34,7 @@ Templates can keep the parsed value in a shared library:
 content collections, the Aster version, and the current route; project
 configuration therefore keeps one explicit source of truth in TOML.
 
-The `[highlight.themes]` table selects built-in Syntect themes or project-local
+The `[highlight.themes]` table selects built-in two-face themes or project-local
 `.tmTheme` files for generated light and dark syntax styles.
 
 == Build configuration

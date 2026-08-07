@@ -6,7 +6,8 @@ use anyhow::Result;
 use comemo::Tracked;
 use syntect::easy::ScopeRegionIterator;
 use syntect::highlighting::{Color, FontStyle, Highlighter, StyleModifier, Theme, ThemeSet};
-use syntect::parsing::{ParseState, Scope, ScopeStack, SyntaxSet};
+use syntect::parsing::{ParseState, Scope, ScopeStack};
+use two_face::theme::LazyThemeSet;
 use typst::ecow::{EcoString, EcoVec, eco_format, eco_vec};
 use typst::foundations::Bytes;
 use typst::syntax::{LinkedNode, Span, SyntaxNode, VirtualPath, parse_code, parse_math};
@@ -35,8 +36,7 @@ enum ThemeError {
     File(#[from] FileAccessError),
 }
 
-static SS: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
-static THEMES: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
+static THEMES: LazyLock<LazyThemeSet> = LazyLock::new(|| two_face::theme::extra().into());
 
 /// Languages that Typst can parse with its own AST.
 const TYPST_LANGS: &[&str] = &["typ", "typst", "typc", "typm"];
@@ -213,17 +213,18 @@ fn highlight_tokens(code: &str, lang: &str) -> EcoVec<HighlightToken> {
 
 /// Parse non-Typst code into its complete TextMate scope stacks.
 fn do_syntect_highlight(code: &str, lang: &str) -> EcoVec<HighlightToken> {
-    let syntax = SS
+    let syntaxes = &*typst::text::RAW_SYNTAXES;
+    let syntax = syntaxes
         .find_syntax_by_token(lang)
-        .or_else(|| SS.find_syntax_by_extension(lang))
-        .unwrap_or_else(|| SS.find_syntax_plain_text());
+        .or_else(|| syntaxes.find_syntax_by_extension(lang))
+        .unwrap_or_else(|| syntaxes.find_syntax_plain_text());
 
     let mut parse_state = ParseState::new(syntax);
     let mut scope_stack = ScopeStack::new();
     let mut out = EcoVec::new();
 
     for line in code.lines() {
-        let Ok(ops) = parse_state.parse_line(line, &SS) else {
+        let Ok(ops) = parse_state.parse_line(line, syntaxes) else {
             continue;
         };
 
@@ -305,12 +306,12 @@ fn walk_typst_node<'a>(
     }
 }
 
-/// Load a syntect theme by built-in name or project-root-relative virtual path.
+/// Load a two-face theme by built-in name or a project-root-relative `.tmTheme` path.
 fn load_theme(
     name_or_path: &str,
     project_files: Tracked<ProjectFiles>,
 ) -> std::result::Result<Theme, ThemeError> {
-    if let Some(theme) = THEMES.themes.get(name_or_path) {
+    if let Some(theme) = THEMES.get(name_or_path) {
         return Ok(theme.clone());
     }
 
@@ -526,5 +527,17 @@ mod tests {
             assert_eq!(highlighted_text(&do_typst_highlight(code, "typc")), code);
         }
         assert_eq!(highlighted_text(&do_syntect_highlight(json, "json")), json);
+    }
+
+    #[test]
+    fn exposes_two_face_syntaxes_and_themes() {
+        assert!(THEMES.get("Nord").is_some());
+
+        let tokens = do_syntect_highlight("name = \"aster\"\n", "toml");
+        assert!(tokens.iter().any(|(scopes, _)| {
+            scopes
+                .iter()
+                .any(|scope| scope.to_string() == "source.toml")
+        }));
     }
 }
