@@ -12,6 +12,8 @@ mod dependencies;
 mod endpoint;
 #[path = "integration/highlight.rs"]
 mod highlight;
+#[path = "integration/image.rs"]
+mod image;
 #[path = "integration/navigation.rs"]
 mod navigation;
 #[path = "integration/pipeline.rs"]

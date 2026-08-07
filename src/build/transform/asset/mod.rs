@@ -1,6 +1,7 @@
 mod component;
 mod css;
 mod data_url;
+mod image;
 mod reference;
 mod script;
 
@@ -10,16 +11,18 @@ use std::path::Path;
 use anyhow::{Context, Result, ensure};
 use comemo::Tracked;
 use typst::ecow::EcoString;
+use typst::foundations::Bytes;
 use typst::syntax::{Span, VirtualPath};
-use typst_html::HtmlElement;
+use typst_html::{HtmlDocument, HtmlElement};
 
 use crate::build::files::ProjectFiles;
 use crate::build::output::PagePublication;
 use crate::foundation::config::{AssetsConfig, CssConfig};
 
 use self::{
-    css::{CssPipeline, StylesheetKind},
+    css::{BundledStylesheet, CssPipeline, StylesheetKind},
     data_url::decode_data_url,
+    image::{ImageProcessor, ImageSizeLimit},
     reference::{resolve_project_reference, source_origin},
     script::ScriptPipeline,
 };
@@ -41,6 +44,7 @@ enum ScriptKind {
 pub struct AssetProcessor<'a> {
     project_files: Tracked<'a, ProjectFiles>,
     inline_threshold: usize,
+    images: ImageProcessor,
     css: CssPipeline<'a>,
     scripts: ScriptPipeline<'a>,
 }
@@ -52,9 +56,11 @@ impl<'a> AssetProcessor<'a> {
         assets: &AssetsConfig,
         css: &CssConfig,
     ) -> Result<Self> {
+        let images = ImageProcessor::new(&assets.images)?;
         Ok(Self {
             project_files,
             inline_threshold: assets.image_inline_threshold,
+            images,
             css: CssPipeline::new(project_files, css)?,
             scripts: ScriptPipeline::new(project_files, project_root),
         })
@@ -65,7 +71,7 @@ impl<'a> AssetProcessor<'a> {
         source: &VirtualPath,
         page: &mut PagePublication<'_>,
     ) -> Result<EcoString> {
-        self.css.add_file(source, page)
+        self.add_stylesheet(StylesheetKind::Css, source, page)
     }
 
     fn add_stylesheet_raw(
@@ -75,8 +81,33 @@ impl<'a> AssetProcessor<'a> {
         code: EcoString,
         page: &mut PagePublication<'_>,
     ) -> Result<EcoString> {
-        let content = self.css.add_raw(origin, code, page)?;
+        let stylesheet = self.css.bundle_raw(origin, code, page.project_root())?;
+        let content = self.resolve_stylesheet(stylesheet, page)?;
         page.add_bundled_stylesheet(name, content)
+    }
+
+    fn add_stylesheet(
+        &mut self,
+        kind: StylesheetKind,
+        source: &VirtualPath,
+        page: &mut PagePublication<'_>,
+    ) -> Result<EcoString> {
+        let stylesheet = self
+            .css
+            .bundle_stylesheet(kind, source, page.project_root())?;
+        let content = self.resolve_stylesheet(stylesheet, page)?;
+        page.add_bundled_stylesheet(source, content)
+    }
+
+    fn resolve_stylesheet(
+        &self,
+        stylesheet: BundledStylesheet,
+        page: &mut PagePublication<'_>,
+    ) -> Result<Bytes> {
+        stylesheet.resolve_references(|source, content| {
+            let content = self.images.process(content, ImageSizeLimit::default());
+            page.add_css_asset(source, content)
+        })
     }
 
     fn add_script_file(
@@ -131,7 +162,7 @@ impl<'a> AssetProcessor<'a> {
             );
             return Ok(true);
         };
-        let url = self.css.add_stylesheet(kind, &reference.source, page)?;
+        let url = self.add_stylesheet(kind, &reference.source, page)?;
         let url = reference.with_url(url);
         element.update_attr("href", move |value| *value = url);
         if custom_relation {
@@ -212,13 +243,14 @@ impl<'a> AssetProcessor<'a> {
         &self,
         element: &mut HtmlElement,
         attribute: &str,
+        limit: ImageSizeLimit,
         page: &mut PagePublication<'_>,
     ) -> Result<()> {
         let Some(reference) = element.get_attr(attribute) else {
             return Ok(());
         };
         let Some(url) = self
-            .publish_reference(page, element.span, &reference)
+            .publish_reference(page, element.span, &reference, limit)
             .with_context(|| format!("invalid {attribute} resource reference {reference}"))?
         else {
             return Ok(());
@@ -236,11 +268,14 @@ impl<'a> AssetProcessor<'a> {
         let Some(value) = element.get_attr(attribute) else {
             return Ok(());
         };
+        let element_limit = ImageSizeLimit::from_element(element);
         let mut candidates = parse_srcset::parse_srcset(&value);
         let mut changed = false;
         for candidate in &mut candidates {
+            let limit =
+                element_limit.for_candidate(candidate.width, candidate.height, candidate.density);
             let Some(url) = self
-                .publish_reference(page, element.span, &candidate.url)
+                .publish_reference(page, element.span, &candidate.url, limit)
                 .with_context(|| {
                     format!("invalid {attribute} resource reference {}", candidate.url)
                 })?
@@ -279,15 +314,15 @@ impl<'a> AssetProcessor<'a> {
         page: &mut PagePublication<'_>,
         span: Span,
         reference: &str,
+        limit: ImageSizeLimit,
     ) -> Result<Option<EcoString>> {
         let reference = classify_url(reference);
         if let UrlReference::Data { url } = reference {
             let Some(asset) = decode_data_url(url, self.inline_threshold)? else {
                 return Ok(None);
             };
-            return page
-                .add_data_asset(asset.extension, asset.content)
-                .map(Some);
+            let content = self.images.process(Bytes::new(asset.content), limit);
+            return page.add_data_asset(asset.extension, content).map(Some);
         }
 
         let Some(reference) = resolve_project_reference(page, span, reference)? else {
@@ -302,6 +337,7 @@ impl<'a> AssetProcessor<'a> {
                     reference.source.get_with_slash()
                 )
             })?;
+        let content = self.images.process(content, limit);
         let url = page.add_asset(&reference.source, content)?;
         Ok(Some(reference.with_url(url)))
     }
@@ -325,47 +361,59 @@ impl Processor for AssetProcessor<'_> {
         let tag = element.tag.resolve();
         match tag.as_str() {
             "img" => {
-                self.publish_attribute(element, "src", page)?;
+                let limit = ImageSizeLimit::from_element(element);
+                self.publish_attribute(element, "src", limit, page)?;
                 self.publish_srcset(element, "srcset", page)?;
             }
             "source" => {
-                self.publish_attribute(element, "src", page)?;
+                let limit = ImageSizeLimit::from_element(element);
+                self.publish_attribute(element, "src", limit, page)?;
                 self.publish_srcset(element, "srcset", page)?;
             }
             "video" => {
-                self.publish_attribute(element, "src", page)?;
-                self.publish_attribute(element, "poster", page)?;
+                self.publish_attribute(element, "src", ImageSizeLimit::default(), page)?;
+                self.publish_attribute(element, "poster", ImageSizeLimit::default(), page)?;
             }
             "audio" | "track" | "embed" => {
-                self.publish_attribute(element, "src", page)?;
+                self.publish_attribute(element, "src", ImageSizeLimit::default(), page)?;
             }
             "object" => {
-                self.publish_attribute(element, "data", page)?;
+                self.publish_attribute(element, "data", ImageSizeLimit::default(), page)?;
             }
             "input"
                 if element
                     .get_attr("type")
                     .is_some_and(|kind| kind.eq_ignore_ascii_case("image")) =>
             {
-                self.publish_attribute(element, "src", page)?;
+                let limit = ImageSizeLimit::from_element(element);
+                self.publish_attribute(element, "src", limit, page)?;
             }
             "link" if publishes_link(element) => {
-                self.publish_attribute(element, "href", page)?;
+                self.publish_attribute(element, "href", ImageSizeLimit::default(), page)?;
                 self.publish_srcset(element, "imagesrcset", page)?;
             }
             "meta" if publishes_meta(element) => {
-                self.publish_attribute(element, "content", page)?;
+                self.publish_attribute(element, "content", ImageSizeLimit::default(), page)?;
             }
             "a" | "area" if element.get_attr("download").is_some() => {
-                self.publish_attribute(element, "href", page)?;
+                self.publish_attribute(element, "href", ImageSizeLimit::default(), page)?;
             }
             "image" | "use" | "feImage" => {
-                self.publish_attribute(element, "href", page)?;
-                self.publish_attribute(element, "xlink:href", page)?;
+                let limit = ImageSizeLimit::from_element(element);
+                self.publish_attribute(element, "href", limit, page)?;
+                self.publish_attribute(element, "xlink:href", limit, page)?;
             }
             _ => {}
         }
         Ok(WalkControl::Continue)
+    }
+
+    fn end_document(
+        &mut self,
+        document: &mut HtmlDocument,
+        _page: &mut PagePublication<'_>,
+    ) -> Result<()> {
+        self.images.process_frames(document)
     }
 }
 

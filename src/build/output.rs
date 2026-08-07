@@ -274,14 +274,8 @@ impl PagePublication<'_> {
     }
 
     /// Register an extracted data URL and return its browser-facing URL from this page.
-    pub fn add_data_asset(
-        &mut self,
-        extension: Option<&str>,
-        content: Vec<u8>,
-    ) -> Result<EcoString> {
-        let asset = self
-            .publication
-            .add_asset(None, extension, Bytes::new(content))?;
+    pub fn add_data_asset(&mut self, extension: Option<&str>, content: Bytes) -> Result<EcoString> {
+        let asset = self.publication.add_asset(None, extension, content)?;
         self.reference(&asset)
     }
 

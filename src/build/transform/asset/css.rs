@@ -19,7 +19,6 @@ use typst::syntax::VirtualPath;
 use url::Url;
 
 use crate::build::files::{FileAccessError, ProjectFiles};
-use crate::build::output::PagePublication;
 use crate::foundation::config::CssConfig;
 
 use super::super::url::{UrlReference, classify_url};
@@ -27,7 +26,7 @@ use super::super::url::{UrlReference, classify_url};
 pub struct CssPipeline<'a> {
     project_files: Tracked<'a, ProjectFiles>,
     config: CssConfig,
-    stylesheets: HashMap<StylesheetSource, Bytes>,
+    stylesheets: HashMap<StylesheetSource, BundledStylesheet>,
 }
 
 impl<'a> CssPipeline<'a> {
@@ -40,69 +39,52 @@ impl<'a> CssPipeline<'a> {
         })
     }
 
-    /// Build and publish a normal CSS entry point declared by a component.
-    pub fn add_file(
-        &mut self,
-        source: &VirtualPath,
-        page: &mut PagePublication<'_>,
-    ) -> Result<EcoString> {
-        self.add_stylesheet(StylesheetKind::Css, source, page)
-    }
-
     /// Transform raw CSS declared by a component.
-    pub fn add_raw(
+    pub fn bundle_raw(
         &mut self,
         origin: &VirtualPath,
         code: EcoString,
-        page: &mut PagePublication<'_>,
-    ) -> Result<Bytes> {
+        project_root: &Path,
+    ) -> Result<BundledStylesheet> {
         let source = StylesheetSource::Css(CssBundleSource::Memory {
             origin: origin.clone(),
             code,
         });
-        self.resolve_stylesheet(source, page)
+        self.bundle(source, project_root)
     }
 
-    pub fn add_stylesheet(
+    pub fn bundle_stylesheet(
         &mut self,
         kind: StylesheetKind,
         source: &VirtualPath,
-        page: &mut PagePublication<'_>,
-    ) -> Result<EcoString> {
+        project_root: &Path,
+    ) -> Result<BundledStylesheet> {
         let key = match kind {
             StylesheetKind::Css => StylesheetSource::Css(CssBundleSource::File(source.clone())),
             StylesheetKind::Tailwind => StylesheetSource::Tailwind(source.clone()),
         };
-        let css = self.resolve_stylesheet(key, page)?;
-        page.add_bundled_stylesheet(source, css)
+        self.bundle(key, project_root)
     }
 
-    fn resolve_stylesheet(
+    fn bundle(
         &mut self,
         source: StylesheetSource,
-        page: &mut PagePublication<'_>,
-    ) -> Result<Bytes> {
+        project_root: &Path,
+    ) -> Result<BundledStylesheet> {
         let stylesheet = if let Some(stylesheet) = self.stylesheets.get(&source) {
             stylesheet.clone()
         } else {
             let bundle = match &source {
-                StylesheetSource::Css(source) => bundle_css(
-                    self.project_files,
-                    source,
-                    page.project_root(),
-                    &self.config,
-                ),
-                StylesheetSource::Tailwind(path) => bundle_tailwind_file(
-                    self.project_files,
-                    path,
-                    page.project_root(),
-                    &self.config,
-                ),
+                StylesheetSource::Css(source) => {
+                    bundle_css(self.project_files, source, project_root, &self.config)
+                }
+                StylesheetSource::Tailwind(path) => {
+                    bundle_tailwind_file(self.project_files, path, project_root, &self.config)
+                }
             }
             .map_err(|error| anyhow::anyhow!("{error:#}"))?;
-            let stylesheet = bundle.resolve_references(page)?;
-            self.stylesheets.insert(source, stylesheet.clone());
-            stylesheet
+            self.stylesheets.insert(source, bundle.clone());
+            bundle
         };
         Ok(stylesheet)
     }
@@ -446,13 +428,16 @@ impl SourceProvider for ConfinedFileProvider<'_> {
 ///
 /// Each distinct placeholder has exactly one entry in `references`.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-struct BundledStylesheet {
+pub(super) struct BundledStylesheet {
     code: EcoString,
     references: EcoVec<CssReference>,
 }
 
 impl BundledStylesheet {
-    fn resolve_references(self, page: &mut PagePublication<'_>) -> Result<Bytes> {
+    pub fn resolve_references(
+        self,
+        mut publish_asset: impl FnMut(&VirtualPath, Bytes) -> Result<EcoString>,
+    ) -> Result<Bytes> {
         if self.references.is_empty() {
             return Ok(Bytes::from_string(self.code));
         }
@@ -467,7 +452,7 @@ impl BundledStylesheet {
                     content,
                     suffix,
                 } => {
-                    let mut url = page.add_css_asset(&source, content)?;
+                    let mut url = publish_asset(&source, content)?;
                     url.push_str(&suffix);
                     (placeholder, url)
                 }

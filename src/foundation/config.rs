@@ -90,16 +90,41 @@ impl Default for OutputConfig {
 
 /// Resource processing settings.
 #[derive(Clone, Deserialize)]
-#[serde(default, rename_all = "kebab-case")]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub struct AssetsConfig {
     /// Maximum decoded image size retained as a data URL.
     pub image_inline_threshold: usize,
+    /// Raster-image transformation settings.
+    pub images: ImageConfig,
 }
 
 impl Default for AssetsConfig {
     fn default() -> Self {
         Self {
             image_inline_threshold: 1024,
+            images: ImageConfig::default(),
+        }
+    }
+}
+
+/// Raster-image transformation settings.
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq)]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
+pub struct ImageConfig {
+    /// Whether PNG/JPEG optimization and explicit-size downsampling are enabled.
+    pub enabled: bool,
+    /// JPEG quality used when optimizing JPEG resources.
+    pub jpeg_quality: u8,
+    /// Optional density multiplier for raster images embedded by `html.frame`.
+    pub frame_density: Option<u8>,
+}
+
+impl Default for ImageConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            jpeg_quality: 85,
+            frame_density: None,
         }
     }
 }
@@ -269,6 +294,9 @@ mod tests {
                 "pretty = true\n",
                 "[assets]\n",
                 "image-inline-threshold = 2048\n",
+                "[assets.images]\n",
+                "jpeg-quality = 90\n",
+                "frame-density = 2\n",
                 "[css]\n",
                 "minify = false\n",
                 "targets = [\"last 2 Chrome versions\", \"Firefox ESR\"]\n",
@@ -293,6 +321,9 @@ mod tests {
         assert_eq!(config.output.assets, "static/generated");
         assert!(config.output.pretty);
         assert_eq!(config.assets.image_inline_threshold, 2048);
+        assert!(config.assets.images.enabled);
+        assert_eq!(config.assets.images.jpeg_quality, 90);
+        assert_eq!(config.assets.images.frame_density, Some(2));
         assert!(!config.css.minify);
         assert_eq!(
             config

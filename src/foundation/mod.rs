@@ -10,8 +10,8 @@ pub mod config;
 mod project;
 
 pub use config::{
-    AssetsConfig, AsterConfig, CssConfig, FontConfig, HighlightConfig, OutputConfig, PathsConfig,
-    Themes, TypstConfig, WatchConfig,
+    AssetsConfig, AsterConfig, CssConfig, FontConfig, HighlightConfig, ImageConfig, OutputConfig,
+    PathsConfig, Themes, TypstConfig, WatchConfig,
 };
 pub use project::{Project, ProjectLayout};
 

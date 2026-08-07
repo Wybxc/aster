@@ -59,6 +59,11 @@ pretty = false
 [assets]
 image-inline-threshold = 1024
 
+[assets.images]
+enabled = true
+jpeg-quality = 85
+# frame-density = 2
+
 [css]
 minify = true
 targets = ["defaults"]
@@ -79,6 +84,16 @@ themes = { light = "InspiredGitHub", dark = "base16-eighties.dark" }
 `image-inline-threshold` is the decoded byte size at which an image data URL
 becomes a generated asset. Setting `system` to `false` makes font discovery
 depend only on the configured project-local font directories.
+
+Raster PNG and JPEG resources are optimized automatically. Pixel `width` and
+`height` attributes provide a downsampling bound; images are never enlarged,
+animated images are not resized through the static-image path, and Aster retains
+the original when a transformed file would be larger. PNG optimization is lossless;
+`jpeg-quality` controls same-format JPEG encoding. Raster images inside
+`html.frame` remain embedded in Typst's inline SVG, but their embedded data is
+optimized before SVG rendering. They keep their source resolution by default;
+set `frame-density` to opt into downsampling relative to the frame's nominal 96
+DPI display size. Later CSS scaling can still enlarge it.
 
 CSS entries are ultimately bundled and transformed with Lightning CSS. `targets`
 accepts Browserslist queries and controls syntax lowering and vendor prefixes.
