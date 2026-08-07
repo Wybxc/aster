@@ -38,12 +38,22 @@ impl ImageSizeLimit {
         density: Option<f64>,
     ) -> Self {
         let width = width
-            .and_then(|value| u32::try_from(value).ok())
+            .and_then(candidate_dimension)
             .or_else(|| scaled_dimension(self.width, density));
         let height = height
-            .and_then(|value| u32::try_from(value).ok())
+            .and_then(candidate_dimension)
             .or_else(|| scaled_dimension(self.height, density));
         Self { width, height }
+    }
+
+    fn from_frame(size: Size, transform: Transform, density: u8) -> Self {
+        let width = transform.sx.get().hypot(transform.ky.get()) * size.x.to_pt();
+        let height = transform.kx.get().hypot(transform.sy.get()) * size.y.to_pt();
+        let scale = (96.0 / 72.0) * f64::from(density);
+        Self {
+            width: pixel_dimension(width * scale),
+            height: pixel_dimension(height * scale),
+        }
     }
 }
 
@@ -51,11 +61,20 @@ fn image_dimension(value: Option<&str>) -> Option<u32> {
     value?.parse().ok().filter(|value| *value > 0)
 }
 
+fn candidate_dimension(value: u64) -> Option<u32> {
+    u32::try_from(value).ok().filter(|value| *value > 0)
+}
+
 fn scaled_dimension(value: Option<u32>, density: Option<f64>) -> Option<u32> {
     let value = f64::from(value?);
     let density = density.filter(|density| density.is_finite() && *density > 0.0)?;
     let scaled = (value * density).ceil();
     (scaled <= f64::from(u32::MAX)).then_some(scaled as u32)
+}
+
+fn pixel_dimension(value: f64) -> Option<u32> {
+    let value = value.ceil();
+    (value.is_finite() && value > 0.0 && value <= f64::from(u32::MAX)).then_some(value as u32)
 }
 
 /// Applies one image policy to HTML, CSS, data URLs, and Typst frames.
@@ -79,110 +98,72 @@ impl ImageProcessor {
         })
     }
 
-    pub fn process(&self, content: Bytes, limit: ImageSizeLimit) -> Bytes {
+    pub fn optimize(&self, content: Bytes, limit: ImageSizeLimit) -> Bytes {
         optimize_image(content, limit, &self.config)
     }
 
-    pub fn process_frames(&self, document: &mut HtmlDocument) -> Result<()> {
+    pub fn optimize_frames(&self, document: &mut HtmlDocument) -> Result<()> {
         if !self.config.enabled {
             return Ok(());
         }
-        process_frame_elements(document.root_mut(), self)
+        self.optimize_element_frames(document.root_mut())
     }
-}
 
-fn process_frame_elements(element: &mut HtmlElement, processor: &ImageProcessor) -> Result<()> {
-    for node in element.children.make_mut() {
-        match node {
-            HtmlNode::Element(element) => {
-                process_frame_elements(element, processor)?;
-            }
-            HtmlNode::Frame(frame) => {
-                process_frame(
-                    &mut frame.inner,
-                    Transform::identity(),
-                    processor.config.frame_density,
-                    processor,
-                )?;
-            }
-            HtmlNode::Tag(_) | HtmlNode::Text(..) => {}
-        }
-    }
-    Ok(())
-}
-
-fn process_frame(
-    frame: &mut Frame,
-    transform: Transform,
-    density: Option<u8>,
-    processor: &ImageProcessor,
-) -> Result<()> {
-    let mut error = None;
-    frame.retain(|item| {
-        if error.is_none() {
-            let result = match item {
-                FrameItem::Group(group) => process_frame(
-                    &mut group.frame,
-                    transform.pre_concat(group.transform),
-                    density,
-                    processor,
-                ),
-                FrameItem::Image(image, size, _) => {
-                    let limit = density
-                        .map(|density| frame_image_size_limit(*size, transform, density))
-                        .unwrap_or_default();
-                    process_frame_image(image, limit, processor)
+    fn optimize_element_frames(&self, element: &mut HtmlElement) -> Result<()> {
+        for node in element.children.make_mut() {
+            match node {
+                HtmlNode::Element(element) => self.optimize_element_frames(element)?,
+                HtmlNode::Frame(frame) => {
+                    self.optimize_frame(&mut frame.inner, Transform::identity())?;
                 }
-                FrameItem::Text(_)
-                | FrameItem::Shape(..)
-                | FrameItem::Link(..)
-                | FrameItem::Tag(_) => Ok(()),
-            };
-            if let Err(cause) = result {
-                error = Some(cause);
+                HtmlNode::Tag(_) | HtmlNode::Text(..) => {}
             }
         }
-        true
-    });
-    match error {
-        Some(error) => Err(error),
-        None => Ok(()),
-    }
-}
-
-fn process_frame_image(
-    image: &mut Image,
-    limit: ImageSizeLimit,
-    processor: &ImageProcessor,
-) -> Result<()> {
-    let web_image = WebImage::new(image);
-    let content = processor.process(web_image.data.clone(), limit);
-    if content == web_image.data {
-        return Ok(());
+        Ok(())
     }
 
-    let Some(format) = ExchangeFormat::detect(content.as_slice()) else {
-        return Ok(());
-    };
-    let raster = RasterImage::plain(content, format)
-        .map_err(|error| anyhow::anyhow!("optimized Typst frame image is invalid: {error}"))?;
-    *image = Image::new(raster, image.alt().map(EcoString::from), image.scaling());
-    Ok(())
-}
-
-fn frame_image_size_limit(size: Size, transform: Transform, density: u8) -> ImageSizeLimit {
-    let width = transform.sx.get().hypot(transform.ky.get()) * size.x.to_pt();
-    let height = transform.kx.get().hypot(transform.sy.get()) * size.y.to_pt();
-    let scale = (96.0 / 72.0) * f64::from(density);
-    ImageSizeLimit {
-        width: pixel_dimension(width * scale),
-        height: pixel_dimension(height * scale),
+    fn optimize_frame(&self, frame: &mut Frame, transform: Transform) -> Result<()> {
+        let mut result = Ok(());
+        frame.retain(|item| {
+            if result.is_ok() {
+                result = match item {
+                    FrameItem::Group(group) => {
+                        self.optimize_frame(&mut group.frame, transform.pre_concat(group.transform))
+                    }
+                    FrameItem::Image(image, size, _) => {
+                        let limit = self
+                            .config
+                            .frame_density
+                            .map(|density| ImageSizeLimit::from_frame(*size, transform, density))
+                            .unwrap_or_default();
+                        self.optimize_frame_image(image, limit)
+                    }
+                    FrameItem::Text(_)
+                    | FrameItem::Shape(..)
+                    | FrameItem::Link(..)
+                    | FrameItem::Tag(_) => Ok(()),
+                };
+            }
+            true
+        });
+        result
     }
-}
 
-fn pixel_dimension(value: f64) -> Option<u32> {
-    let value = value.ceil();
-    (value.is_finite() && value > 0.0 && value <= f64::from(u32::MAX)).then_some(value as u32)
+    fn optimize_frame_image(&self, image: &mut Image, limit: ImageSizeLimit) -> Result<()> {
+        let web_image = WebImage::new(image);
+        let content = self.optimize(web_image.data.clone(), limit);
+        if content == web_image.data {
+            return Ok(());
+        }
+
+        let Some(format) = ExchangeFormat::detect(content.as_slice()) else {
+            return Ok(());
+        };
+        let raster = RasterImage::plain(content, format)
+            .map_err(|error| anyhow::anyhow!("optimized Typst frame image is invalid: {error}"))?;
+        *image = Image::new(raster, image.alt().map(EcoString::from), image.scaling());
+        Ok(())
+    }
 }
 
 #[comemo::memoize]
@@ -203,16 +184,16 @@ fn optimize_image(content: Bytes, limit: ImageSizeLimit, config: &ImageConfig) -
 
 fn optimize_png(content: Bytes, limit: ImageSizeLimit) -> Bytes {
     if limit != ImageSizeLimit::default()
-        && let Some(resized) = try_resize_png(content.as_slice(), limit)
+        && let Some(resized) = resize_png(content.as_slice(), limit)
         && resized.len() < content.len()
     {
         return Bytes::new(resized);
     }
-    smaller_png(content.clone()).unwrap_or(content)
+    optimize_png_losslessly(content.clone()).unwrap_or(content)
 }
 
 fn optimize_jpeg(content: Bytes, limit: ImageSizeLimit, quality: u8) -> Bytes {
-    let Some(encoded) = try_encode_jpeg(content.as_slice(), limit, quality) else {
+    let Some(encoded) = encode_jpeg(content.as_slice(), limit, quality) else {
         return content;
     };
     if encoded.len() < content.len() {
@@ -222,13 +203,15 @@ fn optimize_jpeg(content: Bytes, limit: ImageSizeLimit, quality: u8) -> Bytes {
     }
 }
 
-fn try_resize_png(content: &[u8], limit: ImageSizeLimit) -> Option<Vec<u8>> {
+fn resize_png(content: &[u8], limit: ImageSizeLimit) -> Option<Vec<u8>> {
     let decoder = PngDecoder::with_limits(Cursor::new(content), image::Limits::default()).ok()?;
     if decoder.is_apng().ok()? {
         return None;
     }
     let (mut image, icc_profile) = decode_image(decoder)?;
-    resize_image(&mut image, limit)?;
+    if !resize_image(&mut image, limit) {
+        return None;
+    }
 
     let mut encoded = Vec::new();
     let mut encoder = PngEncoder::new(&mut encoded);
@@ -237,10 +220,14 @@ fn try_resize_png(content: &[u8], limit: ImageSizeLimit) -> Option<Vec<u8>> {
     }
     image.write_with_encoder(encoder).ok()?;
     let encoded = Bytes::new(encoded);
-    Some(smaller_png(encoded.clone()).unwrap_or(encoded).into_vec())
+    Some(
+        optimize_png_losslessly(encoded.clone())
+            .unwrap_or(encoded)
+            .into_vec(),
+    )
 }
 
-fn try_encode_jpeg(content: &[u8], limit: ImageSizeLimit, quality: u8) -> Option<Vec<u8>> {
+fn encode_jpeg(content: &[u8], limit: ImageSizeLimit, quality: u8) -> Option<Vec<u8>> {
     let decoder = JpegDecoder::new(Cursor::new(content)).ok()?;
     let (mut image, icc_profile) = decode_image(decoder)?;
     resize_image(&mut image, limit);
@@ -263,12 +250,12 @@ fn decode_image(mut decoder: impl ImageDecoder) -> Option<(DynamicImage, Option<
     Some((image, icc_profile))
 }
 
-fn resize_image(image: &mut DynamicImage, limit: ImageSizeLimit) -> Option<()> {
+fn resize_image(image: &mut DynamicImage, limit: ImageSizeLimit) -> bool {
     if let Some((width, height)) = target_dimensions(image.dimensions(), limit) {
         *image = image.resize_exact(width, height, FilterType::Lanczos3);
-        Some(())
+        true
     } else {
-        None
+        false
     }
 }
 
@@ -298,7 +285,7 @@ fn scaled_axis(axis: u32, target: u32, source: u32) -> u32 {
         .unwrap_or(u32::MAX)
 }
 
-fn smaller_png(content: Bytes) -> Option<Bytes> {
+fn optimize_png_losslessly(content: Bytes) -> Option<Bytes> {
     let mut options = oxipng::Options::from_preset(2);
     options.max_decompressed_size = Some(512 * 1024 * 1024);
     let optimized = oxipng::optimize_from_memory(content.as_slice(), &options).ok()?;
@@ -348,6 +335,13 @@ mod tests {
 
         let image = image::load_from_memory(processed.as_slice()).unwrap();
         assert_eq!(image.dimensions(), (20, 10));
+    }
+
+    #[test]
+    fn ignores_zero_candidate_dimensions() {
+        let limit = ImageSizeLimit::default().for_candidate(Some(0), Some(0), None);
+
+        assert_eq!(limit, ImageSizeLimit::default());
     }
 
     #[test]

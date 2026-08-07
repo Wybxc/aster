@@ -105,7 +105,7 @@ impl<'a> AssetProcessor<'a> {
         page: &mut PagePublication<'_>,
     ) -> Result<Bytes> {
         stylesheet.resolve_references(|source, content| {
-            let content = self.images.process(content, ImageSizeLimit::default());
+            let content = self.images.optimize(content, ImageSizeLimit::default());
             page.add_css_asset(source, content)
         })
     }
@@ -321,7 +321,7 @@ impl<'a> AssetProcessor<'a> {
             let Some(asset) = decode_data_url(url, self.inline_threshold)? else {
                 return Ok(None);
             };
-            let content = self.images.process(Bytes::new(asset.content), limit);
+            let content = self.images.optimize(Bytes::new(asset.content), limit);
             return page.add_data_asset(asset.extension, content).map(Some);
         }
 
@@ -337,7 +337,7 @@ impl<'a> AssetProcessor<'a> {
                     reference.source.get_with_slash()
                 )
             })?;
-        let content = self.images.process(content, limit);
+        let content = self.images.optimize(content, limit);
         let url = page.add_asset(&reference.source, content)?;
         Ok(Some(reference.with_url(url)))
     }
@@ -413,7 +413,7 @@ impl Processor for AssetProcessor<'_> {
         document: &mut HtmlDocument,
         _page: &mut PagePublication<'_>,
     ) -> Result<()> {
-        self.images.process_frames(document)
+        self.images.optimize_frames(document)
     }
 }
 
