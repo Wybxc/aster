@@ -1,0 +1,28 @@
+[project]
+name = "aster-journal"
+
+[site]
+title = "Papertrail"
+description = "A minimal, responsive, accessible journal built with Aster."
+url = "https://example.com/"
+language = "en"
+author = "Papertrail Editors"
+profile = "https://github.com/Wybxc/aster"
+
+[posts]
+per-page = 3
+per-index = 4
+
+[features]
+theme-toggle = true
+
+[[socials]]
+name = "GitHub"
+href = "https://github.com/Wybxc/aster"
+
+[[socials]]
+name = "Mail"
+href = "mailto:papertrail@example.com"
+
+[highlight]
+themes = { light = "InspiredGitHub", dark = "base16-eighties.dark" }

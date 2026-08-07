@@ -2,15 +2,11 @@
 name = "aster-blog"
 
 [site]
-title = "Astro Blog"
-description = "A clean, approachable blog starter."
+title = "Field Notes"
+description = "Essays about craft, tools, and thoughtful software."
 url = "https://example.com/"
 language = "en"
-author = "Your name here"
-
-[typst.fonts]
-paths = ["assets/fonts"]
-system = true
+author = "The Field Notes editors"
 
 [highlight]
 themes = { light = "InspiredGitHub", dark = "base16-eighties.dark" }

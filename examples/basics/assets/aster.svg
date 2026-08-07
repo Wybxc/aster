@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="154" height="52" viewBox="0 0 154 52" role="img" aria-labelledby="title">
+  <title id="title">Aster</title>
+  <rect x="2" y="2" width="48" height="48" rx="12" fill="#0f766e"/>
+  <path d="M26 11c1.2 8.9 5.1 12.8 14 14-8.9 1.2-12.8 5.1-14 14-1.2-8.9-5.1-12.8-14-14 8.9-1.2 12.8-5.1 14-14Z" fill="#f8fafc"/>
+  <circle cx="39" cy="14" r="3" fill="#f97360"/>
+  <text x="62" y="35" fill="#17201c" font-family="Inter, system-ui, sans-serif" font-size="28" font-weight="750">Aster</text>
+</svg>

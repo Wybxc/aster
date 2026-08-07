@@ -122,8 +122,8 @@
     #html.img(id: "background", src: "/assets/background.svg", alt: "")
     #html.main[
       #html.section(id: "hero")[
-        #html.a(href: "https://astro.build")[
-          #html.img(src: "/assets/astro.svg", width: 115, height: 48, alt: "Astro Homepage")
+        #html.a(href: "https://github.com/Wybxc/aster")[
+          #html.img(src: "/assets/aster.svg", width: 154, height: 52, alt: "Aster project")
         ]
         #html.h1[To get started, open the #html.code[pages] directory in your project.]
         #html.section(id: "links")[

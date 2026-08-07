@@ -6,7 +6,7 @@
 #let entry = get-entry("work", route-params.at("slug", default: ""))
 #if entry != none [
   #let data = entry.metadata()
-  #show: site.with(title: data.title + " | Jeanine White", description: data.description, active: "work")
+  #show: site.with(title: data.title + " | Mira Chen", description: data.description, active: "work")
   #html.main(class: "wrapper project-page")[
     #html.header(class: "project-header")[
       #html.a(href: "/work/")[#("<- Back to work")]

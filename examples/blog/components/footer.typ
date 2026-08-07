@@ -16,8 +16,8 @@
   #html.footer(class: "site-footer")[
     #html.p[Copyright #datetime.today().display("[year]") #settings.site.author. All rights reserved.]
     #html.p[
-      #link("https://twitter.com/astrodotbuild")[Twitter]
-      #link("https://github.com/withastro/astro")[GitHub]
+      #link("https://github.com/Wybxc/aster")[Source]
+      #link("mailto:hello@example.com")[Email]
     ]
   ]
 ]

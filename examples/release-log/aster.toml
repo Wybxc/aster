@@ -1,0 +1,10 @@
+[project]
+name = "aster-release-log"
+
+[site]
+title = "Relay Release Log"
+description = "Product updates for the fictional collaboration tool Relay."
+language = "en"
+
+[highlight]
+themes = { light = "InspiredGitHub", dark = "base16-eighties.dark" }

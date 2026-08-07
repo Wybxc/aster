@@ -62,8 +62,8 @@
       #nav-link("Blog", "/blog/", active == "blog")
       #nav-link("About", "/about/", active == "about")
       #html.span(class: "social")[
-        #html.a(href: "https://twitter.com/astrodotbuild", aria-label: "Astro on X")[X]
-        #html.a(href: "https://github.com/withastro/astro", aria-label: "Astro on GitHub")[GH]
+        #html.a(href: "https://github.com/Wybxc/aster", aria-label: "Aster source code")[Code]
+        #html.a(href: "mailto:hello@example.com", aria-label: "Email the editors")[Mail]
       ]
     ]
   ]

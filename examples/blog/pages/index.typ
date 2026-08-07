@@ -5,14 +5,14 @@
 #show: site.with(active: "home")
 
 #html.main[
-  #html.h1(class: "hero-title")[🧑‍🚀 Hello, Astronaut!]
+  #html.h1(class: "hero-title")[Notes for careful builders]
   #html.p[
-    Welcome to my corner of the internet. I write about learning, building,
-    and the small ideas that make software more enjoyable.
+    Field Notes is a small publication about learning, building, and the ideas
+    that make software easier to understand.
   ]
   #html.p[
-    This starter keeps the approachable shape of Astro's official blog example,
-    while its pages and content are authored in Typst.
+    Articles are written in Typst, collected automatically, and published as
+    regular semantic HTML.
   ]
 
   #html.h2[Recent posts]

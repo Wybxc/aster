@@ -3,15 +3,14 @@
 #show: site.with(title: "About me", description: "A little about the author.", active: "about")
 
 #html.main[
-  #html.img(class: "about-photo", src: "/assets/blog-placeholder-about.jpg", alt: "A colorful abstract portrait")
-  #html.h1[About me]
+  #html.img(class: "about-photo", src: "/assets/about-studio.jpg", alt: "A bright studio desk beside a city window")
+  #html.h1[About Field Notes]
 
-  Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
-  tempor incididunt ut labore et dolore magna aliqua. Vitae ultricies leo
-  integer malesuada nunc vel risus commodo viverra.
+  Field Notes is an independent example publication built to show how a small
+  editorial site can be organized around content collections.
 
-  Adipiscing enim eu turpis egestas pretium. Euismod elementum nisi quis
-  eleifend quam adipiscing. In hac habitasse platea dictumst vestibulum.
+  The writing favors practical observations, durable tools, and explanations
+  that remain useful after the latest release cycle has passed.
 
   = Skills
 

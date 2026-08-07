@@ -2,7 +2,7 @@
 #import "/components/project-grid.typ": project-grid
 #import "/templates/site.typ": site
 
-#show: site.with(title: "My Work | Jeanine White", description: "Jeanine White's recent projects.", active: "work")
+#show: site.with(title: "My Work | Mira Chen", description: "Selected fictional product projects.", active: "work")
 
 #html.main(class: "wrapper work-page")[
   #html.header(class: "page-hero")[

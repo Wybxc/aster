@@ -9,15 +9,15 @@
   #html.div(class: "wrapper")[
     #html.header(class: "hero")[
       #html.div(class: "hero-copy")[
-        #html.h1[Hello, my name is Jeanine White]
-        #html.p(class: "tagline")[I am a Creative Developer who is currently based in Portland, Oregon.]
+        #html.h1[Hello, my name is Mira Chen]
+        #html.p(class: "tagline")[I design calm, durable tools for teams that work with complex information.]
         #html.div(class: "roles")[
           #html.span(class: "pill")[Developer]
           #html.span(class: "pill")[Speaker]
           #html.span(class: "pill")[Writer]
         ]
       ]
-      #html.img(src: "/assets/portrait.jpg", alt: "Jeanine White smiling in a red plaid shirt and glasses")
+      #html.img(src: "/assets/portrait.jpg", alt: "A sunlit home office with a desk and computer")
     ]
     #html.section(class: "skills")[
       #html.div[
@@ -28,7 +28,7 @@
       #html.div[
         #html.span(class: "skill-icon", aria-hidden: true)[#("*")]
         #html.h2[Industry Leader]
-        #html.p[Sharing practical ideas through talks, writing, and collaboration.]
+        #html.p[Sharing practical ideas through writing, workshops, and collaboration.]
       ]
       #html.div[
         #html.span(class: "skill-icon", aria-hidden: true)[#("->")]

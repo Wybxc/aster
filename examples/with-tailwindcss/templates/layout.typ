@@ -1,4 +1,4 @@
-#let layout(body, title: "Astro + Tailwind CSS") = html.html(lang: "en")[
+#let layout(body, title: "Aster + Tailwind CSS") = html.html(lang: "en")[
   #html.head[
     #html.meta(charset: "utf-8")
     #html.meta(name: "viewport", content: "width=device-width")

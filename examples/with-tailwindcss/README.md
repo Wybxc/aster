@@ -8,5 +8,6 @@ passes the result through Aster's normal Lightning CSS pipeline. Install the
 cargo run -- dev -p examples/with-tailwindcss
 ```
 
-The original example design is distributed under `ASTRO-LICENSE`. Its npm-only
-confetti dependency is replaced with a small component-owned browser script.
+The example uses original Aster branding and a small component-owned browser
+script for the confetti interaction. An upstream notice from an earlier version
+is preserved in `UPSTREAM-LICENSE`.

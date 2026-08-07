@@ -58,7 +58,7 @@
         #link-item("About", "/about/", active, "about")
       ]
       #html.div(class: "nav-actions")[
-        #html.a(href: "https://github.com/withastro/astro")[GitHub]
+        #html.a(href: "https://github.com/Wybxc/aster")[Source]
         #html.button(id: "theme-button", aria-pressed: false, aria-label: "Use dark theme")[◐]
       ]
     ]
