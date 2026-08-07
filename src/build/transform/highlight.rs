@@ -5,7 +5,7 @@ use std::sync::{Arc, LazyLock};
 use anyhow::Result;
 use comemo::Tracked;
 use syntect::easy::ScopeRegionIterator;
-use syntect::highlighting::{Highlighter, Theme, ThemeSet};
+use syntect::highlighting::{Color, FontStyle, Highlighter, StyleModifier, Theme, ThemeSet};
 use syntect::parsing::{ParseState, Scope, ScopeStack, SyntaxSet};
 use typst::ecow::{EcoString, EcoVec, eco_format, eco_vec};
 use typst::foundations::Bytes;
@@ -14,7 +14,7 @@ use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 
 use crate::build::BuildWarning;
 use crate::build::files::{FileAccessError, ProjectFiles};
-use crate::build::output::{AssetPath, OutputPublication, PagePublication};
+use crate::build::output::PagePublication;
 use crate::foundation::config::HighlightConfig;
 
 use super::{Processor, WalkControl};
@@ -41,31 +41,75 @@ static THEMES: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
 /// Languages that Typst can parse with its own AST.
 const TYPST_LANGS: &[&str] = &["typ", "typst", "typc", "typm"];
 
-type HighlightToken = (Option<EcoString>, EcoString);
+type HighlightToken = (EcoVec<Scope>, EcoString);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ThemeStyle {
+    foreground: Option<Color>,
+    background: Option<Color>,
+    font_style: FontStyle,
+}
+
+impl From<StyleModifier> for ThemeStyle {
+    fn from(style: StyleModifier) -> Self {
+        Self {
+            foreground: style.foreground,
+            background: style.background,
+            font_style: style.font_style.unwrap_or_default(),
+        }
+    }
+}
+
+impl ThemeStyle {
+    fn is_plain(self) -> bool {
+        self.foreground.is_none() && self.background.is_none() && self.font_style.is_empty()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct HighlightStyle {
+    light: ThemeStyle,
+    dark: ThemeStyle,
+}
+
+impl HighlightStyle {
+    fn resolve(light: &Highlighter<'_>, dark: &Highlighter<'_>, scopes: &[Scope]) -> Self {
+        Self {
+            light: light.style_mod_for_stack(scopes).into(),
+            dark: dark.style_mod_for_stack(scopes).into(),
+        }
+    }
+
+    fn is_plain(self) -> bool {
+        self.light.is_plain() && self.dark.is_plain()
+    }
+}
 
 pub struct HighlightProcessor {
-    enabled: bool,
-    stylesheet: Option<AssetPath>,
+    themes: Option<(Theme, Theme)>,
+    styles: Vec<HighlightStyle>,
 }
 
 impl HighlightProcessor {
     pub fn new(
         config: &HighlightConfig,
         project_files: Tracked<ProjectFiles>,
-        publication: &mut OutputPublication,
     ) -> Result<(Self, Option<BuildWarning>)> {
         if !config.enabled {
             return Ok((
                 Self {
-                    enabled: false,
-                    stylesheet: None,
+                    themes: None,
+                    styles: Vec::new(),
                 },
                 None,
             ));
         }
-        let (stylesheet, warning) = match compute_highlight_css(config, project_files) {
-            Ok(Some(css)) => (Some(publication.add_highlight_stylesheet(css)?), None),
-            Ok(None) => (None, None),
+        let (themes, warning) = match load_themes(
+            config.themes.light.as_str(),
+            config.themes.dark.as_str(),
+            project_files,
+        ) {
+            Ok(themes) => (Some(themes), None),
             Err(error) => {
                 let warning =
                     BuildWarning::new(eco_format!("failed to resolve highlight CSS: {error:#}"));
@@ -74,8 +118,8 @@ impl HighlightProcessor {
         };
         Ok((
             Self {
-                enabled: true,
-                stylesheet,
+                themes,
+                styles: Vec::new(),
             },
             warning,
         ))
@@ -88,10 +132,10 @@ impl Processor for HighlightProcessor {
         element: &mut HtmlElement,
         _page: &mut PagePublication<'_>,
     ) -> Result<WalkControl> {
-        if !self.enabled {
+        let Some((light, dark)) = &self.themes else {
             return Ok(WalkControl::Continue);
-        }
-        Ok(process_element(element))
+        };
+        Ok(process_element(element, light, dark, &mut self.styles))
     }
 
     fn end_document(
@@ -99,15 +143,21 @@ impl Processor for HighlightProcessor {
         document: &mut HtmlDocument,
         page: &mut PagePublication<'_>,
     ) -> Result<()> {
-        if let Some(stylesheet) = &self.stylesheet {
-            let url = page.reference(stylesheet)?;
+        if !self.styles.is_empty() {
+            let styles = std::mem::take(&mut self.styles);
+            let url = page.add_highlight_stylesheet(highlight_css(&styles))?;
             attach_stylesheet(document, url);
         }
         Ok(())
     }
 }
 
-fn process_element(element: &mut HtmlElement) -> WalkControl {
+fn process_element(
+    element: &mut HtmlElement,
+    light: &Theme,
+    dark: &Theme,
+    styles: &mut Vec<HighlightStyle>,
+) -> WalkControl {
     if !element.is_tag(typst_html::tag::code) {
         return WalkControl::Continue;
     }
@@ -121,11 +171,22 @@ fn process_element(element: &mut HtmlElement) -> WalkControl {
     }
 
     let tokens = highlight_tokens(&raw, &lang);
+    let light = Highlighter::new(light);
+    let dark = Highlighter::new(dark);
     let mut children = EcoVec::new();
-    for (class, text) in tokens {
+    for (scopes, text) in tokens {
         let mut span = HtmlElement::new(typst_html::tag::span)
             .with_children(eco_vec![HtmlNode::Text(text, Span::detached())]);
-        if let Some(class) = class {
+        let style = HighlightStyle::resolve(&light, &dark, &scopes);
+        if !style.is_plain() {
+            let index = styles
+                .iter()
+                .position(|candidate| *candidate == style)
+                .unwrap_or_else(|| {
+                    styles.push(style);
+                    styles.len() - 1
+                });
+            let class = eco_format!("hl-s{index}");
             span = span.with_attr(typst_html::attr::class, class);
         }
         children.push(HtmlNode::Element(span));
@@ -141,25 +202,6 @@ fn attach_stylesheet(document: &mut HtmlDocument, url: EcoString) {
     append_to_head(document, link);
 }
 
-/// Derive a semantic CSS variable suffix from a slice of scopes.
-fn scope_css_name(scopes: &[Scope]) -> Option<EcoString> {
-    for scope in scopes.iter().rev() {
-        let scope = eco_format!("{scope}");
-        let mut parts = scope.split('.');
-        let (Some(kind), Some(name)) = (parts.next(), parts.next()) else {
-            continue;
-        };
-        if kind != "source" && kind != "meta" {
-            return Some(eco_format!("{kind}-{name}"));
-        }
-    }
-    None
-}
-
-fn scope_class(scopes: &[Scope]) -> Option<EcoString> {
-    scope_css_name(scopes).map(|name| eco_format!("hl-{name}"))
-}
-
 #[comemo::memoize]
 fn highlight_tokens(code: &str, lang: &str) -> EcoVec<HighlightToken> {
     if TYPST_LANGS.contains(&lang) {
@@ -169,11 +211,7 @@ fn highlight_tokens(code: &str, lang: &str) -> EcoVec<HighlightToken> {
     }
 }
 
-/// Highlight code using syntect (all non-Typst languages).
-///
-/// This is **theme-independent** — it only derives CSS class names from
-/// the scope stack produced by the syntax parser.  All colour / font
-/// decisions live in the generated CSS.
+/// Parse non-Typst code into its complete TextMate scope stacks.
 fn do_syntect_highlight(code: &str, lang: &str) -> EcoVec<HighlightToken> {
     let syntax = SS
         .find_syntax_by_token(lang)
@@ -195,18 +233,19 @@ fn do_syntect_highlight(code: &str, lang: &str) -> EcoVec<HighlightToken> {
                 continue;
             }
 
-            out.push((scope_class(scope_stack.as_slice()), EcoString::from(text)));
+            out.push((
+                scope_stack.as_slice().iter().copied().collect(),
+                text.into(),
+            ));
         }
 
-        out.push((None, "\n".into()));
+        out.push((EcoVec::new(), "\n".into()));
     }
 
     out
 }
 
-/// Highlight code using Typst's native AST (languages: typ, typst, typc, typm).
-///
-/// Theme-independent — scope-based class names only, no colour resolution.
+/// Parse Typst code into TextMate-compatible scope stacks from its native AST.
 fn do_typst_highlight(code: &str, lang: &str) -> EcoVec<HighlightToken> {
     let root: SyntaxNode = match lang {
         "typc" => parse_code(code),
@@ -225,13 +264,13 @@ fn do_typst_highlight(code: &str, lang: &str) -> EcoVec<HighlightToken> {
     );
 
     let mut out = EcoVec::new();
-    for (class, text) in native_tokens {
+    for (scopes, text) in native_tokens {
         for (i, segment) in text.split('\n').enumerate() {
             if i > 0 {
-                out.push((None, "\n".into()));
+                out.push((EcoVec::new(), "\n".into()));
             }
             if !segment.is_empty() {
-                out.push((class.clone(), EcoString::from(segment)));
+                out.push((scopes.clone(), segment.into()));
             }
         }
     }
@@ -248,7 +287,7 @@ fn walk_typst_node<'a>(
     if node.children().len() == 0 {
         let text = &code[node.range()];
         if !text.is_empty() {
-            tokens.push((scope_class(scopes.as_slice()), EcoString::from(text)));
+            tokens.push((scopes.clone(), text.into()));
         }
         return;
     }
@@ -265,10 +304,6 @@ fn walk_typst_node<'a>(
         std::mem::swap(&mut child_scopes, scopes);
     }
 }
-
-// ---------------------------------------------------------------------------
-// Theme resolution for CSS variable generation
-// ---------------------------------------------------------------------------
 
 /// Load a syntect theme by built-in name or project-root-relative virtual path.
 fn load_theme(
@@ -298,115 +333,135 @@ fn load_theme(
     Ok(theme)
 }
 
-/// Resolve highlight theme colours and return the CSS content.
-///
-/// Returns `None` when no scopes need highlighting. Asset identity and naming
-/// are owned by the output publication module.
-fn compute_highlight_css(
-    config: &HighlightConfig,
-    project_files: Tracked<ProjectFiles>,
-) -> Result<Option<Bytes>> {
-    compute_highlight_css_impl(
-        config.themes.light.as_str(),
-        config.themes.dark.as_str(),
-        project_files,
-    )
-    .map_err(anyhow::Error::msg)
-}
-
 #[comemo::memoize]
-fn compute_highlight_css_impl(
+fn load_themes(
     light_theme: &str,
     dark_theme: &str,
     project_files: Tracked<ProjectFiles>,
-) -> std::result::Result<Option<Bytes>, ThemeError> {
+) -> std::result::Result<(Theme, Theme), ThemeError> {
     let light = load_theme(light_theme, project_files)?;
     let dark = load_theme(dark_theme, project_files)?;
-    let light_h = Highlighter::new(&light);
-    let dark_h = Highlighter::new(&dark);
+    Ok((light, dark))
+}
 
-    let default_dark = crate::build::transform::dom::color_to_hex(
-        dark.settings
-            .foreground
-            .unwrap_or(syntect::highlighting::Color::BLACK),
-    );
-
-    // Collect unique scope names from theme selectors, resolve colours + font style.
-    let mut vars: Vec<(EcoString, EcoString, u8, EcoString, u8)> = Vec::new();
-    for theme in [&light, &dark] {
-        for scope_entry in &theme.scopes {
-            for single in &scope_entry.scope.selectors {
-                let Some(scope) = single.extract_single_scope() else {
-                    continue;
-                };
-
-                let Some(name) = scope_css_name(std::slice::from_ref(&scope)) else {
-                    continue;
-                };
-                // Deduplicate by scope name.
-                if vars.iter().any(|(n, _, _, _, _)| *n == name) {
-                    continue;
-                }
-                let light_st = light_h.style_for_stack(std::slice::from_ref(&scope));
-                let dark_st = dark_h.style_for_stack(std::slice::from_ref(&scope));
-                vars.push((
-                    name,
-                    crate::build::transform::dom::color_to_hex(light_st.foreground),
-                    light_st.font_style.bits(),
-                    crate::build::transform::dom::color_to_hex(dark_st.foreground),
-                    dark_st.font_style.bits(),
-                ));
-            }
-        }
-    }
-
-    if vars.is_empty() {
-        return Ok(None);
-    }
-
-    fn font_style(bits: u8) -> &'static str {
-        match bits & 3 {
-            1 => ";font-weight:bold",
-            2 => ";font-style:italic",
-            3 => ";font-weight:bold;font-style:italic",
-            _ => "",
-        }
-    }
-
-    // Generate CSS, one class per scope, with prefers-color-scheme + data-theme cascade:
-    //   1. default = light
-    //   2. @media(prefers-color-scheme:dark) — OS-level dark preference
-    //   3. [data-theme="dark"] — explicit override
-    //   4. [data-theme="light"] — explicit override (wins over OS dark)
+fn highlight_css(styles: &[HighlightStyle]) -> Bytes {
     let mut css = String::new();
-    for (name, lc, lb, _, _) in &vars {
-        let _ = writeln!(css, ".hl-{name}{{color:{lc}{}}}", font_style(*lb));
-    }
-    for (name, _, _, dc, db) in &vars {
-        if *dc != default_dark || *db != 0 {
-            let _ = writeln!(
-                css,
-                "@media(prefers-color-scheme:dark){{.hl-{name}{{color:{dc}{}}}}}",
-                font_style(*db),
-            );
-        }
-    }
-    for (name, lc, lb, _, _) in &vars {
-        let _ = writeln!(
-            css,
-            "[data-theme=\"light\"] .hl-{name}{{color:{lc}{}}}",
-            font_style(*lb)
-        );
-    }
-    for (name, _, _, dc, db) in &vars {
-        let _ = writeln!(
-            css,
-            "[data-theme=\"dark\"] .hl-{name}{{color:{dc}{}}}",
-            font_style(*db),
-        );
+    for (index, style) in styles.iter().copied().enumerate() {
+        write_theme_rule(&mut css, "", index, style.light, style);
     }
 
-    Ok(Some(Bytes::from_string(css)))
+    css.push_str("@media(prefers-color-scheme:dark){");
+    for (index, style) in styles.iter().copied().enumerate() {
+        if style.light != style.dark {
+            write_theme_rule(&mut css, "", index, style.dark, style);
+        }
+    }
+    css.push_str("}\n");
+
+    for (index, style) in styles.iter().copied().enumerate() {
+        if style.light != style.dark {
+            write_theme_rule(
+                &mut css,
+                "[data-theme=\"light\"] ",
+                index,
+                style.light,
+                style,
+            );
+            write_theme_rule(&mut css, "[data-theme=\"dark\"] ", index, style.dark, style);
+        }
+    }
+
+    Bytes::from_string(css)
+}
+
+fn write_theme_rule(
+    css: &mut String,
+    selector_prefix: &str,
+    index: usize,
+    current: ThemeStyle,
+    pair: HighlightStyle,
+) {
+    let _ = write!(css, "{selector_prefix}.hl-s{index}{{");
+    let mut has_property = false;
+
+    if pair.light.foreground.is_some() || pair.dark.foreground.is_some() {
+        write_property_separator(css, &mut has_property);
+        if let Some(color) = current.foreground {
+            let _ = write!(
+                css,
+                "color:{}",
+                crate::build::transform::dom::color_to_hex(color)
+            );
+        } else {
+            css.push_str("color:inherit");
+        }
+    }
+    if pair.light.background.is_some() || pair.dark.background.is_some() {
+        write_property_separator(css, &mut has_property);
+        if let Some(color) = current.background {
+            let _ = write!(
+                css,
+                "background-color:{}",
+                crate::build::transform::dom::color_to_hex(color)
+            );
+        } else {
+            css.push_str("background-color:transparent");
+        }
+    }
+    write_font_style(
+        css,
+        &mut has_property,
+        "font-weight",
+        current.font_style.contains(FontStyle::BOLD),
+        pair.light.font_style.contains(FontStyle::BOLD)
+            || pair.dark.font_style.contains(FontStyle::BOLD),
+        "bold",
+        "normal",
+    );
+    write_font_style(
+        css,
+        &mut has_property,
+        "font-style",
+        current.font_style.contains(FontStyle::ITALIC),
+        pair.light.font_style.contains(FontStyle::ITALIC)
+            || pair.dark.font_style.contains(FontStyle::ITALIC),
+        "italic",
+        "normal",
+    );
+    write_font_style(
+        css,
+        &mut has_property,
+        "text-decoration",
+        current.font_style.contains(FontStyle::UNDERLINE),
+        pair.light.font_style.contains(FontStyle::UNDERLINE)
+            || pair.dark.font_style.contains(FontStyle::UNDERLINE),
+        "underline",
+        "none",
+    );
+    css.push_str("}\n");
+}
+
+fn write_font_style(
+    css: &mut String,
+    has_property: &mut bool,
+    property: &str,
+    enabled: bool,
+    used: bool,
+    value: &str,
+    reset: &str,
+) {
+    if used {
+        write_property_separator(css, has_property);
+        let _ = write!(css, "{property}:{}", if enabled { value } else { reset });
+    }
+}
+
+fn write_property_separator(css: &mut String, has_property: &mut bool) {
+    if *has_property {
+        css.push(';');
+    } else {
+        *has_property = true;
+    }
 }
 
 #[cfg(test)]
@@ -418,17 +473,37 @@ mod tests {
     }
 
     #[test]
-    fn scopes_without_semantic_style_have_no_class() {
-        assert_eq!(scope_css_name(&[]), None);
+    fn theme_css_resets_styles_between_modes() {
+        let style = HighlightStyle {
+            light: ThemeStyle {
+                foreground: Some(Color {
+                    r: 0x11,
+                    g: 0x22,
+                    b: 0x33,
+                    a: 0xff,
+                }),
+                background: None,
+                font_style: FontStyle::BOLD | FontStyle::ITALIC | FontStyle::UNDERLINE,
+            },
+            dark: ThemeStyle {
+                foreground: None,
+                background: Some(Color {
+                    r: 0x44,
+                    g: 0x55,
+                    b: 0x66,
+                    a: 0xff,
+                }),
+                font_style: FontStyle::empty(),
+            },
+        };
 
-        let source = Scope::new("source.rust").unwrap();
-        assert_eq!(scope_css_name(std::slice::from_ref(&source)), None);
-
-        let keyword = Scope::new("keyword.control").unwrap();
-        assert_eq!(
-            scope_css_name(std::slice::from_ref(&keyword)).as_deref(),
-            Some("keyword-control")
-        );
+        let css = String::from_utf8(highlight_css(&[style]).to_vec()).unwrap();
+        assert!(css.contains(
+            ".hl-s0{color:#112233;background-color:transparent;font-weight:bold;font-style:italic;text-decoration:underline}"
+        ));
+        assert!(css.contains(
+            "[data-theme=\"dark\"] .hl-s0{color:inherit;background-color:#445566;font-weight:normal;font-style:normal;text-decoration:none}"
+        ));
     }
 
     #[test]

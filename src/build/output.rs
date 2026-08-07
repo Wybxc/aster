@@ -226,6 +226,12 @@ impl PagePublication<'_> {
         &self.publication.project_root
     }
 
+    /// Register the styles used by this page's highlighted code.
+    pub fn add_highlight_stylesheet(&mut self, content: Bytes) -> Result<EcoString> {
+        let asset = self.publication.add_highlight_stylesheet(content)?;
+        self.reference(&asset)
+    }
+
     /// Register a bundled stylesheet under the entry file's name.
     pub fn add_bundled_stylesheet(
         &mut self,

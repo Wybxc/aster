@@ -69,11 +69,8 @@ impl BuildSession {
                 &config.assets,
                 &config.css,
             )?;
-            let (mut highlight, highlight_warning) = transform::HighlightProcessor::new(
-                &config.highlight,
-                session.project_files(),
-                &mut publication,
-            )?;
+            let (mut highlight, highlight_warning) =
+                transform::HighlightProcessor::new(&config.highlight, session.project_files())?;
             warnings.extend(highlight_warning);
 
             let protocol =

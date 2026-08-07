@@ -4,6 +4,20 @@ use aster::BuildSession;
 
 use crate::common::{generated_asset_containing, project};
 
+fn highlight_stylesheet(root: &Path) -> String {
+    let path = std::fs::read_dir(root.join("dist/_assets"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .find(|path| {
+            path.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("highlight.")
+        })
+        .unwrap();
+    std::fs::read_to_string(path).unwrap()
+}
+
 fn write_theme(path: &Path, color: &str) {
     let theme = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -48,7 +62,7 @@ fn custom_theme_changes_replace_the_highlight_stylesheet() {
         concat!(
             "#html.html({\n",
             "  html.head[]\n",
-            "  html.body[Page]\n",
+            "  html.body[#raw(\"if true {}\", block: true, lang: \"rust\")]\n",
             "})\n",
         ),
     )
@@ -79,7 +93,11 @@ fn creates_head_before_body_for_highlight_stylesheet() {
     std::fs::write(root.join("aster.toml"), "").unwrap();
     std::fs::write(
         root.join("pages/index.typ"),
-        concat!("#html.html({\n", "  html.body[Page]\n", "})\n"),
+        concat!(
+            "#html.html({\n",
+            "  html.body[#raw(\"pub fn main() {}\", block: true, lang: \"rust\")]\n",
+            "})\n"
+        ),
     )
     .unwrap();
 
@@ -93,6 +111,32 @@ fn creates_head_before_body_for_highlight_stylesheet() {
     assert!(head < body);
     assert!(html[head..body].contains("rel=\"stylesheet\""));
     assert!(html[head..body].contains("href=\"_assets/highlight."));
+}
+
+#[test]
+fn applies_inherited_theme_styles_to_rust_modifiers() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join("pages")).unwrap();
+    std::fs::write(root.join("aster.toml"), "").unwrap();
+    std::fs::write(
+        root.join("pages/index.typ"),
+        concat!(
+            "#html.html({\n",
+            "  html.head[]\n",
+            "  html.body[#raw(\"pub fn main() {}\", block: true, lang: \"rust\")]\n",
+            "})\n",
+        ),
+    )
+    .unwrap();
+
+    BuildSession::new(project(root)).build().unwrap();
+
+    let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
+    assert!(html.contains("<span class=\"hl-s0\">pub</span>"));
+    let css = highlight_stylesheet(root);
+    assert!(css.contains(".hl-s0{color:#a71d5d;font-weight:bold}"));
+    assert!(css.contains("[data-theme=\"dark\"] .hl-s0{color:#cc99cc;font-weight:normal}"));
 }
 
 #[test]
@@ -153,7 +197,7 @@ fn allows_symlinked_theme_outside_project_root() {
         concat!(
             "#html.html({\n",
             "  html.head[]\n",
-            "  html.body[Page]\n",
+            "  html.body[#raw(\"if true {}\", block: true, lang: \"rust\")]\n",
             "})\n",
         ),
     )
