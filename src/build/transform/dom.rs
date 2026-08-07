@@ -1,12 +1,7 @@
-//! DOM helpers — HTML element attribute access and colour formatting.
+//! DOM helpers for HTML element access and document mutation.
 
-use typst::ecow::{EcoString, eco_format};
+use typst::ecow::EcoString;
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
-
-/// Format a syntect [`Color`](syntect::highlighting::Color) as `#rrggbb`.
-pub fn color_to_hex(c: syntect::highlighting::Color) -> EcoString {
-    eco_format!("#{:02x}{:02x}{:02x}", c.r, c.g, c.b)
-}
 
 /// Extension methods on [`HtmlElement`] for common attribute and text access.
 pub trait HtmlElementExt {

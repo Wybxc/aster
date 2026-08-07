@@ -1,15 +1,15 @@
 use std::fmt::Write;
 use std::path::Path;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 
 use anyhow::Result;
 use comemo::Tracked;
-use syntect::easy::ScopeRegionIterator;
-use syntect::highlighting::{Color, FontStyle, Highlighter, StyleModifier, Theme, ThemeSet};
-use syntect::parsing::{ParseState, Scope, ScopeStack, SyntaxSet};
+use lumis::highlight::{HighlightError, highlight_iter};
+use lumis::languages::Language;
+use lumis::themes::{Style, TextDecoration, Theme, UnderlineStyle};
 use typst::ecow::{EcoString, EcoVec, eco_format, eco_vec};
 use typst::foundations::Bytes;
-use typst::syntax::{LinkedNode, Span, SyntaxNode, VirtualPath, parse_code, parse_math};
+use typst::syntax::{Span, VirtualPath};
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 
 use crate::build::BuildWarning;
@@ -17,8 +17,8 @@ use crate::build::files::{FileAccessError, ProjectFiles};
 use crate::build::output::PagePublication;
 use crate::foundation::config::HighlightConfig;
 
+use super::dom::{HtmlElementExt, append_to_head};
 use super::{Processor, WalkControl};
-use crate::build::transform::dom::{HtmlElementExt, append_to_head};
 
 /// A cheaply cloneable theme-loading error at the memoization seam.
 #[derive(Debug, Clone, thiserror::Error)]
@@ -35,52 +35,65 @@ enum ThemeError {
     File(#[from] FileAccessError),
 }
 
-static SS: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
-static THEMES: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
+type HighlightToken = (Language, &'static str, EcoString);
 
-/// Languages that Typst can parse with its own AST.
-const TYPST_LANGS: &[&str] = &["typ", "typst", "typc", "typm"];
-
-type HighlightToken = (EcoVec<Scope>, EcoString);
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 struct ThemeStyle {
-    foreground: Option<Color>,
-    background: Option<Color>,
-    font_style: FontStyle,
+    foreground: Option<EcoString>,
+    background: Option<EcoString>,
+    bold: bool,
+    italic: bool,
+    decoration: TextDecoration,
 }
 
-impl From<StyleModifier> for ThemeStyle {
-    fn from(style: StyleModifier) -> Self {
+impl From<Option<&Style>> for ThemeStyle {
+    fn from(style: Option<&Style>) -> Self {
+        let Some(style) = style else {
+            return Self::default();
+        };
         Self {
-            foreground: style.foreground,
-            background: style.background,
-            font_style: style.font_style.unwrap_or_default(),
+            foreground: style.fg.as_deref().map(Into::into),
+            background: style.bg.as_deref().map(Into::into),
+            bold: style.bold,
+            italic: style.italic,
+            decoration: style.text_decoration,
         }
     }
 }
 
 impl ThemeStyle {
-    fn is_plain(self) -> bool {
-        self.foreground.is_none() && self.background.is_none() && self.font_style.is_empty()
+    fn resolve(theme: &Theme, language: Language, scope: &str) -> Self {
+        if scope.is_empty() {
+            return Self::default();
+        }
+        let specialized = eco_format!("{scope}.{}", language.id_name());
+        theme.get_style(&specialized).into()
+    }
+
+    fn is_plain(&self) -> bool {
+        self.foreground.is_none()
+            && self.background.is_none()
+            && !self.bold
+            && !self.italic
+            && self.decoration == TextDecoration::default()
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct HighlightStyle {
     light: ThemeStyle,
     dark: ThemeStyle,
 }
 
 impl HighlightStyle {
-    fn resolve(light: &Highlighter<'_>, dark: &Highlighter<'_>, scopes: &[Scope]) -> Self {
+    fn resolve(light: &Theme, dark: &Theme, language: Language, scope: &str) -> Self {
         Self {
-            light: light.style_mod_for_stack(scopes).into(),
-            dark: dark.style_mod_for_stack(scopes).into(),
+            light: ThemeStyle::resolve(light, language, scope),
+            dark: ThemeStyle::resolve(dark, language, scope),
         }
     }
 
-    fn is_plain(self) -> bool {
+    fn is_plain(&self) -> bool {
         self.light.is_plain() && self.dark.is_plain()
     }
 }
@@ -104,6 +117,7 @@ impl HighlightProcessor {
                 None,
             ));
         }
+
         let (themes, warning) = match load_themes(
             config.themes.light.as_str(),
             config.themes.dark.as_str(),
@@ -135,7 +149,7 @@ impl Processor for HighlightProcessor {
         let Some((light, dark)) = &self.themes else {
             return Ok(WalkControl::Continue);
         };
-        Ok(process_element(element, light, dark, &mut self.styles))
+        process_element(element, light, dark, &mut self.styles)
     }
 
     fn end_document(
@@ -157,27 +171,24 @@ fn process_element(
     light: &Theme,
     dark: &Theme,
     styles: &mut Vec<HighlightStyle>,
-) -> WalkControl {
+) -> Result<WalkControl> {
     if !element.is_tag(typst_html::tag::code) {
-        return WalkControl::Continue;
+        return Ok(WalkControl::Continue);
     }
 
-    let Some(lang) = element.get_attr("data-lang") else {
-        return WalkControl::Continue;
+    let Some(language) = element.get_attr("data-lang") else {
+        return Ok(WalkControl::Continue);
     };
-    let raw = element.inner_text();
-    if raw.is_empty() {
-        return WalkControl::SkipChildren;
+    let source = element.inner_text();
+    if source.is_empty() {
+        return Ok(WalkControl::SkipChildren);
     }
 
-    let tokens = highlight_tokens(&raw, &lang);
-    let light = Highlighter::new(light);
-    let dark = Highlighter::new(dark);
     let mut children = EcoVec::new();
-    for (scopes, text) in tokens {
+    for (language, scope, text) in highlight_tokens(&source, &language)? {
         let mut span = HtmlElement::new(typst_html::tag::span)
             .with_children(eco_vec![HtmlNode::Text(text, Span::detached())]);
-        let style = HighlightStyle::resolve(&light, &dark, &scopes);
+        let style = HighlightStyle::resolve(light, dark, language, scope);
         if !style.is_plain() {
             let index = styles
                 .iter()
@@ -186,13 +197,12 @@ fn process_element(
                     styles.push(style);
                     styles.len() - 1
                 });
-            let class = eco_format!("hl-s{index}");
-            span = span.with_attr(typst_html::attr::class, class);
+            span = span.with_attr(typst_html::attr::class, eco_format!("hl-s{index}"));
         }
         children.push(HtmlNode::Element(span));
     }
     element.children = children;
-    WalkControl::SkipChildren
+    Ok(WalkControl::SkipChildren)
 }
 
 fn attach_stylesheet(document: &mut HtmlDocument, url: EcoString) {
@@ -203,115 +213,43 @@ fn attach_stylesheet(document: &mut HtmlDocument, url: EcoString) {
 }
 
 #[comemo::memoize]
-fn highlight_tokens(code: &str, lang: &str) -> EcoVec<HighlightToken> {
-    if TYPST_LANGS.contains(&lang) {
-        do_typst_highlight(code, lang)
-    } else {
-        do_syntect_highlight(code, lang)
-    }
-}
-
-/// Parse non-Typst code into its complete TextMate scope stacks.
-fn do_syntect_highlight(code: &str, lang: &str) -> EcoVec<HighlightToken> {
-    let syntax = SS
-        .find_syntax_by_token(lang)
-        .or_else(|| SS.find_syntax_by_extension(lang))
-        .unwrap_or_else(|| SS.find_syntax_plain_text());
-
-    let mut parse_state = ParseState::new(syntax);
-    let mut scope_stack = ScopeStack::new();
-    let mut out = EcoVec::new();
-
-    for line in code.lines() {
-        let Ok(ops) = parse_state.parse_line(line, &SS) else {
-            continue;
-        };
-
-        for (text, op) in ScopeRegionIterator::new(&ops, line) {
-            let _ = scope_stack.apply(op);
-            if text.is_empty() {
-                continue;
-            }
-
-            out.push((
-                scope_stack.as_slice().iter().copied().collect(),
-                text.into(),
-            ));
-        }
-
-        out.push((EcoVec::new(), "\n".into()));
-    }
-
-    out
-}
-
-/// Parse Typst code into TextMate-compatible scope stacks from its native AST.
-fn do_typst_highlight(code: &str, lang: &str) -> EcoVec<HighlightToken> {
-    let root: SyntaxNode = match lang {
-        "typc" => parse_code(code),
-        "typm" => parse_math(code),
-        _ => typst::syntax::parse(code),
+fn highlight_tokens(
+    source: &str,
+    language: &str,
+) -> std::result::Result<EcoVec<HighlightToken>, HighlightError> {
+    let (prefix, suffix, language) = match language {
+        "typc" => ("#", "", Language::Typst),
+        "typm" => ("$", "$", Language::Typst),
+        _ => ("", "", Language::guess(Some(language), source)),
     };
-
-    let mut native_tokens = EcoVec::new();
-    let mut scopes = EcoVec::new();
-
-    walk_typst_node(
-        code,
-        &LinkedNode::new(&root),
-        &mut scopes,
-        &mut native_tokens,
-    );
-
-    let mut out = EcoVec::new();
-    for (scopes, text) in native_tokens {
-        for (i, segment) in text.split('\n').enumerate() {
-            if i > 0 {
-                out.push((EcoVec::new(), "\n".into()));
+    let wrapped =
+        (!prefix.is_empty() || !suffix.is_empty()).then(|| eco_format!("{prefix}{source}{suffix}"));
+    let highlighted = wrapped.as_deref().unwrap_or(source);
+    let source_range = prefix.len()..highlighted.len() - suffix.len();
+    let mut tokens = EcoVec::new();
+    highlight_iter(
+        highlighted,
+        language,
+        None,
+        |_text, language, range, scope, _style| {
+            let start = range.start.max(source_range.start);
+            let end = range.end.min(source_range.end);
+            if start < end {
+                tokens.push((language, scope, highlighted[start..end].into()));
             }
-            if !segment.is_empty() {
-                out.push((scopes.clone(), segment.into()));
-            }
-        }
-    }
-    out
+            Ok::<(), std::io::Error>(())
+        },
+    )?;
+    Ok(tokens)
 }
 
-/// Walk Typst's AST collecting scope-and-text pairs (theme‑independent).
-fn walk_typst_node<'a>(
-    code: &str,
-    node: &LinkedNode<'a>,
-    scopes: &mut EcoVec<Scope>,
-    tokens: &mut EcoVec<HighlightToken>,
-) {
-    if node.children().len() == 0 {
-        let text = &code[node.range()];
-        if !text.is_empty() {
-            tokens.push((scopes.clone(), text.into()));
-        }
-        return;
-    }
-
-    for child in node.children() {
-        let mut child_scopes = scopes.clone();
-        if let Some(tag) = typst::syntax::highlight(&child)
-            && let Ok(s) = Scope::new(tag.tm_scope())
-        {
-            child_scopes.push(s);
-        }
-        std::mem::swap(&mut child_scopes, scopes);
-        walk_typst_node(code, &child, scopes, tokens);
-        std::mem::swap(&mut child_scopes, scopes);
-    }
-}
-
-/// Load a syntect theme by built-in name or project-root-relative virtual path.
+/// Load a Lumis theme by built-in name or project-root-relative JSON path.
 fn load_theme(
     name_or_path: &str,
     project_files: Tracked<ProjectFiles>,
 ) -> std::result::Result<Theme, ThemeError> {
-    if let Some(theme) = THEMES.themes.get(name_or_path) {
-        return Ok(theme.clone());
+    if let Ok(theme) = lumis::themes::get(name_or_path) {
+        return Ok(theme);
     }
 
     if Path::new(name_or_path).is_absolute() {
@@ -325,12 +263,14 @@ fn load_theme(
         message: eco_format!("{error}"),
     })?;
     let bytes = project_files.read(&path)?;
-    let mut reader = std::io::Cursor::new(bytes);
-    let theme = ThemeSet::load_from_reader(&mut reader).map_err(|error| ThemeError::Load {
+    let source = std::str::from_utf8(bytes.as_slice()).map_err(|error| ThemeError::Load {
         path: path.get_with_slash().into(),
         inner: Arc::new(anyhow::Error::new(error)),
     })?;
-    Ok(theme)
+    lumis::themes::from_json(source).map_err(|error| ThemeError::Load {
+        path: path.get_with_slash().into(),
+        inner: Arc::new(anyhow::Error::new(error)),
+    })
 }
 
 #[comemo::memoize]
@@ -346,28 +286,36 @@ fn load_themes(
 
 fn highlight_css(styles: &[HighlightStyle]) -> Bytes {
     let mut css = String::new();
-    for (index, style) in styles.iter().copied().enumerate() {
-        write_theme_rule(&mut css, "", index, style.light, style);
+    for (index, style) in styles.iter().enumerate() {
+        write_theme_rule(&mut css, "", index, &style.light, style);
     }
 
-    css.push_str("@media(prefers-color-scheme:dark){");
-    for (index, style) in styles.iter().copied().enumerate() {
-        if style.light != style.dark {
-            write_theme_rule(&mut css, "", index, style.dark, style);
+    if styles.iter().any(|style| style.light != style.dark) {
+        css.push_str("@media(prefers-color-scheme:dark){");
+        for (index, style) in styles.iter().enumerate() {
+            if style.light != style.dark {
+                write_theme_rule(&mut css, "", index, &style.dark, style);
+            }
         }
-    }
-    css.push_str("}\n");
+        css.push_str("}\n");
 
-    for (index, style) in styles.iter().copied().enumerate() {
-        if style.light != style.dark {
-            write_theme_rule(
-                &mut css,
-                "[data-theme=\"light\"] ",
-                index,
-                style.light,
-                style,
-            );
-            write_theme_rule(&mut css, "[data-theme=\"dark\"] ", index, style.dark, style);
+        for (index, style) in styles.iter().enumerate() {
+            if style.light != style.dark {
+                write_theme_rule(
+                    &mut css,
+                    "[data-theme=\"light\"] ",
+                    index,
+                    &style.light,
+                    style,
+                );
+                write_theme_rule(
+                    &mut css,
+                    "[data-theme=\"dark\"] ",
+                    index,
+                    &style.dark,
+                    style,
+                );
+            }
         }
     }
 
@@ -378,90 +326,97 @@ fn write_theme_rule(
     css: &mut String,
     selector_prefix: &str,
     index: usize,
-    current: ThemeStyle,
-    pair: HighlightStyle,
+    current: &ThemeStyle,
+    pair: &HighlightStyle,
 ) {
     let _ = write!(css, "{selector_prefix}.hl-s{index}{{");
     let mut has_property = false;
 
     if pair.light.foreground.is_some() || pair.dark.foreground.is_some() {
-        write_property_separator(css, &mut has_property);
-        if let Some(color) = current.foreground {
-            let _ = write!(
-                css,
-                "color:{}",
-                crate::build::transform::dom::color_to_hex(color)
-            );
-        } else {
-            css.push_str("color:inherit");
-        }
+        write_property(
+            css,
+            &mut has_property,
+            "color",
+            current.foreground.as_deref().unwrap_or("inherit"),
+        );
     }
     if pair.light.background.is_some() || pair.dark.background.is_some() {
-        write_property_separator(css, &mut has_property);
-        if let Some(color) = current.background {
-            let _ = write!(
-                css,
-                "background-color:{}",
-                crate::build::transform::dom::color_to_hex(color)
-            );
-        } else {
-            css.push_str("background-color:transparent");
-        }
+        write_property(
+            css,
+            &mut has_property,
+            "background-color",
+            current.background.as_deref().unwrap_or("transparent"),
+        );
     }
-    write_font_style(
-        css,
-        &mut has_property,
-        "font-weight",
-        current.font_style.contains(FontStyle::BOLD),
-        pair.light.font_style.contains(FontStyle::BOLD)
-            || pair.dark.font_style.contains(FontStyle::BOLD),
-        "bold",
-        "normal",
-    );
-    write_font_style(
-        css,
-        &mut has_property,
-        "font-style",
-        current.font_style.contains(FontStyle::ITALIC),
-        pair.light.font_style.contains(FontStyle::ITALIC)
-            || pair.dark.font_style.contains(FontStyle::ITALIC),
-        "italic",
-        "normal",
-    );
-    write_font_style(
-        css,
-        &mut has_property,
-        "text-decoration",
-        current.font_style.contains(FontStyle::UNDERLINE),
-        pair.light.font_style.contains(FontStyle::UNDERLINE)
-            || pair.dark.font_style.contains(FontStyle::UNDERLINE),
-        "underline",
-        "none",
-    );
+    if pair.light.bold || pair.dark.bold {
+        write_property(
+            css,
+            &mut has_property,
+            "font-weight",
+            if current.bold { "bold" } else { "normal" },
+        );
+    }
+    if pair.light.italic || pair.dark.italic {
+        write_property(
+            css,
+            &mut has_property,
+            "font-style",
+            if current.italic { "italic" } else { "normal" },
+        );
+    }
+
+    let uses_decoration = pair.light.decoration != TextDecoration::default()
+        || pair.dark.decoration != TextDecoration::default();
+    if uses_decoration {
+        write_property(
+            css,
+            &mut has_property,
+            "text-decoration-line",
+            decoration_line(current.decoration),
+        );
+    }
+    if pair.light.decoration.underline != UnderlineStyle::None
+        || pair.dark.decoration.underline != UnderlineStyle::None
+    {
+        write_property(
+            css,
+            &mut has_property,
+            "text-decoration-style",
+            underline_style(current.decoration.underline),
+        );
+    }
     css.push_str("}\n");
 }
 
-fn write_font_style(
-    css: &mut String,
-    has_property: &mut bool,
-    property: &str,
-    enabled: bool,
-    used: bool,
-    value: &str,
-    reset: &str,
-) {
-    if used {
-        write_property_separator(css, has_property);
-        let _ = write!(css, "{property}:{}", if enabled { value } else { reset });
+fn decoration_line(decoration: TextDecoration) -> &'static str {
+    match (
+        decoration.underline != UnderlineStyle::None,
+        decoration.strikethrough,
+    ) {
+        (true, true) => "underline line-through",
+        (true, false) => "underline",
+        (false, true) => "line-through",
+        (false, false) => "none",
     }
 }
 
-fn write_property_separator(css: &mut String, has_property: &mut bool) {
+fn underline_style(underline: UnderlineStyle) -> &'static str {
+    match underline {
+        UnderlineStyle::None | UnderlineStyle::Solid => "solid",
+        UnderlineStyle::Wavy => "wavy",
+        UnderlineStyle::Double => "double",
+        UnderlineStyle::Dotted => "dotted",
+        UnderlineStyle::Dashed => "dashed",
+    }
+}
+
+fn write_property(css: &mut String, has_property: &mut bool, name: &str, value: &str) {
     if *has_property {
         css.push(';');
     } else {
         *has_property = true;
     }
+    let _ = write!(css, "{name}:{value}");
 }
 
 #[cfg(test)]
@@ -469,40 +424,45 @@ mod tests {
     use super::*;
 
     fn highlighted_text(tokens: &[HighlightToken]) -> String {
-        tokens.iter().map(|(_, text)| text.as_str()).collect()
+        tokens.iter().map(|(_, _, text)| text.as_str()).collect()
+    }
+
+    #[test]
+    fn recognizes_rust_modifiers() {
+        let tokens = highlight_tokens("pub fn main() {}", "rust").unwrap();
+        assert!(
+            tokens
+                .iter()
+                .any(|(_, scope, text)| *scope == "keyword.modifier" && text == "pub")
+        );
     }
 
     #[test]
     fn theme_css_resets_styles_between_modes() {
         let style = HighlightStyle {
             light: ThemeStyle {
-                foreground: Some(Color {
-                    r: 0x11,
-                    g: 0x22,
-                    b: 0x33,
-                    a: 0xff,
-                }),
+                foreground: Some("#112233".into()),
                 background: None,
-                font_style: FontStyle::BOLD | FontStyle::ITALIC | FontStyle::UNDERLINE,
+                bold: true,
+                italic: true,
+                decoration: TextDecoration {
+                    underline: UnderlineStyle::Wavy,
+                    strikethrough: true,
+                },
             },
             dark: ThemeStyle {
                 foreground: None,
-                background: Some(Color {
-                    r: 0x44,
-                    g: 0x55,
-                    b: 0x66,
-                    a: 0xff,
-                }),
-                font_style: FontStyle::empty(),
+                background: Some("#445566".into()),
+                ..ThemeStyle::default()
             },
         };
 
         let css = String::from_utf8(highlight_css(&[style]).to_vec()).unwrap();
         assert!(css.contains(
-            ".hl-s0{color:#112233;background-color:transparent;font-weight:bold;font-style:italic;text-decoration:underline}"
+            ".hl-s0{color:#112233;background-color:transparent;font-weight:bold;font-style:italic;text-decoration-line:underline line-through;text-decoration-style:wavy}"
         ));
         assert!(css.contains(
-            "[data-theme=\"dark\"] .hl-s0{color:inherit;background-color:#445566;font-weight:normal;font-style:normal;text-decoration:none}"
+            "[data-theme=\"dark\"] .hl-s0{color:inherit;background-color:#445566;font-weight:normal;font-style:normal;text-decoration-line:none;text-decoration-style:solid}"
         ));
     }
 
@@ -523,8 +483,23 @@ mod tests {
         let json = "{\n  \"a\": 1,\n  \"b\": 2\n}\n";
 
         for code in [typst, invalid_typst] {
-            assert_eq!(highlighted_text(&do_typst_highlight(code, "typc")), code);
+            assert_eq!(
+                highlighted_text(&highlight_tokens(code, "typc").unwrap()),
+                code
+            );
         }
-        assert_eq!(highlighted_text(&do_syntect_highlight(json, "json")), json);
+        assert_eq!(
+            highlighted_text(&highlight_tokens(json, "json").unwrap()),
+            json
+        );
+    }
+
+    #[test]
+    fn highlights_typst_code_and_math_fragments() {
+        for (language, source) in [("typc", "let answer = 42"), ("typm", "x^2 + y^2")] {
+            let tokens = highlight_tokens(source, language).unwrap();
+            assert_eq!(highlighted_text(&tokens), source);
+            assert!(tokens.iter().any(|(_, scope, _)| !scope.is_empty()));
+        }
     }
 }

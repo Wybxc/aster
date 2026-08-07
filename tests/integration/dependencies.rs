@@ -39,14 +39,14 @@ fn includes_observed_inputs_but_not_generated_outputs() {
         root.join("aster.toml"),
         concat!(
             "[highlight.themes]\n",
-            "light = \"theme.tmTheme\"\n",
-            "dark = \"theme.tmTheme\"\n",
+            "light = \"theme.json\"\n",
+            "dark = \"theme.json\"\n",
         ),
     )
     .unwrap();
     std::fs::write(root.join("pages/index.typ"), "#html.elem(\"p\")[Page]").unwrap();
     let project = Project::open(root.to_owned()).unwrap();
-    let theme = root.join("theme.tmTheme");
+    let theme = root.join("theme.json");
     let generated = root.join("dist/index.html");
 
     let mut session = BuildSession::new(project);

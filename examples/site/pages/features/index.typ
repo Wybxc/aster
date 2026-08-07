@@ -83,9 +83,8 @@
 
 #html.elem("section")[
   #heading(level: 2)[Aster applies syntax highlighting during document transformation.]
-  Aster parses Typst-family code with Typst and highlights other languages with
-  Syntect before combining the selected light and dark themes into one
-  generated stylesheet.
+  Aster highlights source code with Lumis and combines the selected light and
+  dark themes into one generated stylesheet.
 
   ```typ
   #metadata(

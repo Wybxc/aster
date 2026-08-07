@@ -9,6 +9,3 @@ repository = "https://github.com/Wybxc/aster"
 
 [docs]
 edit-base = "https://github.com/Wybxc/aster/edit/main/examples/docs/content/docs/"
-
-[highlight]
-themes = { light = "InspiredGitHub", dark = "base16-eighties.dark" }

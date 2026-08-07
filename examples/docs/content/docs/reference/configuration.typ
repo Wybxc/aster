@@ -34,7 +34,7 @@ minify = true
 targets = ["defaults"]
 
 [highlight]
-themes = { light = "InspiredGitHub", dark = "base16-eighties.dark" }
+themes = { light = "github_light", dark = "github_dark" }
 ```
 
 #callout(kind: "note")[

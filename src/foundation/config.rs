@@ -29,17 +29,17 @@ impl Default for HighlightConfig {
 #[derive(Clone, Deserialize)]
 #[serde(default)]
 pub struct Themes {
-    /// Syntect theme used for light color schemes.
+    /// Lumis theme used for light color schemes.
     pub light: EcoString,
-    /// Syntect theme used for dark color schemes.
+    /// Lumis theme used for dark color schemes.
     pub dark: EcoString,
 }
 
 impl Default for Themes {
     fn default() -> Self {
         Self {
-            light: "InspiredGitHub".into(),
-            dark: "base16-eighties.dark".into(),
+            light: "github_light".into(),
+            dark: "github_dark".into(),
         }
     }
 }
@@ -240,16 +240,16 @@ mod tests {
                 "[site]\n",
                 "enabled = true\n",
                 "[highlight.themes]\n",
-                "light = \"Solarized (light)\"\n",
-                "dark = \"Solarized (dark)\"\n",
+                "light = \"catppuccin_latte\"\n",
+                "dark = \"catppuccin_mocha\"\n",
             ),
         )
         .unwrap();
 
         let config = load(&config_file).unwrap();
 
-        assert_eq!(config.highlight.themes.light, "Solarized (light)");
-        assert_eq!(config.highlight.themes.dark, "Solarized (dark)");
+        assert_eq!(config.highlight.themes.light, "catppuccin_latte");
+        assert_eq!(config.highlight.themes.dark, "catppuccin_mocha");
         assert_eq!(
             config
                 .css
@@ -268,14 +268,14 @@ mod tests {
         let config_file = temp.path().join("aster.toml");
         std::fs::write(
             &config_file,
-            "[highlight.themes]\nlight = \"Solarized (light)\"\n",
+            "[highlight.themes]\nlight = \"catppuccin_latte\"\n",
         )
         .unwrap();
 
         let config = load(&config_file).unwrap();
 
-        assert_eq!(config.highlight.themes.light, "Solarized (light)");
-        assert_eq!(config.highlight.themes.dark, "base16-eighties.dark");
+        assert_eq!(config.highlight.themes.light, "catppuccin_latte");
+        assert_eq!(config.highlight.themes.dark, "github_dark");
     }
 
     #[test]
@@ -347,14 +347,14 @@ mod tests {
         assert_eq!(config.typst.fonts.paths, eco_vec!["fonts".into()]);
         assert!(!config.typst.fonts.system);
         assert!(!config.highlight.enabled);
-        assert_eq!(config.highlight.themes.light, "InspiredGitHub");
+        assert_eq!(config.highlight.themes.light, "github_light");
     }
 
     #[test]
     fn rejects_invalid_highlight_settings() {
         let temp = tempfile::tempdir().unwrap();
         let config_file = temp.path().join("aster.toml");
-        std::fs::write(&config_file, "[highlight]\nthemes = \"InspiredGitHub\"\n").unwrap();
+        std::fs::write(&config_file, "[highlight]\nthemes = \"github_light\"\n").unwrap();
 
         let error = match load(&config_file) {
             Ok(_) => panic!("invalid highlight settings must be rejected"),
