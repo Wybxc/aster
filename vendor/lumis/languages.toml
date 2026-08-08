@@ -1,0 +1,580 @@
+# Languages supported by Aster's Lumis-based highlighter.
+
+[languages.angular]
+grammar = "angular"
+queries = "angular"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-angular@0.26.2/tree-sitter-angular.wasm", integrity = "sha256-ZxRLCj6rNQeLT+LavXqRp2s/1rVOlg+cSXu+qd4egpg=" }
+
+[languages.arduino]
+grammar = "arduino"
+queries = "arduino"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-arduino@0.26.1/tree-sitter-arduino.wasm", integrity = "sha256-8RUzskC87RUUV/l5LYFvN2gc6lXCLbZl0X/twWhnUKg=" }
+
+[languages.asm]
+grammar = "asm"
+queries = "asm"
+aliases = ["assembly"]
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-asm@0.26.2/tree-sitter-asm.wasm", integrity = "sha256-Ms1wQxk/F2wUfbtnNkwDXUSHOvMOb+7uQ3hAbX3TC5E=" }
+
+[languages.astro]
+grammar = "astro"
+queries = "astro"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-astro@0.26.1/tree-sitter-astro.wasm", integrity = "sha256-Op9HaJ+R1lQOzFkGgF7PHiIrpfS867TB5T/fjQIHj8Y=" }
+
+[languages.bash]
+grammar = "bash"
+queries = "bash"
+aliases = ["sh"]
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-bash@0.26.3/tree-sitter-bash.wasm", integrity = "sha256-3eZhFlfW6jgvYhbbNx5h8jsi40dZKlZc3Ue5eavgUj0=" }
+
+[languages.bicep]
+grammar = "bicep"
+queries = "bicep"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-bicep@0.26.0/tree-sitter-bicep.wasm", integrity = "sha256-msLf7BKq8VpdRwN5zIY46Rf8t66kGfXjrvZvXb8FqZw=" }
+
+[languages.c]
+grammar = "c"
+queries = "c"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-c@0.26.1/tree-sitter-c.wasm", integrity = "sha256-g+jXkCudf4x8XNS9mstcfrX69CwJ+FVGsYOWTTtfSPk=" }
+
+[languages.caddy]
+grammar = "caddy"
+queries = "caddy"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-caddy@0.26.2/tree-sitter-caddy.wasm", integrity = "sha256-aloetuTCd8OIZ8gbX8RCeaK3f55Sq/LvGNFByWQYFy0=" }
+
+[languages.clojure]
+grammar = "clojure"
+queries = "clojure"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-clojure@0.26.1/tree-sitter-clojure.wasm", integrity = "sha256-LAMWG7i+eUAbPS0uGS+A7f724wK0oTB2TJ4wNwzoJrw=" }
+
+[languages.cmake]
+grammar = "cmake"
+queries = "cmake"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-cmake@0.26.2/tree-sitter-cmake.wasm", integrity = "sha256-n52hWiP7q5zEbOi2vwnLVnu5brJT5RdDDjcNe56b5Fo=" }
+
+[languages.comment]
+grammar = "comment"
+queries = "comment"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-comment@0.26.1/tree-sitter-comment.wasm", integrity = "sha256-qx60YFaKcrbub22TPmBIbJSHLVdhL6BFl/rMXIQ0cOE=" }
+
+[languages.commonlisp]
+grammar = "commonlisp"
+queries = "commonlisp"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-commonlisp@0.26.1/tree-sitter-commonlisp.wasm", integrity = "sha256-nxbCDYhUgyTyFW+DwFe5wr5aLtDBrZNMlZrtH4H17Ks=" }
+
+[languages.cpp]
+grammar = "cpp"
+queries = "cpp"
+aliases = ["c++"]
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-cpp@0.26.0/tree-sitter-cpp.wasm", integrity = "sha256-n3TkobKGFCX4kx+JNOpIuXVWD1GvXJE8QgSetOmwFvQ=" }
+
+[languages.csharp]
+grammar = "c_sharp"
+queries = "c_sharp"
+aliases = ["c#", "c_sharp"]
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-csharp@0.26.1/tree-sitter-csharp.wasm", integrity = "sha256-cmP+wQkjCvxSJ9VrSSMtu0md2/cR2EUiOmg9a9nH7d0=" }
+
+[languages.css]
+grammar = "css"
+queries = "css"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-css@0.26.2/tree-sitter-css.wasm", integrity = "sha256-qGBAlTxuusOcQo2PqEwWcwO/CDOt921S39Hojfvrb8M=" }
+
+[languages.csv]
+grammar = "csv"
+queries = "csv"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-csv@0.26.1/tree-sitter-csv.wasm", integrity = "sha256-EKpnNOQLzFCZLMmGh3B8QEZ5xHYzTwklKSdwopV2fU0=" }
+
+[languages.d]
+grammar = "d"
+queries = "d"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-d@0.26.1/tree-sitter-d.wasm", integrity = "sha256-3wq3RCElaT01MqyB2xibFuRodtQKZBcDUKAj7FmhGxA=" }
+
+[languages.dart]
+grammar = "dart"
+queries = "dart"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-dart@0.26.2/tree-sitter-dart.wasm", integrity = "sha256-90Pm7NoER88zDQEunI3E94TSqIdNvexLkpsN3of67Hk=" }
+
+[languages.diff]
+grammar = "diff"
+queries = "diff"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-diff@0.26.1/tree-sitter-diff.wasm", integrity = "sha256-C8L9oSOHHx7pr5VmxeSoSgmrPaWsYtudlIxKlSAx/Dk=" }
+
+[languages.dockerfile]
+grammar = "dockerfile"
+queries = "dockerfile"
+aliases = ["docker"]
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-dockerfile@0.26.1/tree-sitter-dockerfile.wasm", integrity = "sha256-vgALwA8wXGpq1m31nkPdNNFoPuU6dgU+udqLgqu0Xqg=" }
+
+[languages.dot]
+grammar = "dot"
+queries = "dot"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-dot@0.26.0/tree-sitter-dot.wasm", integrity = "sha256-8F3TRVr/AxM2u+wLf0b9Y5CJD/1WClthxPlB0Jr0d+c=" }
+
+[languages.editorconfig]
+grammar = "editorconfig"
+queries = "editorconfig"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-editorconfig@0.26.1/tree-sitter-editorconfig.wasm", integrity = "sha256-MIpliq99NlDs+7gdr3WykOwiZiV1B2PH8Ass6o/HdGM=" }
+
+[languages.eex]
+grammar = "eex"
+queries = "eex"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-eex@0.26.0/tree-sitter-eex.wasm", integrity = "sha256-4HK9RhTDjChBIGSmmQAgaooQlrMsfVpVCpSDFBO5WBA=" }
+
+[languages.ejs]
+grammar = "embedded_template"
+queries = "embedded_template"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-embedded-template@0.26.2/tree-sitter-embedded-template.wasm", integrity = "sha256-sQgAGAphLBqrf/5ehsPwIm9/CfOZOB/jXEpy0L+4tsU=" }
+
+[languages.elixir]
+grammar = "elixir"
+queries = "elixir"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-elixir@0.26.2/tree-sitter-elixir.wasm", integrity = "sha256-ktz7W7hvkBraUfMKhh57TQLMQsqy0p2bS2QIdVWfo1U=" }
+
+[languages.elm]
+grammar = "elm"
+queries = "elm"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-elm@0.26.1/tree-sitter-elm.wasm", integrity = "sha256-RNFxjH51D4Kx1NGJYrbPtmFCYFo4uR6hKNMsJxrZz8Q=" }
+
+[languages.erb]
+grammar = "embedded_template"
+queries = "embedded_template"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-embedded-template@0.26.2/tree-sitter-embedded-template.wasm", integrity = "sha256-sQgAGAphLBqrf/5ehsPwIm9/CfOZOB/jXEpy0L+4tsU=" }
+
+[languages.erlang]
+grammar = "erlang"
+queries = "erlang"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-erlang@0.26.2/tree-sitter-erlang.wasm", integrity = "sha256-vLmmYcXtJc5sNf0e9rRiZrc25ik6ZJMMqHzG7a6iiFo=" }
+
+[languages.fish]
+grammar = "fish"
+queries = "fish"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-fish@0.26.0/tree-sitter-fish.wasm", integrity = "sha256-bd/RjGCdWP0o8/6ASMeVY7pPB0+lZlzqfNXzb88ApQI=" }
+
+[languages.fortran]
+grammar = "fortran"
+queries = "fortran"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-fortran@0.26.1/tree-sitter-fortran.wasm", integrity = "sha256-I+c1pKnEbBd4gjmtaizY1fseW7fj4kBYkskjpZDxalQ=" }
+
+[languages.fsharp]
+grammar = "fsharp"
+queries = "fsharp"
+aliases = ["f#"]
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-fsharp@0.26.4/tree-sitter-fsharp.wasm", integrity = "sha256-pgQUmhTRNlYtlw2CtZpMwIV7KPzYQZJ/GWvrrRnlV+g=" }
+
+[languages.gitattributes]
+grammar = "gitattributes"
+queries = "gitattributes"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-gitattributes@0.26.1/tree-sitter-gitattributes.wasm", integrity = "sha256-Ul8ca5XwGiThDWs76G76xTDd/smjaqxA7vgDeaTWNso=" }
+
+[languages.gitignore]
+grammar = "gitignore"
+queries = "gitignore"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-gitignore@0.26.0/tree-sitter-gitignore.wasm", integrity = "sha256-fydXfC2MmpfDHzjHzu8usf7hPCBmPM2nQo3Bhp9cYgs=" }
+
+[languages.glimmer]
+grammar = "glimmer"
+queries = "glimmer"
+aliases = ["ember", "handlebars"]
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-glimmer@0.26.1/tree-sitter-glimmer.wasm", integrity = "sha256-12jywRrfAw3jQ3MlyEjcv8tqN6MD701UT3ajNKRV/jM=" }
+
+[languages.glsl]
+grammar = "glsl"
+queries = "glsl"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-glsl@0.26.1/tree-sitter-glsl.wasm", integrity = "sha256-IEP6UgPlc3JonlmXSBlnzEIWYVYboK0/6n6lWCEAIrE=" }
+
+[languages.go]
+grammar = "go"
+queries = "go"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-go@0.26.1/tree-sitter-go.wasm", integrity = "sha256-fKnhfitP4jbLHSOGsN+ol9fxMBbLiMGlyMEUBxnl5RQ=" }
+
+[languages.graphql]
+grammar = "graphql"
+queries = "graphql"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-graphql@0.26.0/tree-sitter-graphql.wasm", integrity = "sha256-RQBGjWun5VLlvGgVD1CSYs+bpy0c/dOcdcqujhjvZPw=" }
+
+[languages.haskell]
+grammar = "haskell"
+queries = "haskell"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-haskell@0.26.0/tree-sitter-haskell.wasm", integrity = "sha256-+urcneJ8S0D8ciH8aDtitp/reXbIzhlEQsE2+2CO6cU=" }
+
+[languages.hcl]
+grammar = "hcl"
+queries = "hcl"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-hcl@0.26.2/tree-sitter-hcl.wasm", integrity = "sha256-Z/qfyRoxqmkiYBqBTkCnjyWqJ4Eo0QubnhFOajzf7i4=" }
+
+[languages.heex]
+grammar = "heex"
+queries = "heex"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-heex@0.26.1/tree-sitter-heex.wasm", integrity = "sha256-UH0uv5xKMX7AnSMrKZacAdtxp5Wuf2R3+FWznSZckJs=" }
+
+[languages.html]
+grammar = "html"
+queries = "html"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-html@0.26.2/tree-sitter-html.wasm", integrity = "sha256-eNML4GhTvQwUvS4mc3AypzxEuwlbmlaxpaLu6lyFIy8=" }
+
+[languages.http]
+grammar = "http"
+queries = "http"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-http@0.26.0/tree-sitter-http.wasm", integrity = "sha256-timR2B9sCNJUnpTpVMqFmB0drv1oy0uQ7W4BP8dDpxw=" }
+
+[languages.iex]
+grammar = "iex"
+queries = "iex"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-iex@0.26.0/tree-sitter-iex.wasm", integrity = "sha256-WbpD+tuI3HnTL+kDt9VAvavLurPOrkusVvLjhMRQD8g=" }
+
+[languages.ini]
+grammar = "ini"
+queries = "ini"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-ini@0.26.1/tree-sitter-ini.wasm", integrity = "sha256-OzxaCXdSHQ26p9VnlOjynr+Ke5Yknqqf000KFSlmYTU=" }
+
+[languages.java]
+grammar = "java"
+queries = "java"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-java@0.26.1/tree-sitter-java.wasm", integrity = "sha256-kPIf1YmZ+p0kgt6D8Mvqr7SHcpLdpYVmXQNx/bT5vno=" }
+
+[languages.javadoc]
+grammar = "javadoc"
+queries = "javadoc"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-javadoc@0.26.1/tree-sitter-javadoc.wasm", integrity = "sha256-0gNOnv4hZPvrrZ+LRkDheTOP5yJIDwuFMBlZ37KbhY4=" }
+
+[languages.javascript]
+grammar = "javascript"
+queries = "javascript"
+aliases = ["js", "jsx"]
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-javascript@0.26.2/tree-sitter-javascript.wasm", integrity = "sha256-Bq2TLwOOmZczyKrgt/8Mi9IpU8EKaB05xpx35ucHyQ4=" }
+
+[languages.jinja]
+grammar = "jinja"
+queries = "jinja"
+aliases = ["jinja2"]
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-jinja@0.26.4/tree-sitter-jinja.wasm", integrity = "sha256-ULaRtW07QSul/402UJDLjtPviB4n7D+FoG8UCocmHxg=" }
+
+[languages.jinja_inline]
+grammar = "jinja_inline"
+queries = "jinja_inline"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-jinja_inline@0.26.3/tree-sitter-jinja_inline.wasm", integrity = "sha256-4lUMTNcsZWLJ54qdxDTFdOCHPuONr6tCvuQ+cLAN9Q8=" }
+
+[languages.jq]
+grammar = "jq"
+queries = "jq"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-jq@0.26.0/tree-sitter-jq.wasm", integrity = "sha256-mfJ2O48GB2kEupBFWp+iYCnAPZrcg+LxTSQwaZDo5a8=" }
+
+[languages.json]
+grammar = "json"
+queries = "json"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-json@0.26.2/tree-sitter-json.wasm", integrity = "sha256-tsn5mGarQiBrMHZSLIjVPJCiSYK/SCztZPXcIUPOdeo=" }
+
+[languages.json5]
+grammar = "json5"
+queries = "json5"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-json5@0.26.1/tree-sitter-json5.wasm", integrity = "sha256-o0GR9G4Z6+aeaJYeiRgEpdcf8IOLtu7K7gjs7fIrI7I=" }
+
+[languages.julia]
+grammar = "julia"
+queries = "julia"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-julia@0.26.1/tree-sitter-julia.wasm", integrity = "sha256-xmrR1W8tOvNvYkf+XsYJ0svV2eX/wqI0JdT/wLQXZHg=" }
+
+[languages.just]
+grammar = "just"
+queries = "just"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-just@0.26.1/tree-sitter-just.wasm", integrity = "sha256-Vj5IrSgIpCJEyBNQo0bo/st4s/LN7IyAnnzeCZmSPbU=" }
+
+[languages.kdl]
+grammar = "kdl"
+queries = "kdl"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-kdl@0.26.1/tree-sitter-kdl.wasm", integrity = "sha256-irU5Ly5C0FCdDhxsBGqEbzNoIGzTxnB0hI/I8QnCKso=" }
+
+[languages.kotlin]
+grammar = "kotlin"
+queries = "kotlin"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-kotlin@0.26.3/tree-sitter-kotlin.wasm", integrity = "sha256-whbHS3Ae5Tbff2UJVkd1mEhQg15zHnKJykNdEcrSmpc=" }
+
+[languages.latex]
+grammar = "latex"
+queries = "latex"
+aliases = ["tex"]
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-latex@0.26.0/tree-sitter-latex.wasm", integrity = "sha256-qSbg6XqIWlqV+TJx+6KaRDdVXjiqoIwZSYY4ax9JeE8=" }
+
+[languages.liquid]
+grammar = "liquid"
+queries = "liquid"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-liquid@0.26.1/tree-sitter-liquid.wasm", integrity = "sha256-LZaRLEUr7ME6fKu9W9+zCZduXe743DPNQCm3o6bNh+8=" }
+
+[languages.lua]
+grammar = "lua"
+queries = "lua"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-lua@0.26.1/tree-sitter-lua.wasm", integrity = "sha256-3wihcE5QTHC426Sj5vjgyZpPuU4bFpPSlp9TFB0J8NQ=" }
+
+[languages.luadoc]
+grammar = "luadoc"
+queries = "luadoc"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-luadoc@0.26.1/tree-sitter-luadoc.wasm", integrity = "sha256-5NSuTYMV529oY1DAe7VAe/S9f7Ct1R/UjRwXHDws+Rg=" }
+
+[languages.make]
+grammar = "make"
+queries = "make"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-make@0.26.1/tree-sitter-make.wasm", integrity = "sha256-6FvVC4GCSXwxH9csREG1MP9DdCEXa2QRT69TJkFTT/8=" }
+
+[languages.markdown]
+grammar = "markdown"
+queries = "markdown"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-markdown@0.26.1/tree-sitter-markdown.wasm", integrity = "sha256-3Z/BKsKATXx9p4fkd0Elsy5Ps8JE5ecDGnfLfdgDYCA=" }
+
+[languages.markdown_inline]
+grammar = "markdown_inline"
+queries = "markdown_inline"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-markdown_inline@0.26.1/tree-sitter-markdown_inline.wasm", integrity = "sha256-1H5cQ2g8ObZFzthyCrkMOz9GfnFdNCaynvP2mYTYjBU=" }
+
+[languages.matlab]
+grammar = "matlab"
+queries = "matlab"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-matlab@0.26.1/tree-sitter-matlab.wasm", integrity = "sha256-OJJWWL7oqRecklOqYRoNRXDhsxMKqBNIsFnPKAnG63M=" }
+
+[languages.mdx]
+grammar = "markdown"
+queries = "mdx"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-markdown@0.26.1/tree-sitter-markdown.wasm", integrity = "sha256-3Z/BKsKATXx9p4fkd0Elsy5Ps8JE5ecDGnfLfdgDYCA=" }
+
+[languages.mermaid]
+grammar = "mermaid"
+queries = "mermaid"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-mermaid@0.26.0/tree-sitter-mermaid.wasm", integrity = "sha256-oVwCJBBXpABhGcOBht4ySX2o+mVGqfy49G8JkpMbq9M=" }
+
+[languages.nginx]
+grammar = "nginx"
+queries = "nginx"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-nginx@0.26.0/tree-sitter-nginx.wasm", integrity = "sha256-CGFBS/zhIURqyndlEV+n7PGHhdCmuFIGkwQeEczHqFE=" }
+
+[languages.nim]
+grammar = "nim"
+queries = "nim"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-nim@0.26.1/tree-sitter-nim.wasm", integrity = "sha256-763d/rdle1Z/nn6zaZpl4l3i7pxngWu17IZd6i/tG4c=" }
+
+[languages.nix]
+grammar = "nix"
+queries = "nix"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-nix@0.26.0/tree-sitter-nix.wasm", integrity = "sha256-3EO5W1hpd0oHu2tTlwtHnNWwtaeaEsI0e5gnEKs+vm8=" }
+
+[languages.nushell]
+grammar = "nu"
+queries = "nu"
+aliases = ["nu"]
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-nushell@0.26.2/tree-sitter-nushell.wasm", integrity = "sha256-H28kI25ZSDivQ9KKwpZfuIRaZ0f5HnZgm54yNPzYsl4=" }
+
+[languages.objc]
+grammar = "objc"
+queries = "objc"
+aliases = ["objective-c"]
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-objc@0.26.0/tree-sitter-objc.wasm", integrity = "sha256-SCzJVtsjm+dnhkoAFNgn0zpJc0hgqzUf36pfihcvD5w=" }
+
+[languages.ocaml]
+grammar = "ocaml"
+queries = "ocaml"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-ocaml@0.26.1/tree-sitter-ocaml.wasm", integrity = "sha256-WJ4LU6ePp7gCUc98EZOzLMxZOEnSmHZmwKMD8cvXifw=" }
+
+[languages.ocaml_interface]
+grammar = "ocaml_interface"
+queries = "ocaml_interface"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-ocaml_interface@0.26.1/tree-sitter-ocaml_interface.wasm", integrity = "sha256-WDg4c2oPQ3bkN4SL5BC5kYa5Az/BlpXc6VThq9bo4EM=" }
+
+[languages.pascal]
+grammar = "pascal"
+queries = "pascal"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-pascal@0.26.0/tree-sitter-pascal.wasm", integrity = "sha256-6Id7FL+lebdXPPGrP9nK/PRL5xVbmwMQFlIJsIMW9Iw=" }
+
+[languages.perl]
+grammar = "perl"
+queries = "perl"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-perl@0.26.2/tree-sitter-perl.wasm", integrity = "sha256-LHdcAiz9uJYYIBqwVe8qIKnJf5uwxMad+WaRtiIP900=" }
+
+[languages.php]
+grammar = "php"
+queries = "php_only"
+aliases = ["php_only"]
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-php@0.26.2/tree-sitter-php.wasm", integrity = "sha256-5fTtjTn6ZtNs8yo38GXgmv3Q+5pvPd0r2DcBeiEr24k=" }
+
+[languages.powershell]
+grammar = "powershell"
+queries = "powershell"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-powershell@0.26.1/tree-sitter-powershell.wasm", integrity = "sha256-eWEkE38FAOWXE/2dzNpoEv9z0l8i4zQwscWvbhMu+l4=" }
+
+[languages.prisma]
+grammar = "prisma"
+queries = "prisma"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-prisma@0.26.1/tree-sitter-prisma.wasm", integrity = "sha256-qvdQjavV81S0rGczXoCZN3zBQS+wRMDoRVcuxIHVCYU=" }
+
+[languages.protobuf]
+grammar = "proto"
+queries = "proto"
+aliases = ["proto"]
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-protobuf@0.26.1/tree-sitter-protobuf.wasm", integrity = "sha256-YEX1eEiO68yifF8YWg4iZN45TPhrEcwj5CNvf0BvWQA=" }
+
+[languages.puppet]
+grammar = "puppet"
+queries = "puppet"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-puppet@0.26.0/tree-sitter-puppet.wasm", integrity = "sha256-PS1nyVGM/dTmBR9E1hLPhBEPNL2BbZHvJ63DFOuX5cM=" }
+
+[languages.python]
+grammar = "python"
+queries = "python"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-python@0.26.2/tree-sitter-python.wasm", integrity = "sha256-/G+8w3qsetenDQrnejl8TQde0xUtVDUv8zmJMAWganI=" }
+
+[languages.qmljs]
+grammar = "qmljs"
+queries = "qmljs"
+aliases = ["qml"]
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-qmljs@0.26.1/tree-sitter-qmljs.wasm", integrity = "sha256-2uEF5RGA6+eLSSeXIKjrKhfMckksREBm8P7+uyS2gdU=" }
+
+[languages.r]
+grammar = "r"
+queries = "r"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-r@0.26.1/tree-sitter-r.wasm", integrity = "sha256-UXG3IBJbeUvhFf5VS7gq95k1y+0BBGca4QtRXXcghEI=" }
+
+[languages.racket]
+grammar = "racket"
+queries = "racket"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-racket@0.26.1/tree-sitter-racket.wasm", integrity = "sha256-u5Ch0sQHHbcFl8qhXAfOYFHEnj2/ohYvoWj66jro2Ic=" }
+
+[languages.regex]
+grammar = "regex"
+queries = "regex"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-regex@0.26.1/tree-sitter-regex.wasm", integrity = "sha256-f7imxWr50YhYKVrCURf5jUslUukQGnEJiV7IFnY0VEo=" }
+
+[languages.rst]
+grammar = "rst"
+queries = "rst"
+aliases = ["restructuredtext"]
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-rst@0.26.1/tree-sitter-rst.wasm", integrity = "sha256-B4Z0osr9GVoUwUvtIZXiYPQ8KOY8eueaDDXtAaXNxt4=" }
+
+[languages.ruby]
+grammar = "ruby"
+queries = "ruby"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-ruby@0.26.2/tree-sitter-ruby.wasm", integrity = "sha256-oHAVNDNfc+X4Trz+vOO7Csz9FvtdYZOQ1zwvrFYQJKo=" }
+
+[languages.rust]
+grammar = "rust"
+queries = "rust"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-rust@0.26.3/tree-sitter-rust.wasm", integrity = "sha256-YUqvFJc2wZ1PhV23aM5ftLLKBpHb4ttOJoSevAzWZ7Q=" }
+
+[languages.scala]
+grammar = "scala"
+queries = "scala"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-scala@0.26.1/tree-sitter-scala.wasm", integrity = "sha256-AmwvmoN0EJhh9mIfR1nvaQ+uvKpnwtVrBq83hsIGsDA=" }
+
+[languages.scheme]
+grammar = "scheme"
+queries = "scheme"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-scheme@0.26.1/tree-sitter-scheme.wasm", integrity = "sha256-7nzCBWkxnL6OeKDW0tjkTscft4XKzaiSxrWcKNRElNE=" }
+
+[languages.scss]
+grammar = "scss"
+queries = "scss"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-scss@0.26.0/tree-sitter-scss.wasm", integrity = "sha256-jiwVllvQfMwttvWd0zTfoV051PXWsdV/IHCIZ1O97Fk=" }
+
+[languages.solidity]
+grammar = "solidity"
+queries = "solidity"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-solidity@0.26.1/tree-sitter-solidity.wasm", integrity = "sha256-1oKBGeYJnSOng8DlSGNUtBUj3+Sh31s7wrZhBcMnLX8=" }
+
+[languages.sql]
+grammar = "sql"
+queries = "sql"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-sql@0.26.1/tree-sitter-sql.wasm", integrity = "sha256-e+M53FYwT9LhyZ4XFYhGI5m17ff5FkHOu/1z4NEQ5MI=" }
+
+[languages.surface]
+grammar = "surface"
+queries = "surface"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-surface@0.26.1/tree-sitter-surface.wasm", integrity = "sha256-hESY08ZDawUkJ0kwYxOPz+v6WDC3oxGJlfCvg+gSIDc=" }
+
+[languages.svelte]
+grammar = "svelte"
+queries = "svelte"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-svelte@0.26.1/tree-sitter-svelte.wasm", integrity = "sha256-O5pqww79hqN8m91mygmx+wk90fEziwbqqyDET7iQ78Y=" }
+
+[languages.swift]
+grammar = "swift"
+queries = "swift"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-swift@0.26.1/tree-sitter-swift.wasm", integrity = "sha256-Alin7xcwOoB5/+B0izWD1ZZWtcPoZT/Ke2RRs+ZonrI=" }
+
+[languages.systemverilog]
+grammar = "systemverilog"
+queries = "systemverilog"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-systemverilog@0.26.2/tree-sitter-systemverilog.wasm", integrity = "sha256-UuRw6s8qh69QVv4FTAgdRJXR2nL10Km7DUMeER7o8jU=" }
+
+[languages.tcl]
+grammar = "tcl"
+queries = "tcl"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-tcl@0.26.0/tree-sitter-tcl.wasm", integrity = "sha256-4dE2OhkyS0b15dIVq6uLSaBNdFIhD2YTUldAA0grJFw=" }
+
+[languages.terraform]
+grammar = "terraform"
+queries = "terraform"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-terraform@0.26.1/tree-sitter-terraform.wasm", integrity = "sha256-kEwUQzAASVWJgFDmwrMjsMfRmS56eQb+qtLPvil1ld0=" }
+
+[languages.toml]
+grammar = "toml"
+queries = "toml"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-toml@0.26.0/tree-sitter-toml.wasm", integrity = "sha256-S3A2K20ubvq//DBoudIWmJcACF6eacjZ2oAF6kS7Dno=" }
+
+[languages.toon]
+grammar = "toon"
+queries = "toon"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-toon@0.26.2/tree-sitter-toon.wasm", integrity = "sha256-kSRdOAjMjGP8KFDpn6rJL9XknZ3rlEml5fRin9F2rPk=" }
+
+[languages.tsx]
+grammar = "tsx"
+queries = "tsx"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-tsx@0.26.1/tree-sitter-tsx.wasm", integrity = "sha256-aXxapk8Gx3jiAtOuU9z2AUHHEZ+sG4azs/IzPu9xG/U=" }
+
+[languages.typescript]
+grammar = "typescript"
+queries = "typescript"
+aliases = ["ts"]
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-typescript@0.26.1/tree-sitter-typescript.wasm", integrity = "sha256-PEYJCk/VAdvxyu5CWnF9VjgqvT8IgUECgGlddKHsbVY=" }
+
+[languages.vhdl]
+grammar = "vhdl"
+queries = "vhdl"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-vhdl@0.26.1/tree-sitter-vhdl.wasm", integrity = "sha256-70SUG6bn2h93et3uf0ipCn3h71fktT6eEQ3k9hxjKoI=" }
+
+[languages.vim]
+grammar = "vim"
+queries = "vim"
+aliases = ["viml", "vimscript"]
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-vim@0.26.1/tree-sitter-vim.wasm", integrity = "sha256-k8wzLL0JPRY7o9O3/yI+rMAj5vUTUIgBihxehspie+w=" }
+
+[languages.vue]
+grammar = "vue"
+queries = "vue"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-vue@0.26.0/tree-sitter-vue.wasm", integrity = "sha256-tiiRNagffPqp3Ro6U36n3lZn7w0DE26/TAzXrDYezhk=" }
+
+[languages.wat]
+grammar = "wat"
+queries = "wat"
+aliases = ["wasm", "webassembly"]
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-wat@0.26.0/tree-sitter-wat.wasm", integrity = "sha256-7fK9lQiAkagwG9KjYxiG12lcVPjN+zKZMm5tx+6ZxK0=" }
+
+[languages.wgsl]
+grammar = "wgsl"
+queries = "wgsl"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-wgsl@0.26.0/tree-sitter-wgsl.wasm", integrity = "sha256-mSmT8Dr0Ii6O4F/68jIgIPZroxI5rh/QoyAF6PA4d68=" }
+
+[languages.xml]
+grammar = "xml"
+queries = "xml"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-xml@0.26.2/tree-sitter-xml.wasm", integrity = "sha256-D66Eq9T+AOmY5BOxerGFX97zNOeh8M9M3y+3Gq7S3mM=" }
+
+[languages.yaml]
+grammar = "yaml"
+queries = "yaml"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-yaml@0.26.1/tree-sitter-yaml.wasm", integrity = "sha256-gZOowkvJmQ9FmvzSKb+xxyGWIrLKDCWB0oZZNhwYi28=" }
+
+[languages.zig]
+grammar = "zig"
+queries = "zig"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-zig@0.26.0/tree-sitter-zig.wasm", integrity = "sha256-vUAs/oBxOLfdc5KfhHTKxEYtClCUI4lHuRoFBDluW6k=" }
+
+[languages.zsh]
+grammar = "zsh"
+queries = "zsh"
+wasm = { url = "https://cdn.jsdelivr.net/npm/@lumis-sh/wasm-zsh@0.26.0/tree-sitter-zsh.wasm", integrity = "sha256-YwJXqra0wG1ONxntRuEhQxIdkeZK10ZcCr1aLx7v3rM=" }

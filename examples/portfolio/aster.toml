@@ -5,6 +5,3 @@ name = "aster-portfolio"
 title = "Mira Chen"
 description = "The portfolio of a fictional product designer and developer."
 language = "en"
-
-[highlight]
-themes = { light = "InspiredGitHub", dark = "base16-eighties.dark" }

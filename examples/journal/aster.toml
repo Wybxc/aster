@@ -23,6 +23,3 @@ href = "https://github.com/Wybxc/aster"
 [[socials]]
 name = "Mail"
 href = "mailto:papertrail@example.com"
-
-[highlight]
-themes = { light = "InspiredGitHub", dark = "base16-eighties.dark" }

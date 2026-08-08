@@ -20,25 +20,16 @@ fn highlight_stylesheet(root: &Path) -> String {
 
 fn write_theme(path: &Path, color: &str) {
     let theme = format!(
-        r#"<?xml version="1.0" encoding="UTF-8"?>
-<plist version="1.0">
-<dict>
-  <key>name</key><string>Aster Test</string>
-  <key>settings</key>
-  <array>
-    <dict>
-      <key>settings</key>
-      <dict><key>foreground</key><string>{color}</string></dict>
-    </dict>
-    <dict>
-      <key>scope</key><string>keyword.control</string>
-      <key>settings</key>
-      <dict><key>foreground</key><string>{color}</string></dict>
-    </dict>
-  </array>
-</dict>
-</plist>
-"#
+        r##"{{
+  "name": "Aster Test",
+  "appearance": "light",
+  "revision": "test",
+  "highlights": {{
+    "normal": {{ "fg": "#000000" }},
+    "keyword": {{ "fg": "{color}" }}
+  }}
+}}
+"##
     );
     std::fs::write(path, theme).unwrap();
 }
@@ -52,8 +43,8 @@ fn custom_theme_changes_replace_the_highlight_stylesheet() {
         root.join("aster.toml"),
         concat!(
             "[highlight.themes]\n",
-            "light = \"theme.tmTheme\"\n",
-            "dark = \"theme.tmTheme\"\n",
+            "light = \"theme.json\"\n",
+            "dark = \"theme.json\"\n",
         ),
     )
     .unwrap();
@@ -67,7 +58,7 @@ fn custom_theme_changes_replace_the_highlight_stylesheet() {
         ),
     )
     .unwrap();
-    let theme = root.join("theme.tmTheme");
+    let theme = root.join("theme.json");
     write_theme(&theme, "#112233");
 
     let project = project(root);
@@ -114,7 +105,7 @@ fn creates_head_before_body_for_highlight_stylesheet() {
 }
 
 #[test]
-fn applies_inherited_theme_styles_to_rust_modifiers() {
+fn applies_lumis_themes_to_dynamic_rust_highlighting() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
     std::fs::create_dir_all(root.join("pages")).unwrap();
@@ -135,8 +126,8 @@ fn applies_inherited_theme_styles_to_rust_modifiers() {
     let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     assert!(html.contains("<span class=\"hl-s0\">pub</span>"));
     let css = highlight_stylesheet(root);
-    assert!(css.contains(".hl-s0{color:#a71d5d;font-weight:bold}"));
-    assert!(css.contains("[data-theme=\"dark\"] .hl-s0{color:#cc99cc;font-weight:normal}"));
+    assert!(css.contains(".hl-s0{color:#cf222e}"));
+    assert!(css.contains("[data-theme=\"dark\"] .hl-s0{color:#ff7b72}"));
 }
 
 #[test]
@@ -148,8 +139,8 @@ fn invalid_theme_warns_once_for_the_whole_build() {
         root.join("aster.toml"),
         concat!(
             "[highlight.themes]\n",
-            "light = \"missing.tmTheme\"\n",
-            "dark = \"missing.tmTheme\"\n",
+            "light = \"missing.json\"\n",
+            "dark = \"missing.json\"\n",
         ),
     )
     .unwrap();
@@ -187,8 +178,8 @@ fn allows_symlinked_theme_outside_project_root() {
         root.join("aster.toml"),
         concat!(
             "[highlight.themes]\n",
-            "light = \"theme.tmTheme\"\n",
-            "dark = \"theme.tmTheme\"\n",
+            "light = \"theme.json\"\n",
+            "dark = \"theme.json\"\n",
         ),
     )
     .unwrap();
@@ -202,9 +193,9 @@ fn allows_symlinked_theme_outside_project_root() {
         ),
     )
     .unwrap();
-    let external_theme = external.path().join("theme.tmTheme");
+    let external_theme = external.path().join("theme.json");
     write_theme(&external_theme, "#123456");
-    symlink(external_theme, root.join("theme.tmTheme")).unwrap();
+    symlink(external_theme, root.join("theme.json")).unwrap();
 
     let project = project(root);
     let mut session = BuildSession::new(project.clone());

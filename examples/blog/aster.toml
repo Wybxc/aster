@@ -7,6 +7,3 @@ description = "Essays about craft, tools, and thoughtful software."
 url = "https://example.com/"
 language = "en"
 author = "The Field Notes editors"
-
-[highlight]
-themes = { light = "InspiredGitHub", dark = "base16-eighties.dark" }
