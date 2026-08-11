@@ -74,6 +74,30 @@ impl<'a> CssPipeline<'a> {
         let stylesheet = if let Some(stylesheet) = self.stylesheets.get(&source) {
             stylesheet.clone()
         } else {
+            let operation = match &source {
+                StylesheetSource::Css(CssBundleSource::File(path)) => {
+                    tracing::debug_span!(
+                        target: "aster::build",
+                        "stylesheet",
+                        detail = %path.get_with_slash()
+                    )
+                }
+                StylesheetSource::Css(CssBundleSource::Memory { origin, .. }) => {
+                    tracing::debug_span!(
+                        target: "aster::build",
+                        "stylesheet",
+                        detail = %origin.get_with_slash()
+                    )
+                }
+                StylesheetSource::Tailwind(path) => {
+                    tracing::debug_span!(
+                        target: "aster::build",
+                        "tailwind",
+                        detail = %path.get_with_slash()
+                    )
+                }
+            };
+            let _operation = operation.enter();
             let bundle = match &source {
                 StylesheetSource::Css(source) => {
                     bundle_css(self.project_files, source, project_root, &self.config)

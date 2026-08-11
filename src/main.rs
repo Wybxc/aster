@@ -10,6 +10,9 @@ use crate::cli::{build, dev, diag, init, watch};
 #[derive(Parser)]
 #[command(name = "aster", version, about = "Aster build system")]
 struct Cli {
+    /// Show detailed build progress; repeat to include ordinary resources
+    #[arg(short = 'v', long = "verbose", action = clap::ArgAction::Count, global = true)]
+    verbosity: u8,
     #[command(subcommand)]
     command: Commands,
 }
@@ -52,8 +55,9 @@ enum Commands {
 }
 
 fn main() -> ExitCode {
-    diag::init();
-    match run(Cli::parse()) {
+    let cli = Cli::parse();
+    diag::init(cli.verbosity);
+    match run(cli) {
         Ok(exit) => exit,
         Err(error) => {
             diag::emit_error(&format!("{error:#}"));
@@ -74,4 +78,27 @@ fn run(cli: Cli) -> Result<ExitCode> {
         Commands::Watch { project_dir } => watch::run(project_dir)?,
     }
     Ok(ExitCode::SUCCESS)
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::error::ErrorKind;
+
+    use super::*;
+
+    #[test]
+    fn parses_global_verbosity_after_the_subcommand() {
+        let cli = Cli::try_parse_from(["aster", "build", "-vv"]).unwrap();
+        assert_eq!(cli.verbosity, 2);
+    }
+
+    #[test]
+    fn keeps_claps_version_flags() {
+        for flag in ["-V", "--version"] {
+            let error = Cli::try_parse_from(["aster", flag])
+                .err()
+                .expect("version flag should stop command parsing");
+            assert_eq!(error.kind(), ErrorKind::DisplayVersion);
+        }
+    }
 }

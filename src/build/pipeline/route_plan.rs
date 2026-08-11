@@ -38,6 +38,12 @@ pub fn plan_routes(
         let relative = Path::new(template.get_without_slash())
             .strip_prefix(Path::new(layout.pages().get_without_slash()))
             .context("route template is outside configured pages directory")?;
+        let probe = tracing::debug_span!(
+            target: "aster::build",
+            "probe",
+            detail = %relative.display()
+        )
+        .entered();
         let pattern = route::parse_template(relative)
             .with_context(|| format!("invalid route template {}", relative.display()))?;
         let (document, compiled_warnings) =
@@ -78,6 +84,7 @@ pub fn plan_routes(
                 params,
             });
         }
+        drop(probe);
     }
 
     routes.sort_by(|left, right| {

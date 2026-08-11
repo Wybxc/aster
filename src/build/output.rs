@@ -135,6 +135,21 @@ impl OutputPublication {
     /// output directory removes every stale page and content-addressed asset,
     /// so publishing the same build repeatedly produces the same tree.
     pub fn publish(self) -> Result<PublishedOutput> {
+        let file_count = self.files.len();
+        let byte_count = self
+            .files
+            .values()
+            .map(|file| file.content().len())
+            .sum::<usize>();
+        tracing::debug!(
+            target: "aster::build",
+            files = file_count,
+            bytes = byte_count,
+            output = %self.output_dir.display(),
+            "writing {file_count} {} ({byte_count} bytes) to {}",
+            if file_count == 1 { "file" } else { "files" },
+            self.output_dir.display()
+        );
         remove_if_exists(&self.output_dir)?;
         std::fs::create_dir_all(&self.output_dir)
             .with_context(|| format!("failed to create {}", self.output_dir.display()))?;

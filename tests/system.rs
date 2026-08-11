@@ -113,6 +113,43 @@ fn build_command_builds_the_selected_project() {
     for stage in ["configure", "fonts", "prepare", "plan", "render", "publish"] {
         assert!(stderr.contains(stage), "missing {stage} timing in {stderr}");
     }
+    assert!(stderr.contains("page /"), "missing page timing in {stderr}");
+    assert!(
+        !stderr.contains("compile /pages/index.typ"),
+        "default output included verbose details in {stderr}"
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_aster"))
+        .arg("build")
+        .arg("-v")
+        .arg("--project")
+        .arg(root)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    for detail in [
+        "project ",
+        "discovered ",
+        "collected 0 public files",
+        "loaded 0 content entries",
+        "probe index.typ",
+        "planned 1 page and 0 endpoints",
+        "page /",
+        "compile /pages/index.typ",
+        "transform",
+        "encode",
+        "writing 1 file",
+    ] {
+        assert!(
+            stderr.contains(detail),
+            "missing {detail} detail in {stderr}"
+        );
+    }
 }
 
 #[cfg(unix)]

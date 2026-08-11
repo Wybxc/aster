@@ -50,6 +50,15 @@ impl BuildSession {
             let config = AsterConfig::parse(content.as_slice(), &config_file)
                 .context("failed to parse aster.toml")?;
             let layout = ProjectLayout::new(&config).context("invalid project layout")?;
+            let output_dir = self.project().realize(layout.output());
+            tracing::debug!(
+                target: "aster::build",
+                project = %self.project().root().display(),
+                output = %output_dir.display(),
+                "project {} (output {})",
+                self.project().root().display(),
+                output_dir.display()
+            );
             for path in layout.watch_paths() {
                 self.files
                     .watch(path)
@@ -103,6 +112,16 @@ impl BuildSession {
                     PlannedRouteKind::Endpoint => Some(job.output.url_path()),
                 })
                 .collect::<Vec<_>>();
+            tracing::debug!(
+                target: "aster::build",
+                pages = pages.len(),
+                endpoints = endpoints.len(),
+                "planned {} {} and {} {}",
+                pages.len(),
+                if pages.len() == 1 { "page" } else { "pages" },
+                endpoints.len(),
+                if endpoints.len() == 1 { "endpoint" } else { "endpoints" }
+            );
             let route_inputs = content::with_routes(&base_inputs, &pages, &endpoints);
             drop(stage);
 
@@ -112,6 +131,15 @@ impl BuildSession {
                     PlannedRouteKind::Page => job.output.page_url_path(),
                     PlannedRouteKind::Endpoint => job.output.url_path(),
                 };
+                let route = match job.kind {
+                    PlannedRouteKind::Page => {
+                        tracing::info_span!(target: "aster::build", "page", detail = %path)
+                    }
+                    PlannedRouteKind::Endpoint => {
+                        tracing::info_span!(target: "aster::build", "endpoint", detail = %path)
+                    }
+                };
+                let _route = route.enter();
                 let library = world::library(content::with_route(&route_inputs, path, &job.params));
                 match job.kind {
                     PlannedRouteKind::Page => render_page(
@@ -155,7 +183,9 @@ fn add_public_files(
     let files = session.project_files();
     let public_root = Path::new(layout.public().get_without_slash());
 
-    for path in files.list(layout.public(), false)? {
+    let paths = files.list(layout.public(), false)?;
+    let count = paths.len();
+    for path in paths {
         let relative = Path::new(path.get_without_slash())
             .strip_prefix(public_root)
             .context("public file is outside configured public directory")?;
@@ -164,6 +194,12 @@ fn add_public_files(
             .with_context(|| format!("failed to read public file {}", path.get_with_slash()))?;
         publication.add_public_file(relative, content)?;
     }
+    tracing::debug!(
+        target: "aster::build",
+        files = count,
+        "collected {count} public {}",
+        if count == 1 { "file" } else { "files" }
+    );
     Ok(())
 }
 
@@ -179,9 +215,18 @@ fn render_page(
     ),
     warnings: &mut Vec<BuildWarning>,
 ) -> Result<()> {
+    let stage = tracing::debug_span!(
+        target: "aster::build",
+        "compile",
+        detail = %job.template.get_with_slash()
+    )
+    .entered();
     let (mut document, compiled_warnings) =
         world::compile_document(session, &job.template, library)?;
     warnings.extend(compiled_warnings);
+    drop(stage);
+
+    let stage = tracing::debug_span!(target: "aster::build", "transform").entered();
     let resources = transform::ComponentResources::collect(&document)?;
 
     let mut page = publication.page(&job.template, &job.output);
@@ -193,8 +238,12 @@ fn render_page(
         transform::process_document(&mut document, &mut page, &mut processors)?;
     }
     resources.apply(&mut document, &mut page, assets)?;
+    drop(stage);
+
+    let stage = tracing::debug_span!(target: "aster::build", "encode").entered();
     let html = typst_html::html(&document, &typst_html::HtmlOptions { pretty })
         .map_err(|error| anyhow::anyhow!("HTML encoding failed: {error:?}"))?;
+    drop(stage);
     page.add_html(html)
 }
 
@@ -205,11 +254,21 @@ fn render_endpoint(
     library: &LazyHash<Library>,
     warnings: &mut Vec<BuildWarning>,
 ) -> Result<()> {
+    let stage = tracing::debug_span!(
+        target: "aster::build",
+        "compile",
+        detail = %job.template.get_with_slash()
+    )
+    .entered();
     let (document, compiled_warnings) = world::compile_document(session, &job.template, library)?;
     warnings.extend(compiled_warnings);
+    drop(stage);
+
+    let stage = tracing::debug_span!(target: "aster::build", "extract").entered();
     let content = endpoint::extract(document.introspector().as_ref())
         .context("invalid endpoint declaration")?
         .context("endpoint route did not produce <aster-endpoint>")?;
+    drop(stage);
     publication.add_generated_file(job.output.clone(), content)
 }
 
@@ -251,5 +310,12 @@ fn load_content(
         });
     }
 
+    tracing::debug!(
+        target: "aster::build",
+        entries = entries.len(),
+        "loaded {} content {}",
+        entries.len(),
+        if entries.len() == 1 { "entry" } else { "entries" }
+    );
     Ok(content::protocol(entries))
 }

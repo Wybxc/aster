@@ -29,9 +29,31 @@ pub fn configure_fonts(
         .font_dirs()
         .map(|path| session.files.directory(path))
         .collect::<Result<Vec<_>, _>>()?;
-    if session.font_config.as_ref() != Some(config) || !config.paths.is_empty() {
+    let refresh = session.font_config.as_ref() != Some(config) || !config.paths.is_empty();
+    if refresh {
         session.fonts = discover_fonts(config, directories.iter().map(PathBuf::as_path));
         session.font_config = Some(config.clone());
+    }
+    let count = session
+        .fonts
+        .book()
+        .families()
+        .map(|(_, variants)| variants.count())
+        .sum::<usize>();
+    if refresh {
+        tracing::debug!(
+            target: "aster::build",
+            fonts = count,
+            "discovered {count} font {}",
+            if count == 1 { "face" } else { "faces" }
+        );
+    } else {
+        tracing::debug!(
+            target: "aster::build",
+            fonts = count,
+            "reused {count} font {}",
+            if count == 1 { "face" } else { "faces" }
+        );
     }
     Ok(())
 }

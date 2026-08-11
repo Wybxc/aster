@@ -179,6 +179,8 @@ impl HighlightProcessor {
             return Ok(tokens.clone());
         }
 
+        let operation =
+            tracing::debug_span!(target: "aster::build", "highlight", detail = %lang).entered();
         if self.languages.is_none() {
             self.languages = Some(LanguageRegistry::new()?);
         }
@@ -191,6 +193,7 @@ impl HighlightProcessor {
             Some(events) => events_to_tokens(code, lang, events),
             None => eco_vec![(lang.into(), EcoString::new(), code.into())],
         };
+        drop(operation);
         self.dynamic_tokens.insert(key, tokens.clone());
         Ok(tokens)
     }

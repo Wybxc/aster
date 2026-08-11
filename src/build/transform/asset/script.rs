@@ -67,6 +67,12 @@ impl<'a> ScriptPipeline<'a> {
         if let Some(module) = self.modules.get(&source) {
             return Ok(module.clone());
         }
+        let operation = tracing::debug_span!(
+            target: "aster::build",
+            "module",
+            detail = %source.origin().get_with_slash()
+        )
+        .entered();
         let module = bundle_module(
             self.project_files,
             &source,
@@ -74,6 +80,7 @@ impl<'a> ScriptPipeline<'a> {
             Path::new("esbuild"),
         )
         .map_err(|error| anyhow::anyhow!("{error:#}"))?;
+        drop(operation);
         self.modules.insert(source, module.clone());
         Ok(module)
     }

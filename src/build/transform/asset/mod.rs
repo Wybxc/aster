@@ -321,13 +321,24 @@ impl<'a> AssetProcessor<'a> {
             let Some(asset) = decode_data_url(url, self.inline_threshold)? else {
                 return Ok(None);
             };
+            let operation =
+                tracing::trace_span!(target: "aster::build", "asset", detail = "data URL")
+                    .entered();
             let content = self.images.optimize(Bytes::new(asset.content), limit);
-            return page.add_data_asset(asset.extension, content).map(Some);
+            let result = page.add_data_asset(asset.extension, content).map(Some);
+            drop(operation);
+            return result;
         }
 
         let Some(reference) = resolve_project_reference(page, span, reference)? else {
             return Ok(None);
         };
+        let operation = tracing::trace_span!(
+            target: "aster::build",
+            "asset",
+            detail = %reference.source.get_with_slash()
+        )
+        .entered();
         let content = self
             .project_files
             .read(&reference.source)
@@ -339,6 +350,7 @@ impl<'a> AssetProcessor<'a> {
             })?;
         let content = self.images.optimize(content, limit);
         let url = page.add_asset(&reference.source, content)?;
+        drop(operation);
         Ok(Some(reference.with_url(url)))
     }
 }
