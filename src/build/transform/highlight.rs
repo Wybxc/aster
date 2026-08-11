@@ -3,14 +3,14 @@ use std::fmt::Write;
 use std::path::Path;
 use std::sync::Arc;
 
+use ::typst::ecow::{EcoString, EcoVec, eco_format, eco_vec};
+use ::typst::foundations::Bytes;
+use ::typst::syntax::{Span, VirtualPath};
 use anyhow::Result;
 use comemo::Tracked;
 use lumis_core::events::HighlightEvent;
 use lumis_core::highlights::HIGHLIGHT_NAMES;
 use lumis_core::themes::{self, Style, TextDecoration, Theme, UnderlineStyle};
-use typst::ecow::{EcoString, EcoVec, eco_format, eco_vec};
-use typst::foundations::Bytes;
-use typst::syntax::{LinkedNode, Span, SyntaxNode, Tag, VirtualPath, parse_code, parse_math};
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 
 use crate::build::BuildWarning;
@@ -23,6 +23,7 @@ use super::{Processor, WalkControl};
 
 mod cache;
 mod language;
+mod typst;
 
 use self::language::LanguageRegistry;
 
@@ -40,9 +41,6 @@ enum ThemeError {
     #[error(transparent)]
     File(#[from] FileAccessError),
 }
-
-/// Languages that Typst can parse with its own AST.
-const TYPST_LANGS: &[&str] = &["typ", "typst", "typc", "typm"];
 
 type HighlightToken = (EcoString, EcoString, EcoString);
 
@@ -173,8 +171,8 @@ impl Processor for HighlightProcessor {
 
 impl HighlightProcessor {
     fn highlight_tokens(&mut self, code: &str, lang: &str) -> Result<EcoVec<HighlightToken>> {
-        if TYPST_LANGS.contains(&lang) {
-            return Ok(do_typst_highlight(code, lang));
+        if let Some(tokens) = typst::highlight(code, lang) {
+            return Ok(tokens);
         }
 
         let key = (lang.into(), code.into());
@@ -235,32 +233,6 @@ fn attach_stylesheet(document: &mut HtmlDocument, url: EcoString) {
     append_to_head(document, link);
 }
 
-/// Parse Typst code into Lumis-compatible semantic scopes from its native AST.
-#[comemo::memoize]
-fn do_typst_highlight(code: &str, lang: &str) -> EcoVec<HighlightToken> {
-    let root: SyntaxNode = match lang {
-        "typc" => parse_code(code),
-        "typm" => parse_math(code),
-        _ => typst::syntax::parse(code),
-    };
-
-    let mut native_tokens = EcoVec::new();
-    walk_typst_node(code, &LinkedNode::new(&root), "", &mut native_tokens);
-
-    let mut out = EcoVec::new();
-    for (language, scope, text) in native_tokens {
-        for (i, segment) in text.split('\n').enumerate() {
-            if i > 0 {
-                out.push(("typst".into(), EcoString::new(), "\n".into()));
-            }
-            if !segment.is_empty() {
-                out.push((language.clone(), scope.clone(), segment.into()));
-            }
-        }
-    }
-    out
-}
-
 /// Convert Lumis source ranges into tokens carrying their effective semantic scope.
 fn events_to_tokens(
     code: &str,
@@ -295,54 +267,6 @@ fn events_to_tokens(
         }
     }
     out
-}
-
-/// Walk Typst's AST collecting scope-and-text pairs (theme-independent).
-fn walk_typst_node<'a>(
-    code: &str,
-    node: &LinkedNode<'a>,
-    scope: &'static str,
-    tokens: &mut EcoVec<HighlightToken>,
-) {
-    if node.children().len() == 0 {
-        let text = &code[node.range()];
-        if !text.is_empty() {
-            tokens.push(("typst".into(), scope.into(), text.into()));
-        }
-        return;
-    }
-
-    for child in node.children() {
-        let child_scope = typst::syntax::highlight(&child)
-            .map(typst_scope)
-            .unwrap_or(scope);
-        walk_typst_node(code, &child, child_scope, tokens);
-    }
-}
-
-fn typst_scope(tag: Tag) -> &'static str {
-    match tag {
-        Tag::Comment => "comment",
-        Tag::Punctuation => "punctuation.delimiter",
-        Tag::Escape => "string.escape",
-        Tag::Strong => "markup.strong",
-        Tag::Emph => "markup.italic",
-        Tag::Link => "markup.link.url",
-        Tag::Raw => "markup.raw",
-        Tag::Label => "markup.link.label",
-        Tag::Ref => "markup.link",
-        Tag::Heading => "markup.heading",
-        Tag::ListMarker | Tag::ListTerm => "markup.list",
-        Tag::MathDelimiter => "punctuation.special",
-        Tag::MathOperator | Tag::Operator => "operator",
-        Tag::MathGroupingParens => "punctuation.bracket",
-        Tag::Keyword => "keyword",
-        Tag::Number => "number",
-        Tag::String => "string",
-        Tag::Function => "function.call",
-        Tag::Interpolated => "variable",
-        Tag::Error => "error",
-    }
 }
 
 /// Load a Lumis theme by built-in name or project-root-relative JSON path.
@@ -589,23 +513,8 @@ mod tests {
 
     #[test]
     fn highlighting_preserves_source_text() {
-        let typst = concat!(
-            "let protocol = 1\n",
-            "let posts = (\n",
-            "  blog: (hello-world: (id: \"hello-world\",)),\n",
-            ")\n",
-        );
-        let invalid_typst = concat!(
-            "state.protocol = 1\n",
-            "collections.blog.\"hello-world\".rendered = (\n",
-            "  (kind: \"element\", tag: \"h2\"),\n",
-            ")\n",
-        );
         let json = "{\n  \"a\": 1,\n  \"b\": 2\n}\n";
 
-        for code in [typst, invalid_typst] {
-            assert_eq!(highlighted_text(&do_typst_highlight(code, "typc")), code);
-        }
         let events = vec![HighlightEvent::Source {
             start: 0,
             end: json.len(),
@@ -614,19 +523,6 @@ mod tests {
             highlighted_text(&events_to_tokens(json, "json", events)),
             json
         );
-    }
-
-    #[test]
-    fn maps_typst_code_and_math_to_lumis_scopes() {
-        for (language, source) in [("typc", "let answer = 42"), ("typm", "x^2 + y^2")] {
-            let tokens = do_typst_highlight(source, language);
-            assert_eq!(highlighted_text(&tokens), source);
-            assert!(
-                tokens
-                    .iter()
-                    .any(|(language, scope, _)| { language == "typst" && !scope.is_empty() })
-            );
-        }
     }
 
     #[test]
