@@ -14,7 +14,6 @@ path = "src/main.rs"
 [dependencies]
 aho-corasick = "1"
 anyhow = "1"
-base64 = "0.22"
 clap = { version = "4", features = ["derive"] }
 comemo = "0.5"
 cssparser = "0.37"
@@ -24,8 +23,8 @@ futures-util = "0.3"
 image = { version = "0.25.10", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
 include_dir = "0.7"
 lightningcss = { version = "=1.0.0-alpha.72", default-features = false, features = ["bundler", "browserslist"] }
-lumis-core = { version = "2.3.0", default-features = false }
-lumis-wasm-runtime = "0.1.0"
+lumis-core = { git = "https://github.com/leandrocp/lumis", rev = "8b8ec59b8f41a7f8be3e529fa157c708dc8b2570", default-features = false }
+lumis-wasm-runtime = { git = "https://github.com/leandrocp/lumis", rev = "8b8ec59b8f41a7f8be3e529fa157c708dc8b2570" }
 mime_guess = "2"
 notify-debouncer-full = "0.7"
 oxipng = { version = "10.1.1", default-features = false }
@@ -35,7 +34,6 @@ scopeguard = "1.2"
 seahash = "4.1.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sha2 = "0.10"
 tempfile = "3"
 termcolor = "1"
 thiserror = "2"

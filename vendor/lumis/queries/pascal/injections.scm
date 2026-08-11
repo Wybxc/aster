@@ -1,6 +1,0 @@
-; This file is auto-generated. Do not edit.
-((comment) @injection.content
-  (#set! injection.language "comment"))
-
-((asmBody) @injection.content
-  (#set! injection.language "asm"))

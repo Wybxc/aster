@@ -131,6 +131,50 @@ fn applies_lumis_themes_to_dynamic_rust_highlighting() {
 }
 
 #[test]
+fn highlights_injected_languages_in_one_pass() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join("pages")).unwrap();
+    std::fs::write(
+        root.join("aster.toml"),
+        concat!(
+            "[highlight.themes]\n",
+            "light = \"theme.json\"\n",
+            "dark = \"theme.json\"\n",
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("theme.json"),
+        r##"{
+  "name": "Injection Test",
+  "appearance": "light",
+  "revision": "test",
+  "highlights": {
+    "keyword.javascript": { "fg": "#123456" }
+  }
+}
+"##,
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("pages/index.typ"),
+        concat!(
+            "#html.html({\n",
+            "  html.head[]\n",
+            "  html.body[#raw(\"<script>const answer = true;</script>\", block: true, lang: \"html\")]\n",
+            "})\n",
+        ),
+    )
+    .unwrap();
+
+    BuildSession::new(project(root)).build().unwrap();
+
+    let css = highlight_stylesheet(root);
+    assert!(css.contains("color:#123456"));
+}
+
+#[test]
 fn invalid_theme_warns_once_for_the_whole_build() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();

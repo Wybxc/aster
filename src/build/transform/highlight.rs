@@ -21,7 +21,6 @@ use crate::foundation::config::HighlightConfig;
 use super::dom::{HtmlElementExt, append_to_head};
 use super::{Processor, WalkControl};
 
-mod cache;
 mod language;
 mod typst;
 
@@ -185,7 +184,7 @@ impl HighlightProcessor {
         }
         let tokens = match self
             .languages
-            .as_mut()
+            .as_ref()
             .expect("language registry initialized")
             .highlight(code, lang)?
         {
