@@ -108,7 +108,11 @@ fn build_command_builds_the_selected_project() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(root.join("dist/index.html").is_file());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("built 1 page"));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("built 1 page"));
+    for stage in ["configure", "fonts", "prepare", "plan", "render", "publish"] {
+        assert!(stderr.contains(stage), "missing {stage} timing in {stderr}");
+    }
 }
 
 #[cfg(unix)]

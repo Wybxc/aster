@@ -1,12 +1,22 @@
 use std::io::Write;
 use std::net::SocketAddr;
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use aster::BuildOutcome;
 use termcolor::{ColorChoice, ColorSpec, StandardStream, WriteColor};
+use tracing::Subscriber;
+use tracing::span::{Attributes, Id};
+use tracing_subscriber::layer::{Context, Layer, SubscriberExt};
+use tracing_subscriber::registry::LookupSpan;
+
 fn writer() -> StandardStream {
     StandardStream::stderr(ColorChoice::Auto)
+}
+
+pub fn init() {
+    let subscriber = tracing_subscriber::registry().with(ProgressLayer);
+    let _ = tracing::subscriber::set_global_default(subscriber);
 }
 
 pub fn emit_summary(page_count: usize, endpoint_count: usize, elapsed: Duration) {
@@ -107,4 +117,67 @@ pub fn report_build(outcome: &BuildOutcome) {
         outcome.endpoints.len(),
         outcome.elapsed,
     );
+}
+
+struct ProgressLayer;
+
+struct ProgressStarted(Instant);
+
+impl<S> Layer<S> for ProgressLayer
+where
+    S: Subscriber + for<'lookup> LookupSpan<'lookup>,
+{
+    fn enabled(&self, metadata: &tracing::Metadata<'_>, _context: Context<'_, S>) -> bool {
+        metadata.target() == "aster::build"
+    }
+
+    fn on_new_span(&self, attributes: &Attributes<'_>, id: &Id, context: Context<'_, S>) {
+        let Some(span) = context.span(id) else {
+            return;
+        };
+        span.extensions_mut()
+            .insert(ProgressStarted(Instant::now()));
+        emit_progress_start(attributes.metadata().name());
+    }
+
+    fn on_close(&self, id: Id, context: Context<'_, S>) {
+        let Some(span) = context.span(&id) else {
+            return;
+        };
+        let elapsed = span
+            .extensions()
+            .get::<ProgressStarted>()
+            .map(|start| start.0.elapsed());
+        if let Some(elapsed) = elapsed {
+            emit_progress_finish(elapsed);
+        }
+    }
+}
+
+fn emit_progress_start(label: &str) {
+    let mut writer = writer();
+    let _ = writer.set_color(
+        ColorSpec::new()
+            .set_fg(Some(termcolor::Color::Cyan))
+            .set_bold(true),
+    );
+    let _ = write!(writer, "{label:<10}");
+    let _ = writer.reset();
+    let _ = write!(writer, " ...");
+    let _ = writer.flush();
+}
+
+fn emit_progress_finish(elapsed: Duration) {
+    let mut writer = writer();
+    let _ = writeln!(writer, " {}", format_duration(elapsed));
+}
+
+fn format_duration(duration: Duration) -> String {
+    if duration < Duration::from_millis(1) {
+        "<1ms".into()
+    } else if duration < Duration::from_secs(1) {
+        format!("{}ms", duration.as_millis())
+    } else {
+        format!("{:.2}s", duration.as_secs_f64())
+    }
 }

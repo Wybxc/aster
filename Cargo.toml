@@ -39,6 +39,8 @@ termcolor = "1"
 thiserror = "2"
 tokio = { version = "1", features = ["net", "rt", "sync", "time"] }
 toml = "1.1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["registry"] }
 typst = "0.15.1"
 typst-eval = "0.15.1"
 typst-html = "0.15.1"

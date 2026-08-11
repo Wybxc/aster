@@ -37,8 +37,10 @@ pub struct BuildOutcome {
 impl BuildSession {
     /// Build and publish the complete project output tree.
     pub fn build(&mut self) -> Result<BuildOutcome> {
+        let started = Instant::now();
         self.reset();
         let outcome = (|| {
+            let stage = tracing::info_span!(target: "aster::build", "configure").entered();
             let config_file = self.project().config_file();
             let config_path = self.project().config_path();
             let content = self
@@ -53,10 +55,14 @@ impl BuildSession {
                     .watch(path)
                     .context("failed to inspect configured watch paths")?;
             }
+            drop(stage);
+
+            let stage = tracing::info_span!(target: "aster::build", "fonts").entered();
             world::configure_fonts(self, &config.typst.fonts, &layout)?;
+            drop(stage);
 
             let session = &*self;
-            let started = Instant::now();
+            let stage = tracing::info_span!(target: "aster::build", "prepare").entered();
             let project = session.project().clone();
             let mut warnings = Vec::new();
             let mut publication = OutputPublication::new(&project, &layout)?;
@@ -77,6 +83,9 @@ impl BuildSession {
                 load_content(session, &layout).context("failed to load content collections")?;
             let base_inputs = content::inputs(protocol);
             let base_library = world::library(base_inputs.clone());
+            drop(stage);
+
+            let stage = tracing::info_span!(target: "aster::build", "plan").entered();
             let (routes, route_warnings) = plan_routes(session, &layout, &base_library)?;
             warnings.extend(route_warnings);
 
@@ -95,7 +104,9 @@ impl BuildSession {
                 })
                 .collect::<Vec<_>>();
             let route_inputs = content::with_routes(&base_inputs, &pages, &endpoints);
+            drop(stage);
 
+            let stage = tracing::info_span!(target: "aster::build", "render").entered();
             for job in routes {
                 let path = match job.kind {
                     PlannedRouteKind::Page => job.output.page_url_path(),
@@ -118,8 +129,11 @@ impl BuildSession {
                 }
                 .with_context(|| format!("failed to build {}", job.output))?;
             }
+            drop(stage);
 
+            let stage = tracing::info_span!(target: "aster::build", "publish").entered();
             let published = publication.publish()?;
+            drop(stage);
             Ok(BuildOutcome {
                 output_dir: published.output_dir,
                 outputs: published.pages,

@@ -52,6 +52,7 @@ enum Commands {
 }
 
 fn main() -> ExitCode {
+    diag::init();
     match run(Cli::parse()) {
         Ok(exit) => exit,
         Err(error) => {
