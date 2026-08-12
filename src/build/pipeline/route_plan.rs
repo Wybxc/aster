@@ -53,8 +53,9 @@ pub fn plan_pages(
     session: &BuildSession,
     layout: &ProjectLayout,
     runtime: &Runtime,
-) -> Result<(Vec<PlannedRoute>, Vec<BuildWarning>)> {
-    plan_templates(session, layout, TemplateKind::Page, runtime)
+    warnings: &mut Vec<BuildWarning>,
+) -> Result<Vec<PlannedRoute>> {
+    plan_templates(session, layout, TemplateKind::Page, runtime, warnings)
 }
 
 /// Plan exact-path generated files after the rendered site is available.
@@ -63,10 +64,11 @@ pub fn plan_generators(
     layout: &ProjectLayout,
     runtime: &Runtime,
     pages: &[PlannedRoute],
-) -> Result<(Vec<PlannedRoute>, Vec<BuildWarning>)> {
-    let (generators, warnings) = plan_templates(session, layout, TemplateKind::Generator, runtime)?;
+    warnings: &mut Vec<BuildWarning>,
+) -> Result<Vec<PlannedRoute>> {
+    let generators = plan_templates(session, layout, TemplateKind::Generator, runtime, warnings)?;
     validate_outputs(pages, &generators)?;
-    Ok((generators, warnings))
+    Ok(generators)
 }
 
 /// Validate collisions across independently planned page and generator routes.
@@ -94,11 +96,11 @@ fn plan_templates(
     layout: &ProjectLayout,
     kind: TemplateKind,
     runtime: &Runtime,
-) -> Result<(Vec<PlannedRoute>, Vec<BuildWarning>)> {
+    warnings: &mut Vec<BuildWarning>,
+) -> Result<Vec<PlannedRoute>> {
     let root = kind.root(layout);
     let templates = files::list_typst_files(session.project_files(), root, kind.required())?;
     let mut routes = Vec::new();
-    let mut warnings = Vec::new();
 
     for template in templates {
         let relative = Path::new(template.get_without_slash())
@@ -118,10 +120,8 @@ fn plan_templates(
                 message = "probed dynamic template"
             )
             .entered();
-            let (document, compiled_warnings) =
-                world::compile_document(session, &template, runtime)
-                    .with_context(|| format!("failed to probe {}", relative.display()))?;
-            warnings.extend(compiled_warnings);
+            let document = world::compile_document(session, &template, runtime, warnings)
+                .with_context(|| format!("failed to probe {}", relative.display()))?;
             let params = route::extract_params(document.introspector().as_ref())
                 .with_context(|| format!("invalid route metadata in {}", relative.display()))?;
             if params.is_empty() {
@@ -154,5 +154,5 @@ fn plan_templates(
         })
     });
     validate_outputs(&routes, &[])?;
-    Ok((routes, warnings))
+    Ok(routes)
 }

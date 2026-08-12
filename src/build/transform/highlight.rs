@@ -82,39 +82,35 @@ impl HighlightProcessor {
     pub fn new(
         config: &HighlightConfig,
         project_files: Tracked<ProjectFiles>,
-    ) -> Result<(Self, Option<BuildWarning>)> {
+        warnings: &mut Vec<BuildWarning>,
+    ) -> Self {
         if !config.enabled {
-            return Ok((
-                Self {
-                    themes: None,
-                    styles: Vec::new(),
-                    languages: None,
-                    dynamic_tokens: HashMap::new(),
-                },
-                None,
-            ));
+            return Self {
+                themes: None,
+                styles: Vec::new(),
+                languages: None,
+                dynamic_tokens: HashMap::new(),
+            };
         }
-        let (themes, warning) = match load_themes(
+        let themes = match load_themes(
             config.themes.light.as_str(),
             config.themes.dark.as_str(),
             project_files,
         ) {
-            Ok(themes) => (Some(themes), None),
+            Ok(themes) => Some(themes),
             Err(error) => {
-                let warning =
-                    BuildWarning::new(eco_format!("failed to resolve highlight CSS: {error:#}"));
-                (None, Some(warning))
+                warnings.push(BuildWarning::new(eco_format!(
+                    "failed to resolve highlight CSS: {error:#}"
+                )));
+                None
             }
         };
-        Ok((
-            Self {
-                themes,
-                styles: Vec::new(),
-                languages: None,
-                dynamic_tokens: HashMap::new(),
-            },
-            warning,
-        ))
+        Self {
+            themes,
+            styles: Vec::new(),
+            languages: None,
+            dynamic_tokens: HashMap::new(),
+        }
     }
 }
 

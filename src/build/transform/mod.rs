@@ -35,10 +35,11 @@ impl<'a> DocumentTransform<'a> {
         assets: &AssetsConfig,
         css: &CssConfig,
         highlight: &HighlightConfig,
-    ) -> Result<(Self, Option<BuildWarning>)> {
+        warnings: &mut Vec<BuildWarning>,
+    ) -> Result<Self> {
         let assets = AssetProcessor::new(project_files, project_root, assets, css)?;
-        let (highlight, warning) = HighlightProcessor::new(highlight, project_files)?;
-        Ok((Self { assets, highlight }, warning))
+        let highlight = HighlightProcessor::new(highlight, project_files, warnings);
+        Ok(Self { assets, highlight })
     }
 
     pub fn render(

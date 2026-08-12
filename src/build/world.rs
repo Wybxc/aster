@@ -63,7 +63,8 @@ pub fn compile_document(
     session: &BuildSession,
     entry: &VirtualPath,
     runtime: &Runtime,
-) -> Result<(typst_html::HtmlDocument, Vec<BuildWarning>)> {
+    warnings: &mut Vec<BuildWarning>,
+) -> Result<typst_html::HtmlDocument> {
     let world = world(session, entry, runtime.library());
     let warned = compile_html((&world as &dyn World).track());
     let document = warned
@@ -71,21 +72,23 @@ pub fn compile_document(
         .map_err(|diagnostics| diagnostic_error(&world, "compilation failed", &diagnostics))?;
 
     const TYPST_HTML_WARNING: &str = "html export is under active development and incomplete";
-    let warnings = warned
-        .warnings
-        .iter()
-        .filter(|warning| warning.message.as_str() != TYPST_HTML_WARNING)
-        .map(|warning| format_warning(&world, warning))
-        .collect();
-    Ok((document, warnings))
+    warnings.extend(
+        warned
+            .warnings
+            .iter()
+            .filter(|warning| warning.message.as_str() != TYPST_HTML_WARNING)
+            .map(|warning| format_warning(&world, warning)),
+    );
+    Ok(document)
 }
 
 pub fn evaluate_generator(
     session: &BuildSession,
     entry: &VirtualPath,
     runtime: &Runtime,
-) -> Result<(Bytes, Vec<BuildWarning>)> {
-    let (document, warnings) = compile_document(session, entry, runtime)?;
+    warnings: &mut Vec<BuildWarning>,
+) -> Result<Bytes> {
+    let document = compile_document(session, entry, runtime, warnings)?;
     let selector = Selector::Label(
         Label::construct("aster-output".into()).expect("generator label is non-empty"),
     );
@@ -107,7 +110,7 @@ pub fn evaluate_generator(
         (Some(Value::Bytes(content)), None) => content,
         (Some(_), None) => anyhow::bail!("generator output must be a string or bytes"),
     };
-    Ok((output, warnings))
+    Ok(output)
 }
 
 fn world<'a>(

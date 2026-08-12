@@ -70,22 +70,21 @@ impl BuildSession {
                 .add_public_tree(session.project_files(), layout.public())
                 .context("failed to collect public files")?;
 
-            let (mut transform, transform_warning) = DocumentTransform::new(
+            let mut transform = DocumentTransform::new(
                 session.project_files(),
                 project.root(),
                 &config.assets,
                 &config.css,
                 &config.highlight,
+                &mut warnings,
             )?;
-            warnings.extend(transform_warning);
 
             let runtime = super::content::load(session.project_files(), layout.content())
                 .context("failed to load content collections")?;
             drop(stage);
 
             let stage = tracing::info_span!("plan", message = "planned routes").entered();
-            let (pages, page_warnings) = plan_pages(session, &layout, &runtime)?;
-            warnings.extend(page_warnings);
+            let pages = plan_pages(session, &layout, &runtime, &mut warnings)?;
             let page_paths = pages
                 .iter()
                 .map(|job| job.output.page_url_path())
@@ -112,9 +111,8 @@ impl BuildSession {
                     message = "compiled"
                 )
                 .entered();
-                let (document, compiled_warnings) =
-                    world::compile_document(session, &job.template, &route_runtime)?;
-                warnings.extend(compiled_warnings);
+                let document =
+                    world::compile_document(session, &job.template, &route_runtime, &mut warnings)?;
                 drop(stage);
                 let page = transform
                     .render(
@@ -129,9 +127,7 @@ impl BuildSession {
 
             let stage = tracing::info_span!("generate", message = "ran generators").entered();
             let runtime = runtime.with_site(&site_pages);
-            let (generators, generator_warnings) =
-                plan_generators(session, &layout, &runtime, &pages)?;
-            warnings.extend(generator_warnings);
+            let generators = plan_generators(session, &layout, &runtime, &pages, &mut warnings)?;
             tracing::debug!(
                 generators = generators.len(),
                 "planned {} generator{}",
@@ -153,10 +149,13 @@ impl BuildSession {
                     message = "compiled"
                 )
                 .entered();
-                let (content, compiled_warnings) =
-                    world::evaluate_generator(session, &job.template, &route_runtime)
-                        .context("invalid generator output")?;
-                warnings.extend(compiled_warnings);
+                let content = world::evaluate_generator(
+                    session,
+                    &job.template,
+                    &route_runtime,
+                    &mut warnings,
+                )
+                .context("invalid generator output")?;
                 drop(stage);
                 publication
                     .add_generator_output(job.output.clone(), content)
