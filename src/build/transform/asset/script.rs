@@ -70,7 +70,7 @@ impl<'a> ScriptPipeline<'a> {
         let operation = tracing::debug_span!(
             "module",
             source = %source.origin().get_with_slash(),
-            message = %format_args!("bundled module {}", source.origin().get_with_slash())
+            message = "bundled module"
         )
         .entered();
         let module = bundle_module(

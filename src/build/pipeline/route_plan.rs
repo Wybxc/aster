@@ -41,7 +41,7 @@ pub fn plan_routes(
         let probe = tracing::debug_span!(
             "probe",
             template = %relative.display(),
-            message = %format_args!("probed template {}", relative.display())
+            message = "probed template"
         )
         .entered();
         let pattern = route::parse_template(relative)

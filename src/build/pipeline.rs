@@ -54,9 +54,7 @@ impl BuildSession {
             tracing::debug!(
                 project = %self.project().root().display(),
                 output = %output_dir.display(),
-                "configured project {} with output {}",
-                self.project().root().display(),
-                output_dir.display()
+                "configured project"
             );
             for path in layout.watch_paths() {
                 self.files
@@ -134,14 +132,14 @@ impl BuildSession {
                         tracing::info_span!(
                             "page",
                             route = %path,
-                            message = %format_args!("rendered page {path}")
+                            message = "rendered page"
                         )
                     }
                     PlannedRouteKind::Endpoint => {
                         tracing::info_span!(
                             "endpoint",
                             route = %path,
-                            message = %format_args!("generated endpoint {path}")
+                            message = "generated endpoint"
                         )
                     }
                 };
@@ -223,7 +221,7 @@ fn render_page(
     let stage = tracing::debug_span!(
         "compile",
         source = %job.template.get_with_slash(),
-        message = %format_args!("compiled {}", job.template.get_with_slash())
+        message = "compiled"
     )
     .entered();
     let (mut document, compiled_warnings) =
@@ -262,7 +260,7 @@ fn render_endpoint(
     let stage = tracing::debug_span!(
         "compile",
         source = %job.template.get_with_slash(),
-        message = %format_args!("compiled {}", job.template.get_with_slash())
+        message = "compiled"
     )
     .entered();
     let (document, compiled_warnings) = world::compile_document(session, &job.template, library)?;

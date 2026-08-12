@@ -182,7 +182,7 @@ impl HighlightProcessor {
         let operation = tracing::debug_span!(
             "highlight",
             language = %lang,
-            message = %format_args!("highlighted {lang}")
+            message = "highlighted"
         )
         .entered();
         if self.languages.is_none() {

@@ -339,7 +339,7 @@ impl<'a> AssetProcessor<'a> {
         let operation = tracing::trace_span!(
             "asset",
             source = %reference.source.get_with_slash(),
-            message = %format_args!("processed asset {}", reference.source.get_with_slash())
+            message = "processed asset"
         )
         .entered();
         let content = self

@@ -21,8 +21,7 @@ pub fn run(project_dir: Option<PathBuf>) -> Result<()> {
     let mut watcher = Watcher::new().context("failed to initialize file watcher")?;
     tracing::info!(
         project = %project.root().display(),
-        "watching project {}",
-        project.root().display()
+        "watching project"
     );
 
     loop {

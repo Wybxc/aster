@@ -37,8 +37,7 @@ pub fn run(project_dir: Option<PathBuf>, host: IpAddr, port: u16) -> Result<()> 
     let server = DevServer::start(SocketAddr::new(host, port))?;
     tracing::info!(
         address = %format_args!("http://{}/", server.address()),
-        "serving project at http://{}/",
-        server.address()
+        "serving project at"
     );
 
     loop {

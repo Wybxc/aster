@@ -79,24 +79,22 @@ impl<'a> CssPipeline<'a> {
                     tracing::debug_span!(
                         "stylesheet",
                         source = %path.get_with_slash(),
-                        message = %format_args!("bundled stylesheet {}", path.get_with_slash())
+                        message = "bundled stylesheet"
                     )
                 }
                 StylesheetSource::Css(CssBundleSource::Memory { origin, .. }) => {
                     tracing::debug_span!(
                         "stylesheet",
                         source = %origin.get_with_slash(),
-                        message = %format_args!("bundled stylesheet {}", origin.get_with_slash())
+                        message = "bundled stylesheet"
                     )
                 }
                 StylesheetSource::Tailwind(path) => {
                     tracing::debug_span!(
                         "tailwind",
                         source = %path.get_with_slash(),
-                        message = %format_args!(
-                            "processed stylesheet {} with Tailwind",
-                            path.get_with_slash()
-                        )
+                        tool = "Tailwind",
+                        message = "processed stylesheet"
                     )
                 }
             };

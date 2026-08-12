@@ -22,8 +22,7 @@ pub fn run(destination: PathBuf) -> Result<()> {
 
     tracing::info!(
         project = %destination.display(),
-        "initialized project {}",
-        destination.display()
+        "initialized project"
     );
     Ok(())
 }

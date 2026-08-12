@@ -19,9 +19,10 @@ pub fn init(verbosity: u8) {
         _ => LevelFilter::TRACE,
     };
     let targets = Targets::new().with_target(env!("CARGO_CRATE_NAME"), level);
-    let ansi = std::io::stderr().is_terminal();
+    let ansi = std::io::stderr().is_terminal()
+        && std::env::var_os("NO_COLOR").is_none_or(|value| value.is_empty());
     let layer = tracing_subscriber::fmt::layer()
-        .fmt_fields(SentenceFields)
+        .fmt_fields(SentenceFields { ansi })
         .with_span_events(FmtSpan::CLOSE)
         .event_format(IndentedFormat { ansi })
         .with_writer(std::io::stderr)
@@ -53,43 +54,102 @@ pub fn report_build(outcome: &BuildOutcome) {
     );
 }
 
-struct SentenceFields;
+struct SentenceFields {
+    ansi: bool,
+}
 
 impl<'writer> FormatFields<'writer> for SentenceFields {
     fn format_fields<R: RecordFields>(&self, writer: Writer<'writer>, fields: R) -> fmt::Result {
         let mut visitor = SentenceVisitor {
             writer,
-            result: Ok(()),
+            ansi: self.ansi,
+            message: None,
+            parts: Vec::new(),
         };
         fields.record(&mut visitor);
-        visitor.result
+        visitor.finish()
     }
 }
 
 struct SentenceVisitor<'writer> {
     writer: Writer<'writer>,
-    result: fmt::Result,
+    ansi: bool,
+    message: Option<String>,
+    parts: Vec<(&'static str, String)>,
+}
+
+impl SentenceVisitor<'_> {
+    fn finish(mut self) -> fmt::Result {
+        if let Some(message) = self.message {
+            write!(self.writer, "{message}")?;
+        }
+        for (name, value) in self.parts {
+            match name {
+                "route" | "source" | "template" | "project" | "address" => {
+                    write!(self.writer, " ")?;
+                    write_accent(&mut self.writer, &value, self.ansi)?;
+                }
+                "output" => {
+                    write!(self.writer, " with output ")?;
+                    write_accent(&mut self.writer, &value, self.ansi)?;
+                }
+                "destination" => {
+                    write!(self.writer, " to ")?;
+                    write_accent(&mut self.writer, &value, self.ansi)?;
+                }
+                "language" => {
+                    write!(self.writer, " ")?;
+                    write_emphasis(&mut self.writer, &value, self.ansi)?;
+                }
+                "tool" => {
+                    write!(self.writer, " with ")?;
+                    write_emphasis(&mut self.writer, &value, self.ansi)?;
+                }
+                "time.busy" => {
+                    write!(self.writer, " in ")?;
+                    write_emphasis(&mut self.writer, &value, self.ansi)?;
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
 }
 
 impl Visit for SentenceVisitor<'_> {
     fn record_str(&mut self, field: &Field, value: &str) {
-        if self.result.is_err() {
-            return;
-        }
-        if field.name() == "message" && value != "close" {
-            self.result = write!(self.writer, "{value}");
+        match field.name() {
+            "message" if value != "close" => self.message = Some(value.into()),
+            "message" => {}
+            name => self.parts.push((name, value.into())),
         }
     }
 
     fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
-        if self.result.is_err() {
-            return;
+        let value = format!("{value:?}");
+        if field.name() == "message" {
+            self.message = Some(value);
+        } else {
+            self.parts.push((field.name(), value));
         }
-        self.result = match field.name() {
-            "message" => write!(self.writer, "{value:?}"),
-            "time.busy" => write!(self.writer, "in {value:?}"),
-            _ => Ok(()),
-        };
+    }
+}
+
+fn write_accent(writer: &mut Writer<'_>, value: &str, ansi: bool) -> fmt::Result {
+    if ansi {
+        let style = Style::new().fg_color(Some(AnsiColor::Green.into()));
+        write!(writer, "{style}{value}{style:#}")
+    } else {
+        write!(writer, "{value}")
+    }
+}
+
+fn write_emphasis(writer: &mut Writer<'_>, value: &str, ansi: bool) -> fmt::Result {
+    if ansi {
+        let style = Style::new().bold();
+        write!(writer, "{style}{value}{style:#}")
+    } else {
+        write!(writer, "{value}")
     }
 }
 
@@ -128,7 +188,6 @@ where
                 Some(fields) if !fields.is_empty() => write!(writer, "{fields}")?,
                 _ => write!(writer, "{}", span.name())?,
             }
-            write!(writer, " ")?;
         }
 
         context
@@ -151,5 +210,34 @@ fn write_level(writer: &mut Writer<'_>, level: &Level, ansi: bool) -> fmt::Resul
         write!(writer, "{style}{label}{style:#} ")
     } else {
         write!(writer, "{label} ")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn semantic_styles_are_scoped_to_their_values() {
+        let mut output = String::new();
+        let mut writer = Writer::new(&mut output);
+
+        write_accent(&mut writer, "/pages/index.typ", true).unwrap();
+        write!(writer, " ").unwrap();
+        write_emphasis(&mut writer, "12ms", true).unwrap();
+
+        assert_eq!(output, "\x1b[32m/pages/index.typ\x1b[0m \x1b[1m12ms\x1b[0m");
+    }
+
+    #[test]
+    fn semantic_styles_fall_back_to_plain_text() {
+        let mut output = String::new();
+        let mut writer = Writer::new(&mut output);
+
+        write_accent(&mut writer, "/pages/index.typ", false).unwrap();
+        write!(writer, " ").unwrap();
+        write_emphasis(&mut writer, "12ms", false).unwrap();
+
+        assert_eq!(output, "/pages/index.typ 12ms");
     }
 }
