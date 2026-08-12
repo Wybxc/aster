@@ -1,9 +1,9 @@
 # Aster documentation example
 
-This example implements a complete documentation site with Aster and Typst. It
-includes hierarchical navigation, automatic heading IDs, a table of contents,
-previous/next links, edit links, code highlighting, theme selection, and a
-responsive mobile sidebar.
+This example implements a complete documentation site focused on navigation and
+reading. It includes hierarchical navigation, automatic heading IDs, a table of
+contents, previous/next links, edit links, code highlighting, theme selection,
+and a responsive mobile sidebar.
 
 ```sh
 cargo run -- dev -p examples/docs

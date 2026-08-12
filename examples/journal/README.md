@@ -1,8 +1,9 @@
 # Papertrail journal
 
-Papertrail is a feature-rich Aster journal example. It demonstrates content
-collections, featured and dated posts, tags, archives, pagination, Atom, a
-sitemap, responsive navigation, light/dark themes, and article metadata.
+Papertrail is a complete, feature-rich publication example. It demonstrates
+content collections, featured and dated posts, tags, archives, pagination,
+Atom, sitemap and robots generators, responsive navigation, light/dark themes,
+and article metadata.
 
 ```sh
 cargo run -- build -p examples/journal

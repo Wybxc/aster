@@ -1,7 +1,8 @@
 # Aster basics
 
-This starter demonstrates Aster's basic project structure. The route, layout,
-component-owned CSS, and project assets are kept in separate source modules.
+This focused example demonstrates Aster's basic project structure. The route,
+layout, component-owned CSS, and project assets are kept in separate source
+modules. It intentionally has no content collections or generators.
 
 ```sh
 cargo run -- dev -p examples/basics

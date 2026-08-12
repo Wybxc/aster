@@ -1,8 +1,8 @@
 # Aster portfolio
 
-A fictional product-design portfolio demonstrating nested content IDs, dynamic
-project routes, component-owned interaction, responsive layouts, and a
-persistent light/dark theme.
+A fictional product-design portfolio focused on nested content IDs, dynamic
+project routes, image-heavy presentation, component-owned interaction,
+responsive layouts, and a persistent light/dark theme.
 
 ```sh
 cargo run -- build -p examples/portfolio
