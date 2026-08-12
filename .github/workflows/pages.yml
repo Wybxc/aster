@@ -1,0 +1,105 @@
+name: Deploy examples to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  TAILWIND_VERSION: v4.3.3
+  TAILWIND_LINUX_X64_SHA256: dc61b3ac6b8c9ca874c0cc4c57b2409791a64c5540404ca5f5367360babc313a
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Cache Rust build
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/git
+            ~/.cargo/registry
+            target
+          key: ${{ runner.os }}-cargo-pages-${{ hashFiles('Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'build.rs', 'src/**') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-pages-${{ hashFiles('Cargo.lock') }}-
+            ${{ runner.os }}-cargo-pages-
+
+      - name: Install Tailwind CSS CLI
+        shell: bash
+        run: |
+          install -d "$RUNNER_TEMP/bin"
+          curl --fail --location --retry 3 --silent --show-error \
+            "https://github.com/tailwindlabs/tailwindcss/releases/download/${TAILWIND_VERSION}/tailwindcss-linux-x64" \
+            --output "$RUNNER_TEMP/bin/tailwindcss"
+          echo "$TAILWIND_LINUX_X64_SHA256  $RUNNER_TEMP/bin/tailwindcss" | sha256sum --check
+          chmod +x "$RUNNER_TEMP/bin/tailwindcss"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Build Aster
+        run: cargo build --locked --release
+
+      - name: Build examples
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          site="$RUNNER_TEMP/pages"
+          mkdir -p "$site"
+
+          target/release/aster build --project examples/docs
+          cp -a examples/docs/dist/. "$site/"
+          mkdir -p "$site/examples"
+
+          for manifest in examples/*/aster.toml; do
+            project="${manifest%/aster.toml}"
+            name="${project##*/}"
+
+            if [[ "$name" == "docs" ]]; then
+              continue
+            fi
+
+            target/release/aster build --project "$project"
+
+            destination="$site/examples/$name"
+            mkdir -p "$destination"
+            cp -a "$project/dist/." "$destination/"
+          done
+
+          touch "$site/.nojekyll"
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: ${{ runner.temp }}/pages
+          include-hidden-files: true
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
