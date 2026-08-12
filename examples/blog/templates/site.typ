@@ -9,7 +9,7 @@
       #html.meta(name: "viewport", content: "width=device-width, initial-scale=1")
       #html.meta(name: "description", content: description)
       #html.elem("link", attrs: (rel: "icon", href: "/assets/favicon.svg"))
-      #html.elem("link", attrs: (rel: "alternate", type: "application/rss+xml", href: "/rss.xml", title: settings.site.title))
+      #html.elem("link", attrs: (rel: "alternate", type: "application/atom+xml", href: "/atom.xml", title: settings.site.title))
       #html.link(rel: "stylesheet", href: "/styles/global.css")
       #html.title[#title]
     ]

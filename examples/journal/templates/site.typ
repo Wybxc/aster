@@ -36,9 +36,9 @@
       #html.link(rel: "icon", type: "image/svg+xml", href: "/assets/favicon.svg")
       #html.link(
         rel: "alternate",
-        type: "application/rss+xml",
+        type: "application/atom+xml",
         title: settings.site.title,
-        href: settings.site.url + "rss.xml",
+        href: settings.site.url + "atom.xml",
       )
       #html.title(document-title)
       #html.script(src: "./theme-init.js")

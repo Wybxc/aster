@@ -14,7 +14,7 @@ It is a practical starting point for a personal publication.
 - Light and dark color schemes.
 - Organized posts, tags, pagination, and archives.
 - Responsive and keyboard-accessible navigation.
-- RSS, sitemap, canonical URLs, and article metadata.
+- Atom, sitemap, canonical URLs, and article metadata.
 - Configurable site details and social links.
 
 = Explore the implementation

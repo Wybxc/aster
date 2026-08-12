@@ -32,9 +32,9 @@
       #html.title(document-title)
       #html.elem("link", attrs: (
         rel: "alternate",
-        type: "application/rss+xml",
+        type: "application/atom+xml",
         title: settings.site.title,
-        href: settings.site.url + "rss.xml",
+        href: settings.site.url + "atom.xml",
       ))
       #html.link(rel: "stylesheet", href: stylesheet)
     ]

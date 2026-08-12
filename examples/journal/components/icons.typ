@@ -47,7 +47,7 @@
   #html.elem("path", attrs: (d: "M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4"))
 ]
 
-#let rss-icon = _svg[
+#let feed-icon = _svg[
   #html.elem("path", attrs: (d: "M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16"))
   #html.elem("circle", attrs: (cx: "5", cy: "19", r: "1"))
 ]

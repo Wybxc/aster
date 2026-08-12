@@ -1,5 +1,5 @@
 #import "/lib.typ": published-posts, settings
-#import "/components/icons.typ": arrow-right-icon, rss-icon
+#import "/components/icons.typ": arrow-right-icon, feed-icon
 #import "/components/post-list.typ": post-list
 #import "/components/social-links.typ": social-links
 #import "/templates/site.typ": site
@@ -131,10 +131,10 @@
     #html.div[
       #html.h1[Welcome to Papertrail]
       #html.a(
-        href: "/rss.xml",
-        title: "RSS Feed",
-        aria-label: "RSS Feed",
-      )[#rss-icon]
+        href: "/atom.xml",
+        title: "Atom Feed",
+        aria-label: "Atom Feed",
+      )[#feed-icon]
     ]
     #html.p[
       Papertrail is a minimal and responsive journal with accessible navigation,

@@ -25,9 +25,10 @@ site/
 │   └── docs/
 ├── styles/
 │   └── site.css
+├── generate/
+│   └── atom.xml.typ
 └── pages/
     ├── index.typ
-    ├── rss.xml.typ
     ├── journal/[slug]/index.typ
     └── docs/[...path]/index.typ
 ```
