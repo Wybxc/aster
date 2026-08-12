@@ -6,11 +6,12 @@ use std::sync::Arc;
 use ::typst::ecow::{EcoString, EcoVec, eco_format, eco_vec};
 use ::typst::foundations::Bytes;
 use ::typst::syntax::{Span, VirtualPath};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use comemo::Tracked;
 use lumis_core::events::HighlightEvent;
 use lumis_core::highlights::HIGHLIGHT_NAMES;
 use lumis_core::themes::{self, Style, TextDecoration, Theme, UnderlineStyle};
+use lumis_wasm_runtime::{HttpFetcher, LanguageStore, Runtime, StoreConfig, set_compile_cache_dir};
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 
 use crate::build::BuildWarning;
@@ -21,10 +22,7 @@ use crate::foundation::config::HighlightConfig;
 use super::dom::{HtmlElementExt, append_to_head};
 use super::{Processor, WalkControl};
 
-mod language;
 mod typst;
-
-use self::language::LanguageRegistry;
 
 /// A cheaply cloneable theme-loading error at the memoization seam.
 #[derive(Debug, Clone, thiserror::Error)]
@@ -76,7 +74,7 @@ fn resolve_theme_style(theme: &Theme, language: &str, scope: &str) -> Option<Sty
 pub struct HighlightProcessor {
     themes: Option<(Theme, Theme)>,
     styles: Vec<HighlightStyle>,
-    languages: Option<LanguageRegistry>,
+    languages: Option<Runtime>,
     dynamic_tokens: HashMap<(EcoString, EcoString), EcoVec<HighlightToken>>,
 }
 
@@ -186,17 +184,28 @@ impl HighlightProcessor {
         )
         .entered();
         if self.languages.is_none() {
-            self.languages = Some(LanguageRegistry::new()?);
+            let cache_dir = dirs::cache_dir()
+                .context("could not determine Aster's cache directory")?
+                .join("aster/lumis");
+            set_compile_cache_dir(cache_dir.clone());
+            let store = LanguageStore::new(StoreConfig { cache_dir }, Box::new(HttpFetcher));
+            let runtime = Runtime::with_worker_limit(1)
+                .context("failed to initialize the syntax highlighting runtime")?
+                .with_store(store);
+            self.languages = Some(runtime);
         }
-        let tokens = match self
+        let Some(language) = lumis_wasm_runtime::catalog::find(lang) else {
+            let tokens = eco_vec![(lang.into(), EcoString::new(), code.into())];
+            self.dynamic_tokens.insert(key, tokens.clone());
+            return Ok(tokens);
+        };
+        let events = self
             .languages
             .as_ref()
-            .expect("language registry initialized")
-            .highlight(code, lang)?
-        {
-            Some(events) => events_to_tokens(code, lang, events),
-            None => eco_vec![(lang.into(), EcoString::new(), code.into())],
-        };
+            .expect("language runtime initialized")
+            .highlight(code, language.id, false)
+            .with_context(|| format!("failed to highlight {} code", language.id))?;
+        let tokens = events_to_tokens(code, lang, events);
         drop(operation);
         self.dynamic_tokens.insert(key, tokens.clone());
         Ok(tokens)

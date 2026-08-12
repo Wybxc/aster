@@ -118,7 +118,8 @@ fn build_command_builds_the_selected_project() {
         "loaded fonts",
         "prepared build",
         "planned routes",
-        "rendered routes",
+        "rendered pages",
+        "ran generators",
         "published output",
     ] {
         assert!(
@@ -159,13 +160,13 @@ fn build_command_builds_the_selected_project() {
         "DEBUG   discovered ",
         "DEBUG   collected 0 public files",
         "DEBUG   loaded 0 content entries",
-        "DEBUG   probed template index.typ in ",
-        "DEBUG   planned 1 page and 0 endpoints",
+        "DEBUG   planned 1 page",
+        "DEBUG   planned 0 generators",
         "INFO    rendered page / in ",
         "DEBUG     compiled /pages/index.typ in ",
         "DEBUG     transformed document in ",
         "DEBUG     encoded HTML in ",
-        "DEBUG   publishing 1 file (",
+        "DEBUG   staging 1 file (",
     ] {
         assert!(
             stderr.contains(detail),
@@ -396,7 +397,7 @@ fn init_creates_a_buildable_project() {
 
     let project = Project::open(destination).unwrap();
     let outcome = BuildSession::new(project).build().unwrap();
-    assert_eq!(outcome.outputs.len(), 1);
+    assert_eq!(outcome.pages.len(), 1);
 }
 
 #[test]

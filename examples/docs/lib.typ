@@ -4,7 +4,7 @@
   (:)
 } else {
   assert(
-    _content-state.protocol == 6,
+    _content-state.protocol == 7,
     message: "incompatible runtime protocol with the Aster binary",
   )
   _content-state.collections

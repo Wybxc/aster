@@ -20,7 +20,7 @@
     #html.elem("p")[#meta.summary]
   ]
 
-  #html.elem("article")[#entry.render()]
+  #html.elem("article")[#entry.render()] <aster-content>
   #html.elem("nav", attrs: ("aria-label": "Journal navigation"))[
     #link("/")[Return to all journal entries]
   ]

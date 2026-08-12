@@ -33,7 +33,7 @@ fn route_plan_is_sorted_and_probes_dynamic_templates() {
     let outcome = BuildSession::new(project.clone()).build().unwrap();
     let output_dir = project.root().join("dist");
     let outputs = outcome
-        .outputs
+        .pages
         .iter()
         .map(|path| {
             let path = VirtualPath::virtualize(&output_dir, path).unwrap();
@@ -59,7 +59,7 @@ fn route_plan_preserves_file_shaped_page_routes() {
     let outcome = BuildSession::new(project.clone()).build().unwrap();
     let output_dir = project.root().join("dist");
     let outputs = outcome
-        .outputs
+        .pages
         .iter()
         .map(|path| {
             let path = VirtualPath::virtualize(&output_dir, path).unwrap();
@@ -82,19 +82,43 @@ fn route_plan_rejects_static_dynamic_collision() {
 }
 
 #[test]
-fn route_plan_rejects_page_endpoint_collision() {
-    let (_temp, project) = fixture(&["feed.typ", "feed.html.typ"]);
+fn route_plan_rejects_page_generator_collision() {
+    let (_temp, project) = fixture(&["feed.typ"]);
+    std::fs::create_dir(project.root().join("generate")).unwrap();
     std::fs::write(
-        project.root().join("pages/feed.html.typ"),
-        "#metadata(\"feed\") <aster-endpoint>",
+        project.root().join("generate/feed.html.typ"),
+        "#metadata(\"feed\") <aster-output>",
     )
     .unwrap();
 
     let error = BuildSession::new(project)
         .build()
         .err()
-        .expect("page and endpoint collision must fail");
+        .expect("page and generator collision must fail");
     assert!(format!("{error:#}").contains("conflicting outputs feed.html and feed.html"));
+}
+
+#[test]
+fn route_plan_rejects_generator_collision() {
+    let (_temp, project) = fixture(&["index.typ"]);
+    std::fs::create_dir(project.root().join("generate")).unwrap();
+    std::fs::write(
+        project.root().join("generate/[name].typ"),
+        concat!(
+            "#metadata(((name: \"feed\"), (name: \"feed\"))) <aster-route>\n",
+            "#metadata(\"feed\") <aster-output>",
+        ),
+    )
+    .unwrap();
+
+    let error = BuildSession::new(project)
+        .build()
+        .err()
+        .expect("generator collision must fail");
+    assert!(
+        format!("{error:#}").contains("conflicting outputs feed and feed"),
+        "unexpected error: {error:#}"
+    );
 }
 
 #[test]
@@ -103,7 +127,7 @@ fn route_plan_reports_missing_dynamic_metadata() {
 
     let outcome = BuildSession::new(project).build().unwrap();
 
-    assert!(outcome.outputs.is_empty());
+    assert!(outcome.pages.is_empty());
     assert_eq!(outcome.warnings.len(), 1);
     assert!(
         outcome.warnings[0]

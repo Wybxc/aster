@@ -8,8 +8,8 @@ mod config;
 mod css;
 #[path = "integration/dependencies.rs"]
 mod dependencies;
-#[path = "integration/endpoint.rs"]
-mod endpoint;
+#[path = "integration/generator.rs"]
+mod generator;
 #[path = "integration/highlight.rs"]
 mod highlight;
 #[path = "integration/image.rs"]
@@ -18,6 +18,8 @@ mod image;
 mod navigation;
 #[path = "integration/pipeline.rs"]
 mod pipeline;
+#[path = "integration/postprocess.rs"]
+mod postprocess;
 #[path = "integration/public.rs"]
 mod public;
 #[path = "integration/resource.rs"]

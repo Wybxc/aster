@@ -16,6 +16,6 @@
       ]
       #html.div(class: "prose")[#body]
       #html.p(class: "back-link")[#link("/blog/")[Back to all posts]]
-    ]
+    ] <aster-content>
   ]
 }

@@ -7,9 +7,9 @@
 
 = Template file names define output routes.
 
-Every `.typ` file under `pages/` is a route template. Templates with
-`<aster-endpoint>` metadata generate arbitrary files; all others generate HTML pages.
-Brackets in a template's relative path declare route parameters.
+Every `.typ` file under `pages/` is an HTML page template. Every `.typ` file
+under `generate/` is a generator whose `<aster-output>` metadata contains one
+string or bytes result. Brackets in either template path declare route parameters.
 
 #table(
   columns: (1.1fr, 1fr),
@@ -47,10 +47,10 @@ can provide stable accessors while retaining editor fallbacks:
 ```
 
 For pages, root and nested `index.html` outputs become `/` and directory URLs;
-file-shaped pages retain their `.html` suffix. Generated endpoints use their
-exact output path. The same protocol exposes all planned paths through
-`sys.inputs._aster.routes.pages` and `.endpoints`, so generated artifacts such
-as sitemaps do not need to duplicate route discovery.
+file-shaped pages retain their `.html` suffix. Generators remove only their
+final `.typ` extension and use that exact output path. The same protocol exposes
+all planned page paths through `sys.inputs._aster.routes.pages`, so generated
+artifacts such as sitemaps do not need to duplicate route discovery.
 
 == Site-root navigation
 

@@ -6,17 +6,20 @@ use comemo::{Track, Tracked};
 use termcolor::NoColor;
 use typst::diag::{FileError, SourceDiagnostic, SourceResult, Warned};
 use typst::ecow::EcoString;
-use typst::foundations::{Bytes, Datetime, Dict, Duration};
+use typst::foundations::Duration;
+use typst::foundations::{Bytes, Datetime, Label, Selector, Value};
+use typst::introspection::{Introspector, MetadataElem};
 use typst::syntax::{FileId, RootedPath, VirtualPath, VirtualRoot};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
-use typst::{Feature, Library, LibraryExt, World};
+use typst::{Library, World};
 use typst_kit::datetime::Time;
 use typst_kit::diagnostics::{self, DiagnosticFormat, DiagnosticWorld};
 use typst_kit::fonts::FontStore;
 
 use crate::build::files::ProjectFiles;
 use crate::build::{BuildSession, BuildWarning};
+use crate::engine::content::Runtime;
 use crate::foundation::ProjectLayout;
 use crate::foundation::config::FontConfig;
 
@@ -56,21 +59,12 @@ pub fn configure_fonts(
     Ok(())
 }
 
-pub fn library(inputs: Dict) -> LazyHash<Library> {
-    LazyHash::new(
-        Library::builder()
-            .with_inputs(inputs)
-            .with_features([Feature::Html].into_iter().collect())
-            .build(),
-    )
-}
-
 pub fn compile_document(
     session: &BuildSession,
     entry: &VirtualPath,
-    library: &LazyHash<Library>,
+    runtime: &Runtime,
 ) -> Result<(typst_html::HtmlDocument, Vec<BuildWarning>)> {
-    let world = world(session, entry, library);
+    let world = world(session, entry, runtime.library());
     let warned = compile_html((&world as &dyn World).track());
     let document = warned
         .output
@@ -84,6 +78,36 @@ pub fn compile_document(
         .map(|warning| format_warning(&world, warning))
         .collect();
     Ok((document, warnings))
+}
+
+pub fn evaluate_generator(
+    session: &BuildSession,
+    entry: &VirtualPath,
+    runtime: &Runtime,
+) -> Result<(Bytes, Vec<BuildWarning>)> {
+    let (document, warnings) = compile_document(session, entry, runtime)?;
+    let selector = Selector::Label(
+        Label::construct("aster-output".into()).expect("generator label is non-empty"),
+    );
+    let mut declarations = document
+        .introspector()
+        .query(&selector)
+        .into_iter()
+        .filter_map(|element| {
+            element
+                .to_packed::<MetadataElem>()
+                .map(|metadata| metadata.value.clone())
+        });
+    let output = match (declarations.next(), declarations.next()) {
+        (_, Some(_)) => {
+            anyhow::bail!("generator must contain exactly one <aster-output> declaration")
+        }
+        (None, None) => anyhow::bail!("generator did not produce <aster-output>"),
+        (Some(Value::Str(content)), None) => Bytes::from_string(content),
+        (Some(Value::Bytes(content)), None) => content,
+        (Some(_), None) => anyhow::bail!("generator output must be a string or bytes"),
+    };
+    Ok((output, warnings))
 }
 
 fn world<'a>(

@@ -67,6 +67,7 @@ fn build_injects_namespaced_route_context() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
     std::fs::create_dir_all(root.join("pages/blog/[slug]")).unwrap();
+    std::fs::create_dir(root.join("generate")).unwrap();
     std::fs::write(root.join("pages/index.typ"), route_context_page()).unwrap();
     std::fs::write(root.join("pages/about.typ"), route_context_page()).unwrap();
     std::fs::write(
@@ -81,13 +82,13 @@ fn build_injects_namespaced_route_context() {
     )
     .unwrap();
     std::fs::write(
-        root.join("pages/feed.xml.typ"),
+        root.join("generate/feed.xml.typ"),
         concat!(
             "#let aster = sys.inputs.at(\"_aster\")\n",
             "#let route = aster.at(\"route\", default: none)\n",
             "#metadata(\n",
             "  if route == none { \"probe\" } else { route.path + \"|\" + aster.version },\n",
-            ") <aster-endpoint>\n",
+            ") <aster-output>\n",
         ),
     )
     .unwrap();
@@ -98,8 +99,8 @@ fn build_injects_namespaced_route_context() {
     let about = std::fs::read_to_string(root.join("dist/about.html")).unwrap();
     let post = std::fs::read_to_string(root.join("dist/blog/post/index.html")).unwrap();
     let feed = std::fs::read_to_string(root.join("dist/feed.xml")).unwrap();
-    assert!(index.contains(&format!("/|{}|3|1", env!("CARGO_PKG_VERSION"))));
-    assert!(about.contains(&format!("/about.html|{}|3|1", env!("CARGO_PKG_VERSION"))));
+    assert!(index.contains(&format!("/|{}|3", env!("CARGO_PKG_VERSION"))));
+    assert!(about.contains(&format!("/about.html|{}|3", env!("CARGO_PKG_VERSION"))));
     assert!(post.contains("/blog/post/|post"));
     assert_eq!(feed, format!("/feed.xml|{}", env!("CARGO_PKG_VERSION")));
 }
@@ -109,7 +110,7 @@ fn route_context_page() -> &'static str {
         "#let aster = sys.inputs.at(\"_aster\")\n",
         "#let route = aster.at(\"route\", default: none)\n",
         "#if route != none {\n",
-        "  html.elem(\"p\")[#route.path|#aster.version|#aster.routes.pages.len()|#aster.routes.endpoints.len()]\n",
+        "  html.elem(\"p\")[#route.path|#aster.version|#aster.routes.pages.len()]\n",
         "}\n",
     )
 }
@@ -227,7 +228,7 @@ fn build_follows_a_pages_directory_symlink_outside_the_project() {
     let project = project(root);
     let outcome = BuildSession::new(project.clone()).build().unwrap();
 
-    assert_eq!(outcome.outputs, vec![root.join("dist/index.html")]);
+    assert_eq!(outcome.pages, vec![root.join("dist/index.html")]);
     assert!(
         std::fs::read_to_string(root.join("dist/index.html"))
             .unwrap()
@@ -255,7 +256,7 @@ fn build_preserves_a_symlinked_project_root() {
     let project = Project::open(&linked).unwrap();
     let outcome = BuildSession::new(project.clone()).build().unwrap();
 
-    assert_eq!(outcome.outputs, vec![linked.join("dist/index.html")]);
+    assert_eq!(outcome.pages, vec![linked.join("dist/index.html")]);
     assert!(
         std::fs::read_to_string(linked.join("dist/index.html"))
             .unwrap()

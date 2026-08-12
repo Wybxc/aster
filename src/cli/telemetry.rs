@@ -34,20 +34,20 @@ pub fn report_build(outcome: &BuildOutcome) {
     for warning in &outcome.warnings {
         tracing::warn!(warning = %warning, "{warning}");
     }
-    let pages = outcome.outputs.len();
-    let endpoints = outcome.endpoints.len();
-    let routes = if endpoints == 0 {
+    let pages = outcome.pages.len();
+    let generated = outcome.generated.len();
+    let routes = if generated == 0 {
         format!("{pages} page{}", if pages == 1 { "" } else { "s" })
     } else {
         format!(
-            "{pages} page{} and {endpoints} endpoint{}",
+            "{pages} page{} and {generated} generated file{}",
             if pages == 1 { "" } else { "s" },
-            if endpoints == 1 { "" } else { "s" }
+            if generated == 1 { "" } else { "s" }
         )
     };
     tracing::info!(
         pages,
-        endpoints,
+        generated,
         elapsed = ?outcome.elapsed,
         "built {routes} in {:.1}s",
         outcome.elapsed.as_secs_f64()

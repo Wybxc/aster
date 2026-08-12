@@ -4,7 +4,7 @@
   (:)
 } else {
   assert(
-    _content-state.protocol == 6,
+    _content-state.protocol == 7,
     message: "incompatible runtime protocol with the Aster binary",
   )
   _content-state.collections
@@ -19,7 +19,6 @@
 #let route-path = if _route == none { "/" } else { _route.path }
 #let route-params = if _route == none { (:) } else { _route.params }
 #let route-pages = if _content-state == none { () } else { _content-state.routes.pages }
-#let route-endpoints = if _content-state == none { () } else { _content-state.routes.endpoints }
 #let route-section = route-path.trim("/").split("/").first()
 
 #let settings = toml("/aster.toml")

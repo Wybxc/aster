@@ -15,7 +15,7 @@ fn copies_public_tree_and_removes_stale_files() {
     let mut session = BuildSession::new(project(root));
     let outcome = session.build().unwrap();
 
-    assert_eq!(outcome.outputs, [root.join("dist/index.html")]);
+    assert_eq!(outcome.pages, [root.join("dist/index.html")]);
     assert_eq!(
         std::fs::read_to_string(root.join("dist/CNAME")).unwrap(),
         "example.com\n"

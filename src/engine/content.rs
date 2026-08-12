@@ -9,15 +9,122 @@ use typst::foundations::{
 };
 use typst::syntax::ast::{self, AstNode};
 use typst::syntax::{RootedPath, SyntaxNode, parse_code};
-use typst::{Library, LibraryExt};
+use typst::utils::LazyHash;
+use typst::{Feature, Library, LibraryExt};
 use typst_eval::CapturesVisitor;
 
+use crate::engine::route::ParamSet;
+
 /// Runtime protocol version understood by this Aster release.
-pub const PROTOCOL_VERSION: i64 = 6;
+pub const PROTOCOL_VERSION: i64 = 7;
 /// Version of Aster providing the runtime protocol.
 pub const ASTER_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Reserved `sys.inputs` key containing Aster's runtime protocol.
 pub const INPUT_NAME: &str = "_aster";
+
+/// The complete Aster-owned Typst runtime state for one build phase.
+pub struct Runtime {
+    inputs: Dict,
+    library: LazyHash<Library>,
+}
+
+impl Runtime {
+    /// Construct the base runtime used for route planning.
+    pub fn new(entries: impl IntoIterator<Item = ContentEntry>) -> Self {
+        let mut collections: BTreeMap<EcoString, Vec<(EcoString, RootedPath)>> = BTreeMap::new();
+        for entry in entries {
+            collections
+                .entry(entry.collection)
+                .or_default()
+                .push((entry.id, entry.source));
+        }
+
+        let mut inputs = Dict::new();
+        inputs.insert(Str::from(INPUT_NAME), protocol_value(collections));
+        Self::from_inputs(inputs)
+    }
+
+    /// Add the complete planned page URL set.
+    pub fn with_page_routes(&self, pages: &[EcoString]) -> Self {
+        self.with_protocol_field(
+            "routes",
+            Value::Dict(dict! {
+                "pages" => pages
+                    .iter()
+                    .map(|path| Value::Str(Str::from(path.as_str())))
+                    .collect::<Array>(),
+            }),
+        )
+    }
+
+    /// Add the final rendered page snapshot available to generators.
+    pub fn with_site(&self, pages: &[SitePage]) -> Self {
+        let pages = pages
+            .iter()
+            .map(|page| {
+                let content = page.content.as_ref().map_or(Value::None, |content| {
+                    Value::Dict(dict! {
+                        "html" => content.html.clone(),
+                        "text" => content.text.clone(),
+                    })
+                });
+                Value::Dict(dict! {
+                    "path" => page.path.clone(),
+                    "html" => page.html.clone(),
+                    "content" => content,
+                })
+            })
+            .collect::<Array>();
+        self.with_protocol_field("site", Value::Dict(dict! { "pages" => pages }))
+    }
+
+    /// Select one route and expose its parameters to a compilation.
+    pub fn for_route(&self, path: EcoString, params: &ParamSet) -> Self {
+        let mut route_params = Dict::new();
+        for (name, value) in params {
+            route_params.insert(
+                Str::from(name.as_str()),
+                Value::Str(Str::from(value.as_str())),
+            );
+        }
+
+        self.with_protocol_field(
+            "route",
+            Value::Dict(dict! {
+                "path" => path,
+                "params" => route_params,
+            }),
+        )
+    }
+
+    pub fn library(&self) -> &LazyHash<Library> {
+        &self.library
+    }
+
+    fn with_protocol_field(&self, name: &str, value: Value) -> Self {
+        let mut inputs = self.inputs.clone();
+        let Value::Dict(mut protocol) = inputs
+            .get(INPUT_NAME)
+            .expect("Aster inputs must contain the runtime protocol")
+            .clone()
+        else {
+            unreachable!("Aster runtime protocol must be a dictionary");
+        };
+        protocol.insert(name.into(), value);
+        inputs.insert(INPUT_NAME.into(), Value::Dict(protocol));
+        Self::from_inputs(inputs)
+    }
+
+    fn from_inputs(inputs: Dict) -> Self {
+        let library = LazyHash::new(
+            Library::builder()
+                .with_inputs(inputs.clone())
+                .with_features([Feature::Html].into_iter().collect())
+                .build(),
+        );
+        Self { inputs, library }
+    }
+}
 
 /// One source entry exposed through Aster's lazy content protocol.
 pub struct ContentEntry {
@@ -29,77 +136,20 @@ pub struct ContentEntry {
     pub source: RootedPath,
 }
 
-/// Build the base `_aster` protocol used for route probing.
-pub fn protocol(entries: impl IntoIterator<Item = ContentEntry>) -> Value {
-    let mut collections: BTreeMap<EcoString, Vec<(EcoString, RootedPath)>> = BTreeMap::new();
-    for entry in entries {
-        collections
-            .entry(entry.collection)
-            .or_default()
-            .push((entry.id, entry.source));
-    }
-    protocol_value(collections)
+/// One rendered page exposed to Typst generators.
+pub struct SitePage {
+    /// Browser-facing route of the page.
+    pub path: EcoString,
+    /// Complete final HTML document.
+    pub html: EcoString,
+    /// Optional labelled main-content fragment.
+    pub content: Option<SiteContent>,
 }
 
-/// Construct the Typst inputs owned by Aster's runtime protocol.
-pub fn inputs(protocol: Value) -> Dict {
-    let mut inputs = Dict::new();
-    inputs.insert(Str::from(INPUT_NAME), protocol);
-    inputs
-}
-
-/// Add one generated route's URL and parameters to a project input dictionary.
-pub fn with_route(base: &Dict, path: EcoString, params: &crate::engine::route::ParamSet) -> Dict {
-    let mut route_params = Dict::new();
-    for (name, value) in params {
-        route_params.insert(
-            Str::from(name.as_str()),
-            Value::Str(Str::from(value.as_str())),
-        );
-    }
-
-    with_protocol_field(
-        base,
-        "route",
-        Value::Dict(dict! {
-            "path" => path,
-            "params" => route_params,
-        }),
-    )
-}
-
-/// Add the complete planned page and endpoint URL sets to project inputs.
-pub fn with_routes(base: &Dict, pages: &[EcoString], endpoints: &[EcoString]) -> Dict {
-    let paths = |values: &[EcoString]| {
-        Value::Array(
-            values
-                .iter()
-                .map(|path| Value::Str(Str::from(path.as_str())))
-                .collect::<Array>(),
-        )
-    };
-    with_protocol_field(
-        base,
-        "routes",
-        Value::Dict(dict! {
-            "pages" => paths(pages),
-            "endpoints" => paths(endpoints),
-        }),
-    )
-}
-
-fn with_protocol_field(base: &Dict, name: &str, value: Value) -> Dict {
-    let mut inputs = base.clone();
-    let Value::Dict(mut protocol) = inputs
-        .get(INPUT_NAME)
-        .expect("Aster inputs must contain the runtime protocol")
-        .clone()
-    else {
-        unreachable!("Aster runtime protocol must be a dictionary");
-    };
-    protocol.insert(name.into(), value);
-    inputs.insert(INPUT_NAME.into(), Value::Dict(protocol));
-    inputs
+/// The final HTML and plain text of a page's `<aster-content>` element.
+pub struct SiteContent {
+    pub html: EcoString,
+    pub text: EcoString,
 }
 
 fn protocol_value(collections: BTreeMap<EcoString, Vec<(EcoString, RootedPath)>>) -> Value {
@@ -125,8 +175,8 @@ fn protocol_value(collections: BTreeMap<EcoString, Vec<(EcoString, RootedPath)>>
         "route" => Value::None,
         "routes" => dict! {
             "pages" => Array::new(),
-            "endpoints" => Array::new(),
         },
+        "site" => dict! { "pages" => Array::new() },
     })
 }
 
@@ -228,13 +278,13 @@ mod tests {
     use super::*;
     use typst::syntax::{VirtualPath, VirtualRoot};
 
-    fn empty() -> Value {
-        protocol(std::iter::empty())
+    fn empty() -> Runtime {
+        Runtime::new(std::iter::empty())
     }
 
     #[test]
     fn protocol_contains_lazy_entry_modules() {
-        let protocol = protocol([ContentEntry {
+        let runtime = Runtime::new([ContentEntry {
             collection: "blog".into(),
             id: "nested/post".into(),
             source: RootedPath::new(
@@ -243,7 +293,7 @@ mod tests {
             ),
         }]);
 
-        let Value::Dict(protocol) = protocol else {
+        let Value::Dict(protocol) = runtime.inputs.get(INPUT_NAME).unwrap() else {
             panic!("protocol must be a dictionary");
         };
         let Value::Dict(collections) = protocol.get("collections").unwrap() else {
@@ -274,7 +324,8 @@ mod tests {
 
     #[test]
     fn empty_protocol_has_one_owner() {
-        let Value::Dict(protocol) = empty() else {
+        let runtime = empty();
+        let Value::Dict(protocol) = runtime.inputs.get(INPUT_NAME).unwrap() else {
             panic!("protocol must be a dictionary");
         };
         assert_eq!(
@@ -294,19 +345,15 @@ mod tests {
 
     #[test]
     fn route_context_keeps_parameters_inside_aster_protocol() {
-        let base = with_routes(
-            &inputs(empty()),
-            &["/".into(), "/blog/post/".into()],
-            &["/feed.xml".into()],
-        );
+        let base = empty().with_page_routes(&["/".into(), "/blog/post/".into()]);
         let params = crate::engine::route::ParamSet::from([
             ("site".into(), "route".into()),
             (INPUT_NAME.into(), "nested".into()),
         ]);
-        let inputs = with_route(&base, "/blog/post/".into(), &params);
+        let runtime = base.for_route("/blog/post/".into(), &params);
 
-        assert_eq!(inputs.len(), 1);
-        let Value::Dict(protocol) = inputs.get(INPUT_NAME).unwrap() else {
+        assert_eq!(runtime.inputs.len(), 1);
+        let Value::Dict(protocol) = runtime.inputs.get(INPUT_NAME).unwrap() else {
             panic!("runtime protocol must be a dictionary");
         };
         let Value::Dict(route) = protocol.get("route").unwrap() else {
@@ -330,9 +377,6 @@ mod tests {
         let Value::Array(pages) = routes.get("pages").unwrap() else {
             panic!("planned pages must be an array");
         };
-        let Value::Array(endpoints) = routes.get("endpoints").unwrap() else {
-            panic!("planned endpoints must be an array");
-        };
         assert_eq!(
             pages.iter().collect::<Vec<_>>(),
             [
@@ -340,9 +384,28 @@ mod tests {
                 &Value::Str(Str::from("/blog/post/"))
             ]
         );
-        assert_eq!(
-            endpoints.iter().collect::<Vec<_>>(),
-            [&Value::Str(Str::from("/feed.xml"))]
-        );
+        assert!(routes.get("endpoints").is_err());
+    }
+
+    #[test]
+    fn site_snapshot_exposes_final_page_content() {
+        let runtime = empty().with_site(&[SitePage {
+            path: "/post/".into(),
+            html: "<html>...</html>".into(),
+            content: Some(SiteContent {
+                html: "<article>Post</article>".into(),
+                text: "Post".into(),
+            }),
+        }]);
+        let Value::Dict(protocol) = runtime.inputs.get(INPUT_NAME).unwrap() else {
+            panic!("runtime protocol must be a dictionary");
+        };
+        let Value::Dict(site) = protocol.get("site").unwrap() else {
+            panic!("site snapshot must be a dictionary");
+        };
+        let Value::Array(pages) = site.get("pages").unwrap() else {
+            panic!("site pages must be an array");
+        };
+        assert_eq!(pages.len(), 1);
     }
 }

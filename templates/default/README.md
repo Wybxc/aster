@@ -3,14 +3,17 @@
 Run `aster dev` to serve the site locally with automatic browser refresh, or
 run `aster build` to generate it once. Files in `public/` are copied unchanged
 to the root of the generated `dist/` site; this is useful for host-level files
-such as `CNAME` that are not page resources. Route templates live in `pages/`,
-while project styles live in `styles/`.
+such as `CNAME` that are not page resources. HTML route templates live in
+`pages/`; optional exact-path Typst generators live in `generate/`, while
+project styles live in `styles/`.
 
 Typst reads project settings directly with `toml("/aster.toml")`. Aster reserves
 `sys.inputs._aster` for its runtime protocol. It contains the Aster version,
 lazy content collections, and the current route's URL path and parameter
-dictionary, together with the complete planned page and endpoint URL lists.
-Route data is absent during editor evaluation and route probing.
+dictionary, together with the complete planned page URL list.
+Route data is absent during editor evaluation and dynamic route probing.
+Generators run after pages and can inspect `_aster.site.pages`; label a page's
+main article with `<aster-content>` to expose its final HTML and plain text.
 
 Project resources referenced by HTML are published with content-addressed file
 names. A resource path such as `/assets/logo.svg` resolves from the project root,

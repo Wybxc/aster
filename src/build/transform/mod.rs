@@ -1,20 +1,82 @@
 mod asset;
+mod content;
 mod dom;
 mod highlight;
 mod navigation;
 mod url;
 
+use std::path::Path;
+
 use anyhow::Result;
+use comemo::Tracked;
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 
+use crate::build::BuildWarning;
+use crate::build::files::ProjectFiles;
 use crate::build::output::PagePublication;
+use crate::engine::content::SitePage;
+use crate::foundation::config::{AssetsConfig, CssConfig, HighlightConfig};
 
-pub use asset::{AssetProcessor, ComponentResources};
-pub use highlight::HighlightProcessor;
-pub use navigation::NavigationProcessor;
+use self::asset::{AssetProcessor, ComponentResources};
+use self::content::ContentCapture;
+use self::highlight::HighlightProcessor;
+use self::navigation::NavigationProcessor;
+
+/// The build-scoped transformation from compiled Typst HTML to a published page.
+pub struct DocumentTransform<'a> {
+    assets: AssetProcessor<'a>,
+    highlight: HighlightProcessor,
+}
+
+impl<'a> DocumentTransform<'a> {
+    pub fn new(
+        project_files: Tracked<'a, ProjectFiles>,
+        project_root: &Path,
+        assets: &AssetsConfig,
+        css: &CssConfig,
+        highlight: &HighlightConfig,
+    ) -> Result<(Self, Option<BuildWarning>)> {
+        let assets = AssetProcessor::new(project_files, project_root, assets, css)?;
+        let (highlight, warning) = HighlightProcessor::new(highlight, project_files)?;
+        Ok((Self { assets, highlight }, warning))
+    }
+
+    pub fn render(
+        &mut self,
+        mut document: HtmlDocument,
+        mut page: PagePublication<'_>,
+        pretty: bool,
+    ) -> Result<SitePage> {
+        let capture = ContentCapture::mark(&mut document)?;
+
+        let stage = tracing::debug_span!("transform", message = "transformed document").entered();
+        let resources = ComponentResources::collect(&document)?;
+        {
+            let mut navigation = NavigationProcessor;
+            let mut processors: [&mut dyn Processor; 3] =
+                [&mut self.assets, &mut navigation, &mut self.highlight];
+            process_document(&mut document, &mut page, &mut processors)?;
+        }
+        resources.apply(&mut document, &mut page, &mut self.assets)?;
+        drop(stage);
+
+        let stage = tracing::debug_span!("encode", message = "encoded HTML").entered();
+        let content = capture.extract(&mut document, pretty)?;
+        let html = typst_html::html(&document, &typst_html::HtmlOptions { pretty })
+            .map_err(|error| anyhow::anyhow!("HTML encoding failed: {error:?}"))?;
+        let snapshot = SitePage {
+            path: page.page_url_path(),
+            html: html.as_str().into(),
+            content,
+        };
+        page.add_html(html)?;
+        drop(stage);
+        Ok(snapshot)
+    }
+}
 
 /// One participant in the shared document traversal.
-pub trait Processor {
+trait Processor {
     /// Process one element and optionally suppress traversal into its children.
     fn process_element(
         &mut self,
@@ -33,7 +95,7 @@ pub trait Processor {
 }
 
 /// Run prepared processors over one document in caller-defined order.
-pub fn process_document(
+fn process_document(
     doc: &mut HtmlDocument,
     page: &mut PagePublication<'_>,
     processors: &mut [&mut dyn Processor],
@@ -57,7 +119,7 @@ pub fn process_document(
     Ok(())
 }
 
-pub enum WalkControl {
+enum WalkControl {
     Continue,
     SkipChildren,
 }

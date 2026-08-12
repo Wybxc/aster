@@ -1,7 +1,7 @@
 # Field Notes blog
 
 An editorial Aster example demonstrating content collections, dynamic post
-routes, RSS and sitemap endpoints, local project assets, and semantic article
+routes, RSS and sitemap generators, local project assets, and semantic article
 templates.
 
 ```sh

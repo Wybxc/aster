@@ -27,7 +27,7 @@ manifest. A build still verifies all transformed assets before publication.
 = Rebuild every route
 
 After updating a compiler, run a complete build and the repository test suite.
-Review page count, generated endpoints, CSS output, and representative light,
+Review page count, generated files, CSS output, and representative light,
 dark, mobile, and desktop pages.
 
 = Keep rollback straightforward

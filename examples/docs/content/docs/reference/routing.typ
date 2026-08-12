@@ -16,7 +16,7 @@ Aster derives output routes from Typst files under `pages/`. Files named
 ```text
 pages/index.typ             -> /index.html
 pages/about/index.typ       -> /about/index.html
-pages/robots.txt.typ        -> /robots.txt
+pages/robots.txt.typ        -> /robots.txt.html
 ```
 
 The development server serves exact output files. `/about/` resolves through
@@ -45,5 +45,6 @@ uses one spread template to render all non-root documentation entries.
 = Route context
 
 The `_aster.route` dictionary exposes the current browser path and parameter
-values. `_aster.routes` contains the complete planned page and endpoint sets for
-navigation, feeds, and sitemaps.
+values. `_aster.routes.pages` contains the complete planned page set for
+navigation, feeds, and sitemaps. Exact-path files belong under `generate/` and
+declare their string or bytes payload with `<aster-output>`.

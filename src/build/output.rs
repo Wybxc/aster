@@ -2,10 +2,12 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, ensure};
+use comemo::Tracked;
 use typst::ecow::EcoString;
 use typst::foundations::Bytes;
 use typst::syntax::VirtualPath;
 
+use crate::build::files::ProjectFiles;
 use crate::engine::route::RoutePath;
 use crate::foundation::{Project, ProjectLayout};
 
@@ -20,21 +22,22 @@ pub struct AssetPath(RoutePath);
 
 /// The publication-layer result returned to the build pipeline.
 ///
-/// Publication writes pages, endpoints, and internal assets. Only the two
+/// Publication writes pages, generated files, and internal assets. Only the two
 /// user-authored route kinds are surfaced as build results.
 pub struct PublishedOutput {
     /// Root directory containing the complete published site.
     pub output_dir: PathBuf,
     /// Published page paths in deterministic route order; generated assets are omitted.
     pub pages: Vec<PathBuf>,
-    /// Published endpoint paths in deterministic route order.
-    pub endpoints: Vec<PathBuf>,
+    /// Published generator output paths in deterministic route order.
+    pub generated: Vec<PathBuf>,
 }
 
 #[derive(Eq, PartialEq)]
 enum OutputFile {
     Page(Vec<u8>),
     Generated(Bytes),
+    Postprocessed(Bytes),
     Asset(Bytes),
     Public(Bytes),
 }
@@ -43,9 +46,10 @@ impl OutputFile {
     fn content(&self) -> &[u8] {
         match self {
             Self::Page(content) => content,
-            Self::Generated(content) | Self::Asset(content) | Self::Public(content) => {
-                content.as_slice()
-            }
+            Self::Generated(content)
+            | Self::Postprocessed(content)
+            | Self::Asset(content)
+            | Self::Public(content) => content.as_slice(),
         }
     }
 
@@ -53,7 +57,7 @@ impl OutputFile {
         matches!(self, Self::Page(_))
     }
 
-    fn is_endpoint(&self) -> bool {
+    fn is_generated(&self) -> bool {
         matches!(self, Self::Generated(_))
     }
 }
@@ -86,14 +90,35 @@ impl OutputPublication {
         self.add_asset(Some("highlight"), Some("css"), content)
     }
 
-    /// Register a file from the project's public directory at the output root.
-    pub fn add_public_file(&mut self, path: &Path, content: Bytes) -> Result<()> {
-        let path = RoutePath::new(path).context("invalid public file path")?;
-        self.insert(path, OutputFile::Public(content))
+    /// Collect the tracked public tree at the output root.
+    pub fn add_public_tree(
+        &mut self,
+        project_files: Tracked<ProjectFiles>,
+        root: &VirtualPath,
+    ) -> Result<()> {
+        let source_root = Path::new(root.get_without_slash());
+        let paths = project_files.list(root, false)?;
+        let count = paths.len();
+        for source in paths {
+            let relative = Path::new(source.get_without_slash())
+                .strip_prefix(source_root)
+                .context("public file is outside configured public directory")?;
+            let content = project_files.read(&source).with_context(|| {
+                format!("failed to read public file {}", source.get_with_slash())
+            })?;
+            let path = RoutePath::new(relative).context("invalid public file path")?;
+            self.insert(path, OutputFile::Public(content))?;
+        }
+        tracing::debug!(
+            files = count,
+            "collected {count} public file{}",
+            if count == 1 { "" } else { "s" }
+        );
+        Ok(())
     }
 
-    /// Register a generated endpoint at its exact output route.
-    pub fn add_generated_file(&mut self, path: RoutePath, content: Bytes) -> Result<()> {
+    /// Register a generator result at its exact output route.
+    pub fn add_generator_output(&mut self, path: RoutePath, content: Bytes) -> Result<()> {
         self.insert(path, OutputFile::Generated(content))
     }
 
@@ -129,12 +154,8 @@ impl OutputPublication {
         }
     }
 
-    /// Replace the prior output tree with this complete build.
-    ///
-    /// The complete file set is collected before publication. Clearing the
-    /// output directory removes every stale page and content-addressed asset,
-    /// so publishing the same build repeatedly produces the same tree.
-    pub fn publish(self) -> Result<PublishedOutput> {
+    /// Write the complete build into a temporary tree beside the destination.
+    pub fn stage(self) -> Result<StagedPublication> {
         let file_count = self.files.len();
         let byte_count = self
             .files
@@ -145,57 +166,159 @@ impl OutputPublication {
             files = file_count,
             bytes = byte_count,
             destination = %self.output_dir.display(),
-            "publishing {file_count} file{} ({byte_count} bytes)",
+            "staging {file_count} file{} ({byte_count} bytes)",
             if file_count == 1 { "" } else { "s" }
         );
-        remove_if_exists(&self.output_dir)?;
-        std::fs::create_dir_all(&self.output_dir)
-            .with_context(|| format!("failed to create {}", self.output_dir.display()))?;
+        let parent = self
+            .output_dir
+            .parent()
+            .context("output directory has no parent")?;
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create {}", parent.display()))?;
+        let staging = tempfile::Builder::new()
+            .prefix(".aster-stage-")
+            .tempdir_in(parent)
+            .context("failed to create output staging directory")?;
         for (relative, file) in &self.files {
-            let path = realize_output_path(&self.output_dir, relative)?;
+            let path = realize_output_path(staging.path(), relative)?;
             write_file(&path, file.content())?;
         }
 
-        let mut pages = Vec::new();
-        let mut endpoints = Vec::new();
-        for (path, file) in self.files {
-            let path = realize_output_path(&self.output_dir, &path)?;
-            if file.is_page() {
-                pages.push(path);
-            } else if file.is_endpoint() {
-                endpoints.push(path);
-            }
-        }
-        Ok(PublishedOutput {
+        Ok(StagedPublication {
             output_dir: self.output_dir,
-            pages,
-            endpoints,
+            staging,
+            files: self.files,
         })
     }
 
     fn insert(&mut self, path: RoutePath, file: OutputFile) -> Result<()> {
-        if let Some(existing) = self.files.get(&path) {
+        insert_file(&mut self.files, path, file)
+    }
+}
+
+/// A complete, unpublished site available to external postprocessors.
+pub struct StagedPublication {
+    output_dir: PathBuf,
+    staging: tempfile::TempDir,
+    files: BTreeMap<RoutePath, OutputFile>,
+}
+
+impl StagedPublication {
+    /// Return the temporary site root passed to external tools.
+    pub fn root(&self) -> &Path {
+        self.staging.path()
+    }
+
+    /// Import one private postprocessor output tree under `mount`.
+    pub fn import(&mut self, mount: &str, source: &Path) -> Result<()> {
+        ensure!(
+            source.is_dir(),
+            "postprocessor did not create its output directory"
+        );
+        let mount = RoutePath::new(mount).context("invalid postprocessor mount")?;
+        let mount = Path::new(mount.as_virtual_path().get_without_slash());
+        for entry in walkdir::WalkDir::new(source).sort_by_file_name() {
+            let entry = entry.context("failed to inspect postprocessor output")?;
+            if !entry.file_type().is_file() {
+                continue;
+            }
+            let relative = entry
+                .path()
+                .strip_prefix(source)
+                .context("postprocessor output escaped its directory")?;
+            let route = RoutePath::new(mount.join(relative))?;
+            let destination = realize_output_path(self.root(), &route)?;
             ensure!(
-                existing == &file,
-                "two published files selected the same output path {}",
-                path
+                !destination.exists(),
+                "postprocessor output conflicts with existing staged file {}",
+                route
             );
-            return Ok(());
+            let content = Bytes::new(std::fs::read(entry.path()).with_context(|| {
+                format!(
+                    "failed to read postprocessor output {}",
+                    entry.path().display()
+                )
+            })?);
+            insert_file(
+                &mut self.files,
+                route.clone(),
+                OutputFile::Postprocessed(content.clone()),
+            )?;
+            write_file(&destination, content.as_slice())?;
         }
-        if let Some(existing) = self
-            .files
-            .keys()
-            .find(|existing| existing.conflicts_with(&path))
-        {
-            anyhow::bail!(
-                "published files selected conflicting output paths {} and {}",
-                existing,
-                path
-            );
-        }
-        self.files.insert(path, file);
         Ok(())
     }
+
+    /// Select this staged tree as the new published output.
+    pub fn publish(self) -> Result<PublishedOutput> {
+        let page_routes = self
+            .files
+            .iter()
+            .filter(|(_, file)| file.is_page())
+            .map(|(path, _)| path.clone())
+            .collect::<Vec<_>>();
+        let generated_routes = self
+            .files
+            .iter()
+            .filter(|(_, file)| file.is_generated())
+            .map(|(path, _)| path.clone())
+            .collect::<Vec<_>>();
+
+        remove_if_exists(&self.output_dir)?;
+        let staging = self.staging.keep();
+        std::fs::rename(&staging, &self.output_dir).with_context(|| {
+            format!(
+                "failed to publish {} to {}",
+                staging.display(),
+                self.output_dir.display()
+            )
+        })?;
+
+        let pages = page_routes
+            .iter()
+            .map(|path| realize_output_path(&self.output_dir, path))
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .filter(|path| path.is_file())
+            .collect();
+        let generated = generated_routes
+            .iter()
+            .map(|path| realize_output_path(&self.output_dir, path))
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .filter(|path| path.is_file())
+            .collect();
+
+        Ok(PublishedOutput {
+            output_dir: self.output_dir,
+            pages,
+            generated,
+        })
+    }
+}
+
+fn insert_file(
+    files: &mut BTreeMap<RoutePath, OutputFile>,
+    path: RoutePath,
+    file: OutputFile,
+) -> Result<()> {
+    if let Some(existing) = files.get(&path) {
+        ensure!(
+            existing == &file,
+            "two published files selected the same output path {}",
+            path
+        );
+        return Ok(());
+    }
+    if let Some(existing) = files.keys().find(|existing| existing.conflicts_with(&path)) {
+        anyhow::bail!(
+            "published files selected conflicting output paths {} and {}",
+            existing,
+            path
+        );
+    }
+    files.insert(path, file);
+    Ok(())
 }
 
 /// Per-page access to output publication policy.
@@ -237,6 +360,10 @@ impl PagePublication<'_> {
 
     pub fn project_root(&self) -> &Path {
         &self.publication.project_root
+    }
+
+    pub fn page_url_path(&self) -> EcoString {
+        self.output.page_url_path()
     }
 
     /// Register the styles used by this page's highlighted code.
@@ -464,10 +591,10 @@ mod tests {
             .page(&template, &output)
             .add_html("new".into())
             .unwrap();
-        let published = publication.publish().unwrap();
+        let published = publication.stage().unwrap().publish().unwrap();
 
         assert_eq!(published.pages, vec![output_dir.join("index.html")]);
-        assert!(published.endpoints.is_empty());
+        assert!(published.generated.is_empty());
 
         let expected = snapshot_tree(&output_dir);
         std::fs::write(output_dir.join("stale.html"), "old").unwrap();
@@ -483,7 +610,7 @@ mod tests {
             .page(&template, &output)
             .add_html("new".into())
             .unwrap();
-        repeated.publish().unwrap();
+        repeated.stage().unwrap().publish().unwrap();
 
         assert_eq!(snapshot_tree(&output_dir), expected);
         assert!(!temp.path().join(".dist.aster-lock").exists());
@@ -498,6 +625,8 @@ mod tests {
         std::fs::write(output_dir.join("stale.html"), "old").unwrap();
 
         OutputPublication::new(&project, &layout)
+            .unwrap()
+            .stage()
             .unwrap()
             .publish()
             .unwrap();

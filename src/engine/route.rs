@@ -233,7 +233,7 @@ impl RouteTemplate {
     }
 
     /// Generate an exact output path without appending a page extension.
-    pub fn generate_endpoint(&self, params: &ParamSet) -> Result<RoutePath> {
+    pub fn generate_file(&self, params: &ParamSet) -> Result<RoutePath> {
         RoutePath::new(self.generate_path(params)?)
     }
 
@@ -501,7 +501,7 @@ mod tests {
         assert_eq!(
             parse("feed/[slug].xml.typ")
                 .unwrap()
-                .generate_endpoint(&ParamSet::from([("slug".into(), "latest".into())]))
+                .generate_file(&ParamSet::from([("slug".into(), "latest".into())]))
                 .unwrap()
                 .as_virtual_path()
                 .get_with_slash(),

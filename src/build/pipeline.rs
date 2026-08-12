@@ -1,23 +1,17 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result, bail};
-use typst::Library;
-use typst::ecow::EcoString;
-use typst::syntax::{RootedPath, VirtualRoot};
-use typst::utils::LazyHash;
+use anyhow::{Context, Result};
 
 use crate::build::output::OutputPublication;
-use crate::build::transform;
-use crate::engine::content::ContentEntry;
-use crate::engine::{content, endpoint};
+use crate::build::transform::DocumentTransform;
 use crate::foundation::ProjectLayout;
 use crate::foundation::config::AsterConfig;
 
 mod route_plan;
 
-use self::route_plan::{PlannedRoute, PlannedRouteKind, plan_routes};
-use super::{BuildSession, BuildWarning, files, world};
+use self::route_plan::{plan_generators, plan_pages};
+use super::{BuildSession, BuildWarning, postprocess, world};
 
 /// The complete build outcome. No build stage decides terminal formatting or
 /// exit status; the CLI renders this value after the pipeline finishes.
@@ -25,9 +19,9 @@ pub struct BuildOutcome {
     /// Root directory containing the complete published site.
     pub output_dir: PathBuf,
     /// Published page paths, in deterministic route order.
-    pub outputs: Vec<PathBuf>,
-    /// Published generated endpoint paths, in deterministic route order.
-    pub endpoints: Vec<PathBuf>,
+    pub pages: Vec<PathBuf>,
+    /// Published generator output paths, in deterministic route order.
+    pub generated: Vec<PathBuf>,
     /// Non-fatal diagnostics collected during the build.
     pub warnings: Vec<BuildWarning>,
     /// Total build and publication time.
@@ -72,104 +66,113 @@ impl BuildSession {
             let project = session.project().clone();
             let mut warnings = Vec::new();
             let mut publication = OutputPublication::new(&project, &layout)?;
-            add_public_files(session, &layout, &mut publication)
+            publication
+                .add_public_tree(session.project_files(), layout.public())
                 .context("failed to collect public files")?;
 
-            let mut assets = transform::AssetProcessor::new(
+            let (mut transform, transform_warning) = DocumentTransform::new(
                 session.project_files(),
                 project.root(),
                 &config.assets,
                 &config.css,
+                &config.highlight,
             )?;
-            let (mut highlight, highlight_warning) =
-                transform::HighlightProcessor::new(&config.highlight, session.project_files())?;
-            warnings.extend(highlight_warning);
+            warnings.extend(transform_warning);
 
-            let protocol =
-                load_content(session, &layout).context("failed to load content collections")?;
-            let base_inputs = content::inputs(protocol);
-            let base_library = world::library(base_inputs.clone());
+            let runtime = super::content::load(session.project_files(), layout.content())
+                .context("failed to load content collections")?;
             drop(stage);
 
             let stage = tracing::info_span!("plan", message = "planned routes").entered();
-            let (routes, route_warnings) = plan_routes(session, &layout, &base_library)?;
-            warnings.extend(route_warnings);
-
-            let pages = routes
+            let (pages, page_warnings) = plan_pages(session, &layout, &runtime)?;
+            warnings.extend(page_warnings);
+            let page_paths = pages
                 .iter()
-                .filter_map(|job| match job.kind {
-                    PlannedRouteKind::Page => Some(job.output.page_url_path()),
-                    PlannedRouteKind::Endpoint => None,
-                })
-                .collect::<Vec<_>>();
-            let endpoints = routes
-                .iter()
-                .filter_map(|job| match job.kind {
-                    PlannedRouteKind::Page => None,
-                    PlannedRouteKind::Endpoint => Some(job.output.url_path()),
-                })
+                .map(|job| job.output.page_url_path())
                 .collect::<Vec<_>>();
             tracing::debug!(
                 pages = pages.len(),
-                endpoints = endpoints.len(),
-                "planned {} page{} and {} endpoint{}",
+                "planned {} page{}",
                 pages.len(),
-                if pages.len() == 1 { "" } else { "s" },
-                endpoints.len(),
-                if endpoints.len() == 1 { "" } else { "s" }
+                if pages.len() == 1 { "" } else { "s" }
             );
-            let route_inputs = content::with_routes(&base_inputs, &pages, &endpoints);
+            let runtime = runtime.with_page_routes(&page_paths);
             drop(stage);
 
-            let stage = tracing::info_span!("render", message = "rendered routes").entered();
-            for job in routes {
-                let path = match job.kind {
-                    PlannedRouteKind::Page => job.output.page_url_path(),
-                    PlannedRouteKind::Endpoint => job.output.url_path(),
-                };
-                let route = match job.kind {
-                    PlannedRouteKind::Page => {
-                        tracing::info_span!(
-                            "page",
-                            route = %path,
-                            message = "rendered page"
-                        )
-                    }
-                    PlannedRouteKind::Endpoint => {
-                        tracing::info_span!(
-                            "endpoint",
-                            route = %path,
-                            message = "generated endpoint"
-                        )
-                    }
-                };
+            let stage = tracing::info_span!("render", message = "rendered pages").entered();
+            let mut site_pages = Vec::with_capacity(pages.len());
+            for job in &pages {
+                let path = job.output.page_url_path();
+                let route = tracing::info_span!("page", route = %path, message = "rendered page");
                 let _route = route.enter();
-                let library = world::library(content::with_route(&route_inputs, path, &job.params));
-                match job.kind {
-                    PlannedRouteKind::Page => render_page(
-                        session,
-                        &mut publication,
-                        &job,
-                        &library,
+                let route_runtime = runtime.for_route(path, &job.params);
+                let stage = tracing::debug_span!(
+                    "compile",
+                    source = %job.template.get_with_slash(),
+                    message = "compiled"
+                )
+                .entered();
+                let (document, compiled_warnings) =
+                    world::compile_document(session, &job.template, &route_runtime)?;
+                warnings.extend(compiled_warnings);
+                drop(stage);
+                let page = transform
+                    .render(
+                        document,
+                        publication.page(&job.template, &job.output),
                         config.output.pretty,
-                        (&mut assets, &mut highlight),
-                        &mut warnings,
-                    ),
-                    PlannedRouteKind::Endpoint => {
-                        render_endpoint(session, &mut publication, &job, &library, &mut warnings)
-                    }
-                }
-                .with_context(|| format!("failed to build {}", job.output))?;
+                    )
+                    .with_context(|| format!("failed to build {}", job.output))?;
+                site_pages.push(page);
+            }
+            drop(stage);
+
+            let stage = tracing::info_span!("generate", message = "ran generators").entered();
+            let runtime = runtime.with_site(&site_pages);
+            let (generators, generator_warnings) =
+                plan_generators(session, &layout, &runtime, &pages)?;
+            warnings.extend(generator_warnings);
+            tracing::debug!(
+                generators = generators.len(),
+                "planned {} generator{}",
+                generators.len(),
+                if generators.len() == 1 { "" } else { "s" }
+            );
+            for job in &generators {
+                let path = job.output.url_path();
+                let route = tracing::info_span!(
+                    "generator",
+                    route = %path,
+                    message = "ran generator"
+                );
+                let _route = route.enter();
+                let route_runtime = runtime.for_route(path, &job.params);
+                let stage = tracing::debug_span!(
+                    "compile",
+                    source = %job.template.get_with_slash(),
+                    message = "compiled"
+                )
+                .entered();
+                let (content, compiled_warnings) =
+                    world::evaluate_generator(session, &job.template, &route_runtime)
+                        .context("invalid generator output")?;
+                warnings.extend(compiled_warnings);
+                drop(stage);
+                publication
+                    .add_generator_output(job.output.clone(), content)
+                    .with_context(|| format!("failed to generate {}", job.output))?;
             }
             drop(stage);
 
             let stage = tracing::info_span!("publish", message = "published output").entered();
-            let published = publication.publish()?;
+            let mut staged = publication.stage()?;
+            postprocess::run(&config.postprocess, project.root(), &mut staged)?;
+            let published = staged.publish()?;
             drop(stage);
             Ok(BuildOutcome {
                 output_dir: published.output_dir,
-                outputs: published.pages,
-                endpoints: published.endpoints,
+                pages: published.pages,
+                generated: published.generated,
                 warnings,
                 elapsed: started.elapsed(),
             })
@@ -177,147 +180,4 @@ impl BuildSession {
         comemo::evict(10);
         outcome
     }
-}
-
-fn add_public_files(
-    session: &BuildSession,
-    layout: &ProjectLayout,
-    publication: &mut OutputPublication,
-) -> Result<()> {
-    let files = session.project_files();
-    let public_root = Path::new(layout.public().get_without_slash());
-
-    let paths = files.list(layout.public(), false)?;
-    let count = paths.len();
-    for path in paths {
-        let relative = Path::new(path.get_without_slash())
-            .strip_prefix(public_root)
-            .context("public file is outside configured public directory")?;
-        let content = files
-            .read(&path)
-            .with_context(|| format!("failed to read public file {}", path.get_with_slash()))?;
-        publication.add_public_file(relative, content)?;
-    }
-    tracing::debug!(
-        files = count,
-        "collected {count} public file{}",
-        if count == 1 { "" } else { "s" }
-    );
-    Ok(())
-}
-
-fn render_page(
-    session: &BuildSession,
-    publication: &mut OutputPublication,
-    job: &PlannedRoute,
-    library: &LazyHash<Library>,
-    pretty: bool,
-    processors: (
-        &mut transform::AssetProcessor<'_>,
-        &mut transform::HighlightProcessor,
-    ),
-    warnings: &mut Vec<BuildWarning>,
-) -> Result<()> {
-    let stage = tracing::debug_span!(
-        "compile",
-        source = %job.template.get_with_slash(),
-        message = "compiled"
-    )
-    .entered();
-    let (mut document, compiled_warnings) =
-        world::compile_document(session, &job.template, library)?;
-    warnings.extend(compiled_warnings);
-    drop(stage);
-
-    let stage = tracing::debug_span!("transform", message = "transformed document").entered();
-    let resources = transform::ComponentResources::collect(&document)?;
-
-    let mut page = publication.page(&job.template, &job.output);
-    let (assets, highlight) = processors;
-    {
-        let mut navigation = transform::NavigationProcessor;
-        let mut processors: [&mut dyn transform::Processor; 3] =
-            [assets, &mut navigation, highlight];
-        transform::process_document(&mut document, &mut page, &mut processors)?;
-    }
-    resources.apply(&mut document, &mut page, assets)?;
-    drop(stage);
-
-    let stage = tracing::debug_span!("encode", message = "encoded HTML").entered();
-    let html = typst_html::html(&document, &typst_html::HtmlOptions { pretty })
-        .map_err(|error| anyhow::anyhow!("HTML encoding failed: {error:?}"))?;
-    drop(stage);
-    page.add_html(html)
-}
-
-fn render_endpoint(
-    session: &BuildSession,
-    publication: &mut OutputPublication,
-    job: &PlannedRoute,
-    library: &LazyHash<Library>,
-    warnings: &mut Vec<BuildWarning>,
-) -> Result<()> {
-    let stage = tracing::debug_span!(
-        "compile",
-        source = %job.template.get_with_slash(),
-        message = "compiled"
-    )
-    .entered();
-    let (document, compiled_warnings) = world::compile_document(session, &job.template, library)?;
-    warnings.extend(compiled_warnings);
-    drop(stage);
-
-    let stage = tracing::debug_span!("extract", message = "extracted endpoint").entered();
-    let content = endpoint::extract(document.introspector().as_ref())
-        .context("invalid endpoint declaration")?
-        .context("endpoint route did not produce <aster-endpoint>")?;
-    drop(stage);
-    publication.add_generated_file(job.output.clone(), content)
-}
-
-fn load_content(
-    session: &BuildSession,
-    layout: &ProjectLayout,
-) -> Result<typst::foundations::Value> {
-    let mut entries = Vec::new();
-
-    for path in files::list_typst_files(session.project_files(), layout.content(), false)? {
-        let content_relative = Path::new(path.get_without_slash())
-            .strip_prefix(Path::new(layout.content().get_without_slash()))
-            .context("content path is outside configured content directory")?;
-        if content_relative.components().count() < 2 {
-            bail!(
-                "entry {} is not inside a collection; expected content/<collection>/.../<id>.typ",
-                path.get_with_slash()
-            );
-        }
-
-        let mut components = content_relative.components();
-        let collection = components
-            .next()
-            .map(|component| EcoString::from(component.as_os_str().to_string_lossy().as_ref()))
-            .context("entry not inside a collection directory")?;
-        let id = {
-            let mut path = PathBuf::new();
-            for component in components {
-                path.push(component);
-            }
-            path.set_extension("");
-            EcoString::from(path.to_string_lossy().replace('\\', "/"))
-        };
-
-        entries.push(ContentEntry {
-            collection,
-            id,
-            source: RootedPath::new(VirtualRoot::Project, path),
-        });
-    }
-
-    tracing::debug!(
-        entries = entries.len(),
-        "loaded {} content entr{}",
-        entries.len(),
-        if entries.len() == 1 { "y" } else { "ies" }
-    );
-    Ok(content::protocol(entries))
 }

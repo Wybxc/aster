@@ -63,6 +63,7 @@ impl Project {
 #[derive(Clone)]
 pub struct ProjectLayout {
     pages: VirtualPath,
+    generate: VirtualPath,
     content: VirtualPath,
     public: VirtualPath,
     output: VirtualPath,
@@ -75,12 +76,17 @@ impl ProjectLayout {
     /// Validate the configured project and output paths.
     pub fn new(config: &AsterConfig) -> Result<Self> {
         let pages = project_directory(&config.paths.pages, "pages")?;
+        let generate = project_directory(&config.paths.generate, "generate")?;
         let content = project_directory(&config.paths.content, "content")?;
         let public = project_directory(&config.paths.public, "public")?;
         let output = project_directory(&config.paths.output, "output")?;
         ensure_disjoint(&pages, "pages", &content, "content")?;
         ensure_disjoint(&pages, "pages", &public, "public")?;
         ensure_disjoint(&pages, "pages", &output, "output")?;
+        ensure_disjoint(&generate, "generate", &pages, "pages")?;
+        ensure_disjoint(&generate, "generate", &content, "content")?;
+        ensure_disjoint(&generate, "generate", &public, "public")?;
+        ensure_disjoint(&generate, "generate", &output, "output")?;
         ensure_disjoint(&content, "content", &public, "public")?;
         ensure_disjoint(&content, "content", &output, "output")?;
         ensure_disjoint(&public, "public", &output, "output")?;
@@ -100,6 +106,12 @@ impl ProjectLayout {
             .watch
             .paths
             .iter()
+            .chain(
+                config
+                    .postprocess
+                    .iter()
+                    .flat_map(|processor| processor.watch.iter()),
+            )
             .map(|value| {
                 let path = project_path(value, "watch")?;
                 ensure!(!path.is_root(), "watch path cannot be the project root");
@@ -114,6 +126,7 @@ impl ProjectLayout {
 
         Ok(Self {
             pages,
+            generate,
             content,
             public,
             output,
@@ -126,6 +139,11 @@ impl ProjectLayout {
     /// Return the page template directory.
     pub fn pages(&self) -> &VirtualPath {
         &self.pages
+    }
+
+    /// Return the Typst generator directory.
+    pub fn generate(&self) -> &VirtualPath {
+        &self.generate
     }
 
     /// Return the content collection directory.

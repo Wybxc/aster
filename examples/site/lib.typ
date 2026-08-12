@@ -4,7 +4,7 @@
   (:)
 } else {
   assert(
-    _content_state.protocol == 6,
+    _content_state.protocol == 7,
     message: "incompatible runtime protocol with the Aster binary",
   )
   _content_state.collections
@@ -19,7 +19,6 @@
 #let route-path = if _route == none { "/" } else { _route.path }
 #let route-params = if _route == none { (:) } else { _route.params }
 #let route-pages = if _content_state == none { () } else { _content_state.routes.pages }
-#let route-endpoints = if _content_state == none { () } else { _content_state.routes.endpoints }
 
 #let get-collection-ids(name) = {
   _collections.at(name, default: (:)).keys().sorted()

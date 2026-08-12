@@ -6,12 +6,9 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result, bail};
 use aster::{BuildSession, FilesystemDependency};
 use notify_debouncer_full::notify::{
-    Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher as NotifyWatcher,
-    event::ModifyKind,
+    Config, EventKind, RecommendedWatcher, RecursiveMode, event::ModifyKind,
 };
-use notify_debouncer_full::{
-    DebounceEventResult, Debouncer, FileIdCache, RecommendedCache, new_debouncer_opt,
-};
+use notify_debouncer_full::{DebounceEventResult, Debouncer, RecommendedCache, new_debouncer_opt};
 
 use crate::cli::{resolve_project, telemetry};
 
@@ -44,8 +41,8 @@ pub fn run(project_dir: Option<PathBuf>) -> Result<()> {
     }
 }
 
-pub struct Watcher<T: NotifyWatcher = RecommendedWatcher, C: FileIdCache = RecommendedCache> {
-    debouncer: Debouncer<T, C>,
+pub struct Watcher {
+    debouncer: Debouncer<RecommendedWatcher, RecommendedCache>,
     events: Receiver<DebounceEventResult>,
     watched: BTreeMap<PathBuf, RecursiveMode>,
     missing: BTreeSet<PathBuf>,
@@ -54,7 +51,7 @@ pub struct Watcher<T: NotifyWatcher = RecommendedWatcher, C: FileIdCache = Recom
 const DEBOUNCE_TIMEOUT: Duration = Duration::from_millis(100);
 const POLL_INTERVAL: Duration = Duration::from_millis(300);
 
-impl Watcher<RecommendedWatcher, RecommendedCache> {
+impl Watcher {
     pub fn new() -> Result<Self> {
         let (sender, events) = std::sync::mpsc::channel();
         let config = Config::default().with_poll_interval(POLL_INTERVAL);
@@ -65,18 +62,12 @@ impl Watcher<RecommendedWatcher, RecommendedCache> {
             RecommendedCache::new(),
             config,
         )?;
-        Ok(Self::from_debouncer(debouncer, events))
-    }
-}
-
-impl<T: NotifyWatcher, C: FileIdCache> Watcher<T, C> {
-    fn from_debouncer(debouncer: Debouncer<T, C>, events: Receiver<DebounceEventResult>) -> Self {
-        Self {
+        Ok(Self {
             debouncer,
             events,
             watched: BTreeMap::new(),
             missing: BTreeSet::new(),
-        }
+        })
     }
 
     pub fn replace(
@@ -196,25 +187,9 @@ fn relevant(kind: EventKind) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use notify_debouncer_full::NoCache;
-    use notify_debouncer_full::notify::PollWatcher;
 
-    fn polling_watcher(
-        dependencies: impl IntoIterator<Item = FilesystemDependency>,
-    ) -> Watcher<PollWatcher, NoCache> {
-        let (sender, events) = std::sync::mpsc::channel();
-        let config = Config::default()
-            .with_poll_interval(Duration::from_millis(50))
-            .with_compare_contents(true);
-        let debouncer = new_debouncer_opt(
-            Duration::from_millis(50),
-            None,
-            sender,
-            NoCache::new(),
-            config,
-        )
-        .unwrap();
-        let mut watcher = Watcher::from_debouncer(debouncer, events);
+    fn watcher(dependencies: impl IntoIterator<Item = FilesystemDependency>) -> Watcher {
+        let mut watcher = Watcher::new().unwrap();
         watcher.replace(dependencies).unwrap();
         watcher
     }
@@ -234,7 +209,7 @@ mod tests {
         let root = temp.path().join("root");
         let nested = root.join("nested");
         std::fs::create_dir_all(&nested).unwrap();
-        let mut watcher = polling_watcher([FilesystemDependency::Tree(root)]);
+        let mut watcher = watcher([FilesystemDependency::Tree(root)]);
         let writer = change_repeatedly(nested.join("page.typ"));
 
         watcher
@@ -248,7 +223,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let file = temp.path().join("page.typ");
         std::fs::write(&file, "initial").unwrap();
-        let mut watcher = polling_watcher([FilesystemDependency::File(file.clone())]);
+        let mut watcher = watcher([FilesystemDependency::File(file.clone())]);
         let writer = change_repeatedly(file);
 
         watcher
@@ -264,7 +239,7 @@ mod tests {
         let new = temp.path().join("new.typ");
         std::fs::write(&old, "old").unwrap();
         std::fs::write(&new, "new").unwrap();
-        let mut watcher = polling_watcher([FilesystemDependency::File(old.clone())]);
+        let mut watcher = watcher([FilesystemDependency::File(old.clone())]);
 
         watcher
             .replace([FilesystemDependency::File(new.clone())])
@@ -283,7 +258,7 @@ mod tests {
     fn polls_missing_paths_until_they_exist() {
         let temp = tempfile::tempdir().unwrap();
         let missing = temp.path().join("content");
-        let mut watcher = polling_watcher([FilesystemDependency::Tree(missing.clone())]);
+        let mut watcher = watcher([FilesystemDependency::Tree(missing.clone())]);
         let created = missing.clone();
         let creator = std::thread::spawn(move || {
             std::thread::sleep(Duration::from_millis(100));
@@ -300,7 +275,7 @@ mod tests {
     fn notices_missing_path_created_before_waiting() {
         let temp = tempfile::tempdir().unwrap();
         let missing = temp.path().join("content");
-        let mut watcher = polling_watcher([FilesystemDependency::Tree(missing.clone())]);
+        let mut watcher = watcher([FilesystemDependency::Tree(missing.clone())]);
 
         std::fs::create_dir(&missing).unwrap();
 

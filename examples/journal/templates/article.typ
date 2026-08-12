@@ -52,7 +52,7 @@
         ]
       ]
     ]
-    #html.article(id: "article")[#prose(body)]
+    #html.article(id: "article")[#prose(body)] <aster-content>
     #html.button(
       id: "back-to-top",
       type: "button",

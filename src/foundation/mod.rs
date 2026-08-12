@@ -11,7 +11,7 @@ mod project;
 
 pub use config::{
     AssetsConfig, AsterConfig, CssConfig, FontConfig, HighlightConfig, ImageConfig, OutputConfig,
-    PathsConfig, Themes, TypstConfig, WatchConfig,
+    PathsConfig, PostprocessConfig, Themes, TypstConfig, WatchConfig,
 };
 pub use project::{Project, ProjectLayout};
 

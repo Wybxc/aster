@@ -48,8 +48,10 @@ impl Default for Themes {
 #[derive(Clone, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct PathsConfig {
-    /// Directory containing page and endpoint templates.
+    /// Directory containing HTML page templates.
     pub pages: EcoString,
+    /// Directory containing exact-path Typst generators.
+    pub generate: EcoString,
     /// Directory containing content collections.
     pub content: EcoString,
     /// Directory copied verbatim into the output.
@@ -62,6 +64,7 @@ impl Default for PathsConfig {
     fn default() -> Self {
         Self {
             pages: "pages".into(),
+            generate: "generate".into(),
             content: "content".into(),
             public: "public".into(),
             output: "dist".into(),
@@ -159,6 +162,22 @@ pub struct WatchConfig {
     pub paths: EcoVec<EcoString>,
 }
 
+/// One external command run against the completed staged site.
+#[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PostprocessConfig {
+    /// Human-readable name used in diagnostics.
+    pub name: EcoString,
+    /// Executable and arguments. `{site}` and `{output}` are replaced by paths.
+    pub command: EcoVec<EcoString>,
+    /// Output-tree directory receiving a private `{output}` tree, when used.
+    #[serde(default)]
+    pub mount: Option<EcoString>,
+    /// Additional project paths observed by development commands.
+    #[serde(default)]
+    pub watch: EcoVec<EcoString>,
+}
+
 /// Typst compiler settings.
 #[derive(Clone, Default, Deserialize)]
 #[serde(default)]
@@ -200,6 +219,8 @@ pub struct AsterConfig {
     pub css: CssConfig,
     /// Additional development watcher inputs.
     pub watch: WatchConfig,
+    /// External postprocessors run after Typst pages and generators.
+    pub postprocess: EcoVec<PostprocessConfig>,
     /// Typst compiler settings.
     pub typst: TypstConfig,
     /// Syntax-highlighting settings.
@@ -315,6 +336,7 @@ mod tests {
         let config = load(&config_file).unwrap();
 
         assert_eq!(config.paths.pages, "routes");
+        assert_eq!(config.paths.generate, "generate");
         assert_eq!(config.paths.content, "content");
         assert_eq!(config.paths.public, "files");
         assert_eq!(config.paths.output, "public");

@@ -7,6 +7,7 @@ fn build_honors_configured_layout_and_processing_options() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
     std::fs::create_dir_all(root.join("routes")).unwrap();
+    std::fs::create_dir_all(root.join("artifacts")).unwrap();
     std::fs::create_dir_all(root.join("styles")).unwrap();
     std::fs::create_dir_all(root.join("entries/blog")).unwrap();
     std::fs::create_dir_all(root.join("fonts/nested")).unwrap();
@@ -16,6 +17,7 @@ fn build_honors_configured_layout_and_processing_options() {
         concat!(
             "[paths]\n",
             "pages = \"routes\"\n",
+            "generate = \"artifacts\"\n",
             "content = \"entries\"\n",
             "public = \"files\"\n",
             "output = \"public\"\n",
@@ -70,7 +72,7 @@ fn build_honors_configured_layout_and_processing_options() {
     let mut session = BuildSession::new(project);
     let outcome = session.build().unwrap();
 
-    assert_eq!(outcome.outputs, [root.join("public/index.html")]);
+    assert_eq!(outcome.pages, [root.join("public/index.html")]);
     let html = std::fs::read_to_string(root.join("public/index.html")).unwrap();
     assert!(html.starts_with("<!DOCTYPE html>\n<html>"));
     assert!(html.contains("Test Site"));
@@ -105,6 +107,7 @@ fn build_honors_configured_layout_and_processing_options() {
 
     let dependencies = session.dependencies();
     assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("routes"))));
+    assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("artifacts"))));
     assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("entries"))));
     assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("fonts"))));
     assert!(dependencies.contains(&FilesystemDependency::Tree(root.join("files"))));

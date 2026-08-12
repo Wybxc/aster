@@ -17,7 +17,9 @@
 
 #let items = entries.map(item => {
   let metadata = item.metadata
-  let url = settings.site.url + "journal/" + item.entry.id + "/"
+  let path = "/journal/" + item.entry.id + "/"
+  let page = sys.inputs._aster.site.pages.find(page => page.path == path)
+  let url = settings.site.url + path.trim("/") + "/"
   (
     tag: "item",
     children: (
@@ -26,13 +28,14 @@
       (tag: "guid", attrs: ("isPermaLink": "true"), children: (url,)),
       (tag: "pubDate", children: (rss-date(metadata.date),)),
       (tag: "description", children: (metadata.summary,)),
+      (tag: "content:encoded", children: (page.content.html,)),
     ),
   )
 })
 
 #let feed = (
   tag: "rss",
-  attrs: (version: "2.0"),
+  attrs: (version: "2.0", "xmlns:content": "http://purl.org/rss/1.0/modules/content/"),
   children: (
     (
       tag: "channel",
@@ -48,4 +51,4 @@
   ),
 )
 
-#metadata(to-xml(feed, pretty: true)) <aster-endpoint>
+#metadata(to-xml(feed, pretty: true)) <aster-output>
