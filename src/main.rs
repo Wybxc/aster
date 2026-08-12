@@ -5,7 +5,7 @@ use clap::Parser;
 
 mod cli;
 
-use crate::cli::{build, dev, diag, init, watch};
+use crate::cli::{build, dev, init, telemetry, watch};
 
 #[derive(Parser)]
 #[command(name = "aster", version, about = "Aster build system")]
@@ -56,11 +56,14 @@ enum Commands {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
-    diag::init(cli.verbosity);
+    telemetry::init(cli.verbosity);
     match run(cli) {
         Ok(exit) => exit,
         Err(error) => {
-            diag::emit_error(&format!("{error:#}"));
+            tracing::error!(
+                error = %format_args!("{error:#}"),
+                "command failed: {error:#}"
+            );
             ExitCode::FAILURE
         }
     }

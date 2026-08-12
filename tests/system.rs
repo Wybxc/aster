@@ -109,15 +109,37 @@ fn build_command_builds_the_selected_project() {
     );
     assert!(root.join("dist/index.html").is_file());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("built 1 page"));
-    for stage in ["configure", "fonts", "prepare", "plan", "render", "publish"] {
-        assert!(stderr.contains(stage), "missing {stage} timing in {stderr}");
-    }
-    assert!(stderr.contains("page /"), "missing page timing in {stderr}");
     assert!(
-        !stderr.contains("compile /pages/index.typ"),
+        stderr.contains("INFO  built 1 page in "),
+        "missing build outcome in {stderr}"
+    );
+    for stage in [
+        "configured project",
+        "loaded fonts",
+        "prepared build",
+        "planned routes",
+        "rendered routes",
+        "published output",
+    ] {
+        assert!(
+            stderr.contains(&format!("INFO  {stage} in ")),
+            "missing {stage} timing in {stderr}"
+        );
+    }
+    assert!(
+        stderr.contains("INFO    rendered page / in "),
+        "missing indented page timing in {stderr}"
+    );
+    assert!(
+        !stderr.contains("compiled /pages/index.typ"),
         "default output included verbose details in {stderr}"
     );
+    for implementation_detail in [" new", " close", "time.busy", "time.idle"] {
+        assert!(
+            !stderr.contains(implementation_detail),
+            "output exposed {implementation_detail} in {stderr}"
+        );
+    }
 
     let output = Command::new(env!("CARGO_BIN_EXE_aster"))
         .arg("build")
@@ -133,21 +155,27 @@ fn build_command_builds_the_selected_project() {
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     for detail in [
-        "project ",
-        "discovered ",
-        "collected 0 public files",
-        "loaded 0 content entries",
-        "probe index.typ",
-        "planned 1 page and 0 endpoints",
-        "page /",
-        "compile /pages/index.typ",
-        "transform",
-        "encode",
-        "writing 1 file",
+        "DEBUG   configured project ",
+        "DEBUG   discovered ",
+        "DEBUG   collected 0 public files",
+        "DEBUG   loaded 0 content entries",
+        "DEBUG   probed template index.typ in ",
+        "DEBUG   planned 1 page and 0 endpoints",
+        "INFO    rendered page / in ",
+        "DEBUG     compiled /pages/index.typ in ",
+        "DEBUG     transformed document in ",
+        "DEBUG     encoded HTML in ",
+        "DEBUG   publishing 1 file (",
     ] {
         assert!(
             stderr.contains(detail),
             "missing {detail} detail in {stderr}"
+        );
+    }
+    for implementation_detail in [" new", " close", "time.busy", "time.idle"] {
+        assert!(
+            !stderr.contains(implementation_detail),
+            "output exposed {implementation_detail} in {stderr}"
         );
     }
 }

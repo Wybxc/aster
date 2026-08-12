@@ -19,7 +19,7 @@ use serde::Deserialize;
 use tokio::sync::{RwLock, oneshot, watch};
 
 use crate::cli::watch::Watcher;
-use crate::cli::{diag, resolve_project};
+use crate::cli::{resolve_project, telemetry};
 
 const LIVE_RELOAD_SCRIPT_PATH: &str = "/_aster/live-reload.js";
 const LIVE_RELOAD_EVENTS_PATH: &str = "/_aster/events";
@@ -35,12 +35,19 @@ pub fn run(project_dir: Option<PathBuf>, host: IpAddr, port: u16) -> Result<()> 
     let mut session = BuildSession::new(project.clone());
     let mut watcher = Watcher::new().context("failed to initialize file watcher")?;
     let server = DevServer::start(SocketAddr::new(host, port))?;
-    diag::emit_serving(server.address());
+    tracing::info!(
+        address = %format_args!("http://{}/", server.address()),
+        "serving project at http://{}/",
+        server.address()
+    );
 
     loop {
         match server.build(&mut session) {
-            Ok(outcome) => diag::report_build(&outcome),
-            Err(error) => diag::emit_error(&format!("{error:#}")),
+            Ok(outcome) => telemetry::report_build(&outcome),
+            Err(error) => tracing::error!(
+                error = %format_args!("{error:#}"),
+                "build failed: {error:#}"
+            ),
         }
 
         watcher
@@ -49,7 +56,7 @@ pub fn run(project_dir: Option<PathBuf>, host: IpAddr, port: u16) -> Result<()> 
         watcher
             .wait()
             .context("failed while watching project inputs")?;
-        diag::emit_rebuilding();
+        tracing::info!(reason = "change detected", "rebuilding after a change");
     }
 }
 
@@ -102,9 +109,10 @@ impl DevServer {
                     let acceptor = match TcpAcceptor::from_std(listener) {
                         Ok(acceptor) => acceptor,
                         Err(error) => {
-                            diag::emit_error(&format!(
+                            tracing::error!(
+                                error = %error,
                                 "failed to initialize development server: {error}"
-                            ));
+                            );
                             return;
                         }
                     };
@@ -116,7 +124,10 @@ impl DevServer {
                         .run_with_graceful_shutdown(app, signal, Some(Duration::from_millis(250)))
                         .await
                     {
-                        diag::emit_error(&format!("development server failed: {error}"));
+                        tracing::error!(
+                            error = %error,
+                            "development server failed: {error}"
+                        );
                     }
                 });
             })
@@ -242,7 +253,12 @@ async fn serve_file(
     let mut content = match tokio::fs::read(&path).await {
         Ok(content) => content,
         Err(error) => {
-            diag::emit_error(&format!("failed to serve {}: {error}", path.display()));
+            tracing::error!(
+                path = %path.display(),
+                error = %error,
+                "failed to serve {}: {error}",
+                path.display()
+            );
             return status_page(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to read requested file",

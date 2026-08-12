@@ -179,8 +179,12 @@ impl HighlightProcessor {
             return Ok(tokens.clone());
         }
 
-        let operation =
-            tracing::debug_span!(target: "aster::build", "highlight", detail = %lang).entered();
+        let operation = tracing::debug_span!(
+            "highlight",
+            language = %lang,
+            message = %format_args!("highlighted {lang}")
+        )
+        .entered();
         if self.languages.is_none() {
             self.languages = Some(LanguageRegistry::new()?);
         }

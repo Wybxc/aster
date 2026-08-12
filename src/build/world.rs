@@ -42,17 +42,15 @@ pub fn configure_fonts(
         .sum::<usize>();
     if refresh {
         tracing::debug!(
-            target: "aster::build",
             fonts = count,
-            "discovered {count} font {}",
-            if count == 1 { "face" } else { "faces" }
+            "discovered {count} font face{}",
+            if count == 1 { "" } else { "s" }
         );
     } else {
         tracing::debug!(
-            target: "aster::build",
             fonts = count,
-            "reused {count} font {}",
-            if count == 1 { "face" } else { "faces" }
+            "reused {count} font face{}",
+            if count == 1 { "" } else { "s" }
         );
     }
     Ok(())

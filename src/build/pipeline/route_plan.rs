@@ -39,9 +39,9 @@ pub fn plan_routes(
             .strip_prefix(Path::new(layout.pages().get_without_slash()))
             .context("route template is outside configured pages directory")?;
         let probe = tracing::debug_span!(
-            target: "aster::build",
             "probe",
-            detail = %relative.display()
+            template = %relative.display(),
+            message = %format_args!("probed template {}", relative.display())
         )
         .entered();
         let pattern = route::parse_template(relative)

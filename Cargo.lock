@@ -163,6 +163,7 @@ name = "aster-ssg"
 version = "0.1.0"
 dependencies = [
  "aho-corasick",
+ "anstyle",
  "anyhow",
  "clap",
  "comemo",

@@ -68,9 +68,9 @@ impl<'a> ScriptPipeline<'a> {
             return Ok(module.clone());
         }
         let operation = tracing::debug_span!(
-            target: "aster::build",
             "module",
-            detail = %source.origin().get_with_slash()
+            source = %source.origin().get_with_slash(),
+            message = %format_args!("bundled module {}", source.origin().get_with_slash())
         )
         .entered();
         let module = bundle_module(

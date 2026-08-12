@@ -142,12 +142,11 @@ impl OutputPublication {
             .map(|file| file.content().len())
             .sum::<usize>();
         tracing::debug!(
-            target: "aster::build",
             files = file_count,
             bytes = byte_count,
             output = %self.output_dir.display(),
-            "writing {file_count} {} ({byte_count} bytes) to {}",
-            if file_count == 1 { "file" } else { "files" },
+            "publishing {file_count} file{} ({byte_count} bytes) to {}",
+            if file_count == 1 { "" } else { "s" },
             self.output_dir.display()
         );
         remove_if_exists(&self.output_dir)?;

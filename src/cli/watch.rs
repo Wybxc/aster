@@ -13,19 +13,26 @@ use notify_debouncer_full::{
     DebounceEventResult, Debouncer, FileIdCache, RecommendedCache, new_debouncer_opt,
 };
 
-use crate::cli::{diag, resolve_project};
+use crate::cli::{resolve_project, telemetry};
 
 pub fn run(project_dir: Option<PathBuf>) -> Result<()> {
     let project = resolve_project(project_dir)?;
     let mut session = BuildSession::new(project.clone());
     let mut watcher = Watcher::new().context("failed to initialize file watcher")?;
-    diag::emit_watching(project.root());
+    tracing::info!(
+        project = %project.root().display(),
+        "watching project {}",
+        project.root().display()
+    );
 
     loop {
         let result = session.build();
         match result {
-            Ok(outcome) => diag::report_build(&outcome),
-            Err(error) => diag::emit_error(&format!("{error:#}")),
+            Ok(outcome) => telemetry::report_build(&outcome),
+            Err(error) => tracing::error!(
+                error = %format_args!("{error:#}"),
+                "build failed: {error:#}"
+            ),
         }
 
         watcher
@@ -34,7 +41,7 @@ pub fn run(project_dir: Option<PathBuf>) -> Result<()> {
         watcher
             .wait()
             .context("failed while watching project inputs")?;
-        diag::emit_rebuilding();
+        tracing::info!(reason = "change detected", "rebuilding after a change");
     }
 }
 

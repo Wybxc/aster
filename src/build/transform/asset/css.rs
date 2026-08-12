@@ -77,23 +77,26 @@ impl<'a> CssPipeline<'a> {
             let operation = match &source {
                 StylesheetSource::Css(CssBundleSource::File(path)) => {
                     tracing::debug_span!(
-                        target: "aster::build",
                         "stylesheet",
-                        detail = %path.get_with_slash()
+                        source = %path.get_with_slash(),
+                        message = %format_args!("bundled stylesheet {}", path.get_with_slash())
                     )
                 }
                 StylesheetSource::Css(CssBundleSource::Memory { origin, .. }) => {
                     tracing::debug_span!(
-                        target: "aster::build",
                         "stylesheet",
-                        detail = %origin.get_with_slash()
+                        source = %origin.get_with_slash(),
+                        message = %format_args!("bundled stylesheet {}", origin.get_with_slash())
                     )
                 }
                 StylesheetSource::Tailwind(path) => {
                     tracing::debug_span!(
-                        target: "aster::build",
                         "tailwind",
-                        detail = %path.get_with_slash()
+                        source = %path.get_with_slash(),
+                        message = %format_args!(
+                            "processed stylesheet {} with Tailwind",
+                            path.get_with_slash()
+                        )
                     )
                 }
             };

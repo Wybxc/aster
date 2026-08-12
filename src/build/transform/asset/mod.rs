@@ -321,9 +321,12 @@ impl<'a> AssetProcessor<'a> {
             let Some(asset) = decode_data_url(url, self.inline_threshold)? else {
                 return Ok(None);
             };
-            let operation =
-                tracing::trace_span!(target: "aster::build", "asset", detail = "data URL")
-                    .entered();
+            let operation = tracing::trace_span!(
+                "asset",
+                kind = "data-url",
+                message = "processed data URL asset"
+            )
+            .entered();
             let content = self.images.optimize(Bytes::new(asset.content), limit);
             let result = page.add_data_asset(asset.extension, content).map(Some);
             drop(operation);
@@ -334,9 +337,9 @@ impl<'a> AssetProcessor<'a> {
             return Ok(None);
         };
         let operation = tracing::trace_span!(
-            target: "aster::build",
             "asset",
-            detail = %reference.source.get_with_slash()
+            source = %reference.source.get_with_slash(),
+            message = %format_args!("processed asset {}", reference.source.get_with_slash())
         )
         .entered();
         let content = self

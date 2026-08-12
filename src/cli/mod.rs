@@ -10,8 +10,8 @@ use aster::Project;
 
 pub mod build;
 pub mod dev;
-pub mod diag;
 pub mod init;
+pub mod telemetry;
 pub mod watch;
 
 fn resolve_project(project_dir: Option<PathBuf>) -> Result<Project> {

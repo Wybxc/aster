@@ -40,7 +40,7 @@ impl BuildSession {
         let started = Instant::now();
         self.reset();
         let outcome = (|| {
-            let stage = tracing::info_span!(target: "aster::build", "configure").entered();
+            let stage = tracing::info_span!("configure", message = "configured project").entered();
             let config_file = self.project().config_file();
             let config_path = self.project().config_path();
             let content = self
@@ -52,10 +52,9 @@ impl BuildSession {
             let layout = ProjectLayout::new(&config).context("invalid project layout")?;
             let output_dir = self.project().realize(layout.output());
             tracing::debug!(
-                target: "aster::build",
                 project = %self.project().root().display(),
                 output = %output_dir.display(),
-                "project {} (output {})",
+                "configured project {} with output {}",
                 self.project().root().display(),
                 output_dir.display()
             );
@@ -66,12 +65,12 @@ impl BuildSession {
             }
             drop(stage);
 
-            let stage = tracing::info_span!(target: "aster::build", "fonts").entered();
+            let stage = tracing::info_span!("fonts", message = "loaded fonts").entered();
             world::configure_fonts(self, &config.typst.fonts, &layout)?;
             drop(stage);
 
             let session = &*self;
-            let stage = tracing::info_span!(target: "aster::build", "prepare").entered();
+            let stage = tracing::info_span!("prepare", message = "prepared build").entered();
             let project = session.project().clone();
             let mut warnings = Vec::new();
             let mut publication = OutputPublication::new(&project, &layout)?;
@@ -94,7 +93,7 @@ impl BuildSession {
             let base_library = world::library(base_inputs.clone());
             drop(stage);
 
-            let stage = tracing::info_span!(target: "aster::build", "plan").entered();
+            let stage = tracing::info_span!("plan", message = "planned routes").entered();
             let (routes, route_warnings) = plan_routes(session, &layout, &base_library)?;
             warnings.extend(route_warnings);
 
@@ -113,19 +112,18 @@ impl BuildSession {
                 })
                 .collect::<Vec<_>>();
             tracing::debug!(
-                target: "aster::build",
                 pages = pages.len(),
                 endpoints = endpoints.len(),
-                "planned {} {} and {} {}",
+                "planned {} page{} and {} endpoint{}",
                 pages.len(),
-                if pages.len() == 1 { "page" } else { "pages" },
+                if pages.len() == 1 { "" } else { "s" },
                 endpoints.len(),
-                if endpoints.len() == 1 { "endpoint" } else { "endpoints" }
+                if endpoints.len() == 1 { "" } else { "s" }
             );
             let route_inputs = content::with_routes(&base_inputs, &pages, &endpoints);
             drop(stage);
 
-            let stage = tracing::info_span!(target: "aster::build", "render").entered();
+            let stage = tracing::info_span!("render", message = "rendered routes").entered();
             for job in routes {
                 let path = match job.kind {
                     PlannedRouteKind::Page => job.output.page_url_path(),
@@ -133,10 +131,18 @@ impl BuildSession {
                 };
                 let route = match job.kind {
                     PlannedRouteKind::Page => {
-                        tracing::info_span!(target: "aster::build", "page", detail = %path)
+                        tracing::info_span!(
+                            "page",
+                            route = %path,
+                            message = %format_args!("rendered page {path}")
+                        )
                     }
                     PlannedRouteKind::Endpoint => {
-                        tracing::info_span!(target: "aster::build", "endpoint", detail = %path)
+                        tracing::info_span!(
+                            "endpoint",
+                            route = %path,
+                            message = %format_args!("generated endpoint {path}")
+                        )
                     }
                 };
                 let _route = route.enter();
@@ -159,7 +165,7 @@ impl BuildSession {
             }
             drop(stage);
 
-            let stage = tracing::info_span!(target: "aster::build", "publish").entered();
+            let stage = tracing::info_span!("publish", message = "published output").entered();
             let published = publication.publish()?;
             drop(stage);
             Ok(BuildOutcome {
@@ -195,10 +201,9 @@ fn add_public_files(
         publication.add_public_file(relative, content)?;
     }
     tracing::debug!(
-        target: "aster::build",
         files = count,
-        "collected {count} public {}",
-        if count == 1 { "file" } else { "files" }
+        "collected {count} public file{}",
+        if count == 1 { "" } else { "s" }
     );
     Ok(())
 }
@@ -216,9 +221,9 @@ fn render_page(
     warnings: &mut Vec<BuildWarning>,
 ) -> Result<()> {
     let stage = tracing::debug_span!(
-        target: "aster::build",
         "compile",
-        detail = %job.template.get_with_slash()
+        source = %job.template.get_with_slash(),
+        message = %format_args!("compiled {}", job.template.get_with_slash())
     )
     .entered();
     let (mut document, compiled_warnings) =
@@ -226,7 +231,7 @@ fn render_page(
     warnings.extend(compiled_warnings);
     drop(stage);
 
-    let stage = tracing::debug_span!(target: "aster::build", "transform").entered();
+    let stage = tracing::debug_span!("transform", message = "transformed document").entered();
     let resources = transform::ComponentResources::collect(&document)?;
 
     let mut page = publication.page(&job.template, &job.output);
@@ -240,7 +245,7 @@ fn render_page(
     resources.apply(&mut document, &mut page, assets)?;
     drop(stage);
 
-    let stage = tracing::debug_span!(target: "aster::build", "encode").entered();
+    let stage = tracing::debug_span!("encode", message = "encoded HTML").entered();
     let html = typst_html::html(&document, &typst_html::HtmlOptions { pretty })
         .map_err(|error| anyhow::anyhow!("HTML encoding failed: {error:?}"))?;
     drop(stage);
@@ -255,16 +260,16 @@ fn render_endpoint(
     warnings: &mut Vec<BuildWarning>,
 ) -> Result<()> {
     let stage = tracing::debug_span!(
-        target: "aster::build",
         "compile",
-        detail = %job.template.get_with_slash()
+        source = %job.template.get_with_slash(),
+        message = %format_args!("compiled {}", job.template.get_with_slash())
     )
     .entered();
     let (document, compiled_warnings) = world::compile_document(session, &job.template, library)?;
     warnings.extend(compiled_warnings);
     drop(stage);
 
-    let stage = tracing::debug_span!(target: "aster::build", "extract").entered();
+    let stage = tracing::debug_span!("extract", message = "extracted endpoint").entered();
     let content = endpoint::extract(document.introspector().as_ref())
         .context("invalid endpoint declaration")?
         .context("endpoint route did not produce <aster-endpoint>")?;
@@ -311,11 +316,10 @@ fn load_content(
     }
 
     tracing::debug!(
-        target: "aster::build",
         entries = entries.len(),
-        "loaded {} content {}",
+        "loaded {} content entr{}",
         entries.len(),
-        if entries.len() == 1 { "entry" } else { "entries" }
+        if entries.len() == 1 { "y" } else { "ies" }
     );
     Ok(content::protocol(entries))
 }
