@@ -136,6 +136,7 @@ fn discover_fonts<'a>(
     if config.system {
         fonts.extend(typst_kit::fonts::system());
     }
+    fonts.extend(typst_kit::fonts::embedded());
     for directory in directories {
         fonts.extend(typst_kit::fonts::scan(directory));
     }
@@ -242,5 +243,38 @@ impl DiagnosticWorld for CompileWorld<'_> {
                 format!("{package}{}", id.vpath().get_with_slash())
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use typst::text::FontFlags;
+
+    use super::*;
+
+    #[test]
+    fn embedded_math_font_is_always_available() {
+        let fonts = discover_fonts(
+            &FontConfig {
+                system: false,
+                ..FontConfig::default()
+            },
+            std::iter::empty(),
+        );
+        let book = fonts.book();
+
+        assert!(book.contains_family("new computer modern math"));
+        let index = book
+            .select_family("new computer modern math")
+            .next()
+            .unwrap();
+        assert!(
+            fonts
+                .font(index)
+                .unwrap()
+                .info()
+                .flags
+                .contains(FontFlags::MATH)
+        );
     }
 }
