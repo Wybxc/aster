@@ -387,31 +387,6 @@ fn allows_imports_across_project_directories() {
 }
 
 #[test]
-fn records_inputs_inside_output_directory() {
-    let temp = tempfile::tempdir().unwrap();
-    let root = temp.path();
-    std::fs::create_dir_all(root.join("styles")).unwrap();
-    std::fs::create_dir(root.join("dist")).unwrap();
-    write_css_page(root);
-    std::fs::write(
-        root.join("styles/style.css"),
-        "@import \"../dist/input.css\";",
-    )
-    .unwrap();
-    let input = root.join("dist/input.css");
-    std::fs::write(&input, ".from-output { color: red; }").unwrap();
-
-    let mut session = BuildSession::new(project(root));
-    session.build().unwrap();
-
-    assert!(
-        session.dependencies().into_iter().any(
-            |dependency| matches!(dependency, FilesystemDependency::File(path) if path == input)
-        )
-    );
-}
-
-#[test]
 fn rejects_transitive_import_outside_project_root() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();

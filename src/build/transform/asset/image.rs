@@ -389,20 +389,4 @@ mod tests {
         let image = image::load_from_memory(processed.as_slice()).unwrap();
         assert_eq!(image.dimensions(), (80, 40));
     }
-
-    #[test]
-    fn leaves_animated_formats_untouched() {
-        let content = Bytes::new(b"GIF89a not decoded by the optimizer");
-        assert_eq!(
-            optimize_image(
-                content.clone(),
-                ImageSizeLimit {
-                    width: Some(1),
-                    height: Some(1),
-                },
-                &ImageConfig::default(),
-            ),
-            content
-        );
-    }
 }

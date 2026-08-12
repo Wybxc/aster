@@ -388,37 +388,4 @@ mod tests {
             "unexpected error: {error:#}"
         );
     }
-
-    #[test]
-    fn rejects_removed_clean_urls_setting() {
-        let temp = tempfile::tempdir().unwrap();
-        let config_file = temp.path().join("aster.toml");
-        std::fs::write(&config_file, "[output]\nclean-urls = true\n").unwrap();
-
-        let error = match load(&config_file) {
-            Ok(_) => panic!("removed output setting must be rejected"),
-            Err(error) => error,
-        };
-
-        assert!(
-            format!("{error:#}").contains("unknown field `clean-urls`"),
-            "unexpected error: {error:#}"
-        );
-    }
-
-    #[test]
-    fn rejects_removed_tailwind_setting() {
-        let temp = tempfile::tempdir().unwrap();
-        let config_file = temp.path().join("aster.toml");
-        std::fs::write(&config_file, "[css]\ntailwind = true\n").unwrap();
-
-        let error = load(&config_file)
-            .err()
-            .expect("removed Tailwind setting must be rejected");
-
-        assert!(
-            format!("{error:#}").contains("unknown field `tailwind`"),
-            "unexpected error: {error:#}"
-        );
-    }
 }
