@@ -46,6 +46,45 @@
 /// The `show heading` rule in `templates/docs.typ` routes native heading
 /// markup through this function.
 #let heading-element(body, id, level) = [
+  #metadata(
+    ```css
+    .sl-heading-wrapper {
+      --anchor-size: 1.25rem;
+      --anchor-gap: 0.25rem;
+      line-height: 1.2;
+    }
+
+    .sl-heading-wrapper > :first-child {
+      display: inline;
+      padding-inline-end: calc(var(--anchor-size) + var(--anchor-gap));
+    }
+
+    .sl-anchor-link {
+      position: relative;
+      display: inline-flex;
+      margin-inline-start: calc(-1 * var(--anchor-size));
+      color: var(--sl-color-text-accent);
+      text-decoration: none;
+    }
+
+    .sl-anchor-link .sl-icon {
+      width: var(--anchor-size);
+      height: var(--anchor-size);
+      translate: 0 0.16em;
+    }
+
+    @media (hover: hover) {
+      .sl-anchor-link {
+        opacity: 0;
+      }
+
+      .sl-anchor-link:focus,
+      .sl-heading-wrapper:hover .sl-anchor-link {
+        opacity: 1;
+      }
+    }
+    ```
+  ) <aster-style>
   #html.div(class: "sl-heading-wrapper level-h" + str(level))[
     #html.elem("h" + str(level), attrs: (id: id))[#body] <toc-heading>
     #html.a(class: "sl-anchor-link", href: "#" + id, aria-label: "Link to this section")[#link-icon]
@@ -68,46 +107,6 @@
     )
   }))
 }
-
-#metadata(
-  ```css
-  .sl-heading-wrapper {
-    --anchor-size: 0.8275em;
-    --anchor-gap: 0.3em;
-    line-height: 1.2;
-  }
-
-  .sl-heading-wrapper > :first-child {
-    display: inline;
-    padding-inline-end: calc(var(--anchor-size) + var(--anchor-gap));
-  }
-
-  .sl-anchor-link {
-    position: relative;
-    display: inline-flex;
-    margin-inline-start: calc(-1 * var(--anchor-size));
-    color: var(--sl-color-text-accent);
-    text-decoration: none;
-  }
-
-  .sl-anchor-link .sl-icon {
-    width: var(--anchor-size);
-    height: var(--anchor-size);
-    translate: 0 0.16em;
-  }
-
-  @media (hover: hover) {
-    .sl-anchor-link {
-      opacity: 0;
-    }
-
-    .sl-anchor-link:focus,
-    .sl-heading-wrapper:hover .sl-anchor-link {
-      opacity: 1;
-    }
-  }
-  ```
-) <aster-style>
 
 #let callout(body, kind: "note", title: none) = {
   let title = if title == none {
@@ -214,7 +213,7 @@
     }
 
     .sl-card h3 a::after {
-      content: " ->";
+      content: " →";
       color: var(--sl-color-text-accent);
     }
 

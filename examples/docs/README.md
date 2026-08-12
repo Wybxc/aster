@@ -1,9 +1,11 @@
 # Aster documentation example
 
 This example implements a complete documentation site focused on navigation and
-reading. It includes hierarchical navigation, automatic heading IDs, a table of
-contents, previous/next links, edit links, code highlighting, theme selection,
-and a responsive mobile sidebar.
+reading. Its content documents Aster's current project model, CLI, content
+protocol, routing, resource processing, configuration, generators,
+postprocessing, and Rust library API. The site itself includes hierarchical
+navigation, automatic heading IDs, a table of contents, previous/next links,
+edit links, code highlighting, theme selection, and a responsive mobile sidebar.
 
 ```sh
 cargo run -- dev -p examples/docs
