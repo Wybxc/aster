@@ -42,7 +42,8 @@
 
 /// Render a heading element with a generated id and anchor link.
 ///
-/// The heading carries a `<toc-heading>` label so `collect-toc` can find it.
+/// The heading carries a private `<aster-doc-toc-heading>` label so
+/// `collect-toc` can find it without colliding with page content.
 /// The `show heading` rule in `templates/docs.typ` routes native heading
 /// markup through this function.
 #let heading-element(body, id, level) = [
@@ -86,7 +87,7 @@
     ```
   ) <aster-style>
   #html.div(class: "sl-heading-wrapper level-h" + str(level))[
-    #html.elem("h" + str(level), attrs: (id: id))[#body] <toc-heading>
+    #html.elem("h" + str(level), attrs: (id: id))[#body] <aster-doc-toc-heading>
     #html.a(class: "sl-anchor-link", href: "#" + id, aria-label: "Link to this section")[#link-icon]
   ]
 ]
@@ -98,7 +99,7 @@
 /// receives the entries as an array of `(id, title, level)` dictionaries and
 /// must return content.
 #let collect-toc(use-toc) = context {
-  use-toc(query(<toc-heading>).map(heading => {
+  use-toc(query(<aster-doc-toc-heading>).map(heading => {
     let attrs = heading.attrs
     (
       id: attrs.at("id", default: none),

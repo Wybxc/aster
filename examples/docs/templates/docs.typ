@@ -5,7 +5,7 @@
 #import "/components/sidebar.typ": sidebar
 #import "/components/toc.typ": mobile-table-of-contents, table-of-contents
 
-// Render every native Typst heading with a generated id and toc-heading label.
+// Render every native Typst heading with a generated id and a private TOC label.
 //
 // The rule must be applied inside the function that receives `entry.render()`
 // content: show rules are lexical, so they only affect content produced within

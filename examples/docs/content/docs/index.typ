@@ -38,6 +38,11 @@ and staged postprocessing share one deterministic build.
     body: [Load metadata and rendered entries lazily from collection directories.],
   ),
   (
+    title: "Compose recipes",
+    href: "/guides/recipes/",
+    body: [Build taxonomies, pagination, navigation, feeds, and indexes from Aster primitives.],
+  ),
+  (
     title: "Publish resources",
     href: "/guides/assets-and-processing/",
     body: [Bundle CSS and scripts, optimize images, and colocate component resources.],

@@ -5,7 +5,7 @@
   description: "Publish project resources, bundle CSS and scripts, and optimize raster images.",
   section: "Guides",
   section_order: 20,
-  order: 40,
+  order: 50,
 )) <aster-frontmatter>
 
 Aster transforms resources referenced by a compiled HTML page and publishes

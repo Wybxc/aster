@@ -11,6 +11,10 @@
 Aster discovers every `.typ` file below `content/`. The first path segment is
 the collection name; the remaining path without `.typ` is the entry id.
 
+For project-owned queries such as published posts, tags, pagination, and
+archives, see the #link("/guides/recipes/")[Recipes] guide. The collection protocol stays
+small so those policies can remain ordinary Typst code.
+
 ```text
 content/posts/hello.typ          → collection "posts", id "hello"
 content/docs/guides/start.typ    → collection "docs", id "guides/start"

@@ -12,6 +12,10 @@ Generators and postprocessors extend different phases. A generator is a Typst
 program that creates one declared file from build context. A postprocessor is an
 explicit external command that runs after the complete site has been staged.
 
+The #link("/guides/recipes/feeds/")[Feeds and Site Indexes] recipe shows how the
+examples use the same generator interface for Atom, sitemap, robots, and other
+project-owned output formats.
+
 = Generators
 
 Every `.typ` file under `generate/` maps to the same relative output path with
