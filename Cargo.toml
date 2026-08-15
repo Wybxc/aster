@@ -2,6 +2,11 @@
 name = "aster-ssg"
 version = "0.1.0"
 edition = "2024"
+description = "A typst-native static site generator, inspired by Astro."
+license = "Apache-2.0"
+documentation = "https://docs.rs/aster-ssg"
+homepage = "http://wybxc.github.io/aster/"
+repository = "https://github.com/Wybxc/aster"
 
 [lib]
 name = "aster"
