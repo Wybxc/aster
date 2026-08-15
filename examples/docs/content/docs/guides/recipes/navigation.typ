@@ -1,7 +1,7 @@
 #import "/components/content.typ": callout
 
 #metadata((
-  title: "Recipe: Adjacent Navigation",
+  title: "Adjacent Navigation",
   description: "Create previous and next links from an ordered content query.",
   section: "Guides",
   section_order: 20,
@@ -24,11 +24,15 @@ An ordered collection can find neighboring entries with `position`:
 }
 ```
 
-The page supplies the ordered query and current id:
+The page reads its current id from the route and supplies the ordered query.
+`post-url` maps an entry id to the project's post route; the blog example uses
+`/blog/` where the journal uses `/posts/`:
 
 ```typ
-#import "/lib.typ": post-url, published-posts
+#import "/lib.typ": published-posts, route-params
 
+#let post-url(id) = "/posts/" + id + "/"
+#let current-id = route-params.at("slug", default: "")
 #let neighbors = adjacent(published-posts(), current-id)
 #if neighbors.previous != none {
   html.a(href: post-url(neighbors.previous.entry.id))[Previous]

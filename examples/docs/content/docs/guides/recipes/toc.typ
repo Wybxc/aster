@@ -1,7 +1,7 @@
 #import "/components/content.typ": callout
 
 #metadata((
-  title: "Recipe: Heading IDs and Tables of Contents",
+  title: "Heading IDs and Tables of Contents",
   description: "Collect headings from rendered Typst content and render a page TOC.",
   section: "Guides",
   section_order: 20,
@@ -9,10 +9,59 @@
 )) <aster-frontmatter>
 
 Heading ids and TOC entries are page-template policy, not content collection
-behavior. The docs example applies a show rule around `entry.render()`:
+behavior.
+
+= Heading ids
+
+Extract readable text from a heading body, then normalize it into a stable
+fragment id. Keep letters, numbers, spaces, underscores, and hyphens, and
+collapse runs of separators into single hyphens:
 
 ```typ
-#import "/components/content.typ": heading-element, heading-id, heading-text
+#let heading-text(content) = {
+  if type(content) == str {
+    content
+  } else if repr(content) == "[ ]" {
+    " "
+  } else {
+    let fields = content.fields()
+    let text = fields.at("text", default: none)
+    if text != none {
+      text
+    } else {
+      let children = fields.at("children", default: none)
+      if children != none {
+        children.map(heading-text).join("")
+      } else {
+        let body = fields.at("body", default: none)
+        if body != none { heading-text(body) } else { "" }
+      }
+    }
+  }
+}
+
+#let heading-id(title) = {
+  lower(title)
+    .replace(regex("[^\\p{L}\\p{N} _-]"), "")
+    .replace(regex("[ _]+"), "-")
+    .replace(regex("-+"), "-")
+    .trim(regex("[- ]"))
+}
+```
+
+Repeated headings produce the same id; add a project-specific uniquifier when
+anchors must be unique. CJK and other Unicode letters are preserved by the
+character class above, so anchors stay readable.
+
+= Apply a show rule
+
+Render every native heading with an id and a private label the TOC query can
+collect. Wrap `entry.render()` so the rule applies to the entry's headings:
+
+```typ
+#let heading-element(body, id, level) = [
+  #html.elem("h" + str(level), attrs: (id: id))[#body] <aster-doc-toc-heading>
+]
 
 #let with-heading-rules(body) = {
   show heading: it => {
@@ -23,16 +72,14 @@ behavior. The docs example applies a show rule around `entry.render()`:
 }
 ```
 
-`heading-text` extracts readable text from markup, while `heading-id` removes
-unsupported characters and normalizes separators. The id allocator must also
-make repeated headings unique and provide a fallback for headings with no
-usable text.
+Use a namespaced label so content authors cannot accidentally collide with the
+recipe's query. The docs example also attaches an anchor link and hover styling
+inside `heading-element`; that presentation is not part of heading discovery.
 
 = Collect heading metadata
 
-The heading element receives a project-specific metadata label. A `context`
-function can query all labels after the body has been evaluated and pass
-`(id, title, level)` records to the TOC renderer:
+A `context` function can query every label after the body has been evaluated
+and pass `(id, title, level)` records to the TOC renderer:
 
 ```typ
 #let collect-toc(use-toc) = context {
@@ -44,9 +91,8 @@ function can query all labels after the body has been evaluated and pass
 }
 ```
 
-Use a namespaced label so content authors cannot accidentally collide with the
-recipe's query. The query observes the complete document regardless of where
-the heading was created.
+The query observes the complete document regardless of where the heading was
+created.
 
 = Render the TOC
 

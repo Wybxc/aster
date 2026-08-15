@@ -1,7 +1,7 @@
 #import "/components/content.typ": callout
 
 #metadata((
-  title: "Recipe: Taxonomies",
+  title: "Taxonomies",
   description: "Derive tag, category, and archive indexes from entry metadata.",
   section: "Guides",
   section_order: 20,

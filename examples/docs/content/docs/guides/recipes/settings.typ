@@ -1,7 +1,7 @@
 #import "/components/content.typ": callout
 
 #metadata((
-  title: "Recipe: Project Settings and URLs",
+  title: "Project Settings and URLs",
   description: "Read project-owned settings and construct stable page URLs.",
   section: "Guides",
   section_order: 20,
@@ -36,17 +36,12 @@ The exact joining policy is project-owned. A recipe that accepts both page and
 file URLs should preserve whether the route ends in `/` instead of blindly
 adding one.
 
-= Relocatable navigation
-
-A single leading slash in links, image-map areas, and form actions denotes the
-generated site's virtual root. Aster rewrites these references relative to the
-output page, so the same tree can be served at a domain root or under a path
-prefix. Explicit relative URLs, protocol URLs, `//` references, fragments, and
-query-only references are preserved.
-
-For URLs that are not ordinary navigation, use a project helper rather than
-assuming that a leading slash includes a deployment prefix. This matters for
-feed discovery links, canonical links, and sitemap locations.
+A single leading slash in ordinary navigation links denotes the site root and
+is rewritten relative to the output page; see the
+#link("/reference/routing/")[Routing] reference. For URLs that are not ordinary
+navigation — feed discovery links, canonical links, and sitemap locations —
+use a project helper rather than assuming a leading slash includes a deployment
+prefix.
 
 #callout(kind: "caution", title: "Keep URL policy in one function")[
   The blog and journal examples both construct absolute feed URLs from

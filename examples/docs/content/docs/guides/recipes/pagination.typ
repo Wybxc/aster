@@ -1,7 +1,7 @@
 #import "/components/content.typ": callout
 
 #metadata((
-  title: "Recipe: Pagination",
+  title: "Pagination",
   description: "Split an ordered query into stable page routes and render a navigation control.",
   section: "Guides",
   section_order: 20,

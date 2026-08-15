@@ -12,10 +12,6 @@ Generators and postprocessors extend different phases. A generator is a Typst
 program that creates one declared file from build context. A postprocessor is an
 explicit external command that runs after the complete site has been staged.
 
-The #link("/guides/recipes/feeds/")[Feeds and Site Indexes] recipe shows how the
-examples use the same generator interface for Atom, sitemap, robots, and other
-project-owned output formats.
-
 = Generators
 
 Every `.typ` file under `generate/` maps to the same relative output path with
@@ -37,8 +33,10 @@ A concrete generator compilation must produce exactly one
 
 Generators run after every page has been transformed and encoded. They can read
 `_aster.site.pages` to build Atom feeds, sitemaps, search documents, or arbitrary
-project-owned formats. A labelled `<aster-content>` page fragment provides both
-final HTML and plain text for feed bodies.
+project-owned formats. The #link("/guides/recipes/feeds/")[Feeds and Site Indexes]
+recipe applies this interface to concrete output formats. A labelled
+`<aster-content>` page fragment provides both final HTML and plain text for feed
+bodies.
 
 Dynamic generators use bracket parameters and `<aster-route>` exactly like
 dynamic pages. Their route probe occurs after rendered pages are available, so

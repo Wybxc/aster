@@ -1,5 +1,39 @@
 #import "/lib.typ": doc-url, docs-by-section
 
+#let sidebar-item-label(node) = [
+  #html.span[#node.label]
+  #if node.badge != none {
+    html.span(class: "sidebar-badge")[#node.badge]
+  }
+]
+
+#let sidebar-link(node, current) = {
+  if node.id == current {
+    html.a(href: node.href, aria-current: "page")[#sidebar-item-label(node)]
+  } else if current.starts-with(node.id + "/") {
+    html.a(href: node.href, class: "sidebar-ancestor")[#sidebar-item-label(node)]
+  } else {
+    html.a(href: node.href)[#sidebar-item-label(node)]
+  }
+}
+
+#let sidebar-list(nodes, current) = {
+  html.ul[
+    #for node in nodes {
+      html.li[
+        #if node.href != none {
+          sidebar-link(node, current)
+        } else {
+          html.span(class: "sidebar-folder")[#node.label]
+        }
+        #if node.children.len() > 0 {
+          sidebar-list(node.children, current)
+        }
+      ]
+    }
+  ]
+}
+
 #let sidebar(current) = [
   #metadata(
     ```css
@@ -38,6 +72,29 @@
       gap: 0.1rem;
       padding: 0;
       list-style: none;
+    }
+
+    .sidebar-group li > ul {
+      margin-top: 0.1rem;
+      padding-inline-start: 0.75rem;
+      border-inline-start: 1px solid var(--sl-color-hairline);
+    }
+
+    .sidebar-group li > ul a {
+      padding-block: 0.22rem;
+      font-size: 0.8125rem;
+    }
+
+    .sidebar-group a.sidebar-ancestor {
+      color: var(--sl-color-white);
+    }
+
+    .sidebar-folder {
+      padding: 0.3rem 0.5rem;
+      color: var(--sl-color-gray-3);
+      font-size: 0.8125rem;
+      font-weight: 600;
+      line-height: 1.5;
     }
 
     .sidebar-group a {
@@ -106,28 +163,7 @@
       #for section in docs-by-section() {
         html.section(class: "sidebar-group")[
           #html.h2[#section.label]
-          #html.ul[
-            #for item in section.docs {
-              let meta = item.metadata
-              html.li[
-                #if item.id == current {
-                  html.a(href: doc-url(item.id), aria-current: "page")[
-                    #html.span[#meta.title]
-                    #if meta.at("badge", default: none) != none {
-                      html.span(class: "sidebar-badge")[#meta.badge]
-                    }
-                  ]
-                } else {
-                  html.a(href: doc-url(item.id))[
-                    #html.span[#meta.title]
-                    #if meta.at("badge", default: none) != none {
-                      html.span(class: "sidebar-badge")[#meta.badge]
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
+          #sidebar-list(section.children, current)
         ]
       }
     ]

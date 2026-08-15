@@ -17,12 +17,14 @@ project-owned patterns, not additional Aster runtime features:
 
 - #link("/guides/recipes/settings/")[Project settings and URLs]
 - #link("/guides/recipes/content/")[Content queries]
-- #link("/guides/recipes/routes/")[Dynamic routes]
 - #link("/guides/recipes/pagination/")[Pagination]
 - #link("/guides/recipes/taxonomy/")[Taxonomies]
 - #link("/guides/recipes/navigation/")[Adjacent navigation]
 - #link("/guides/recipes/toc/")[Heading IDs and tables of contents]
-- #link("/guides/recipes/feeds/")[Atom, sitemap, and robots generators]
+- #link("/guides/recipes/feeds/")[Feeds and site indexes]
+
+Route parameters are an Aster feature documented in the
+#link("/reference/routing/")[Routing] reference.
 
 #callout(kind: "tip", title: "Source examples")[
   `examples/journal/lib.typ` contains the content queries used by a
