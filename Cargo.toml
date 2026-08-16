@@ -1,6 +1,6 @@
 [package]
 name = "aster-ssg"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2024"
 description = "A typst-native static site generator, inspired by Astro."
 license = "Apache-2.0"
