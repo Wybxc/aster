@@ -55,3 +55,12 @@ typst-library = "0.15.1"
 typst-svg = "0.15.1"
 url = "2.5"
 walkdir = "2.5"
+
+[profile.release]
+lto = "thin"
+strip = true
+
+# Asset naming produced by .github/workflows/release-binaries.yml (upload-rust-binary-action),
+# so `cargo binstall aster-ssg` downloads the prebuilt binary from GitHub Releases.
+[package.metadata.binstall]
+pkg-url = "{repo}/releases/download/v{version}/aster-{target}.{archive-format}"
