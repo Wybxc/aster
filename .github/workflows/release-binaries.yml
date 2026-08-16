@@ -1,21 +1,28 @@
 name: Release binaries
 
-# Build per-platform binaries and attach them to the GitHub Release published
-# by release-plz. See https://release-plz.dev/docs/extra/releasing-binaries.
+# Manual backfill: build per-platform binaries and attach them to an existing
+# GitHub Release. The regular release path lives in release-plz.yml, whose
+# `Binaries` job runs on every published release. Use this workflow when that
+# job failed or ran before it existed (e.g. v0.1.1).
 on:
-  release:
-    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag whose release receives the binaries (e.g. v0.1.1)
+        required: true
+        type: string
 
 permissions: {}
 
 jobs:
   upload-assets:
-    name: ${{ matrix.target }}
+    name: Binaries ${{ matrix.target }}
     if: github.repository_owner == 'Wybxc'
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write
     strategy:
+      fail-fast: false
       matrix:
         include:
           - target: aarch64-apple-darwin
@@ -34,9 +41,10 @@ jobs:
     env:
       CARGO_PROFILE_RELEASE_LTO: fat
     steps:
-      - name: Check out repository
+      - name: Check out tagged commit
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.tag }}
           persist-credentials: false
 
       - name: Install Rust toolchain
@@ -68,4 +76,5 @@ jobs:
           target: ${{ matrix.target }}
           tar: all
           zip: windows
+          ref: refs/tags/${{ inputs.tag }}
           token: ${{ secrets.GITHUB_TOKEN }}
