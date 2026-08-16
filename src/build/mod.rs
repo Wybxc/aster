@@ -12,6 +12,7 @@ use typst_kit::fonts::FontStore;
 use crate::foundation::{FilesystemDependency, FontConfig, Project};
 
 mod content;
+mod downloader;
 mod files;
 mod output;
 mod pipeline;

@@ -14,12 +14,13 @@ use typst::diag::FileError;
 use typst::ecow::{EcoString, EcoVec, eco_format};
 use typst::foundations::Bytes;
 use typst::syntax::{FileId, RootedPath, VirtualPath, VirtualRoot};
-use typst_kit::downloader::SystemDownloader;
 use typst_kit::files::{FileStore, FsRoot, SystemFiles};
 use typst_kit::packages::SystemPackages;
 use walkdir::WalkDir;
 
 use crate::foundation::{FilesystemDependency, Project};
+
+use super::downloader::RustlsDownloader;
 
 /// The tracked filesystem surface of a Typst build session.
 ///
@@ -79,7 +80,7 @@ impl FileAccessError {
 impl ProjectFiles {
     pub fn new(project: &Project) -> Self {
         let root = project.root().to_owned();
-        let downloader = SystemDownloader::new(concat!("aster/", env!("CARGO_PKG_VERSION")));
+        let downloader = RustlsDownloader::new(concat!("aster/", env!("CARGO_PKG_VERSION")));
         let packages = SystemPackages::new(downloader);
         let fs_root = FsRoot::new(root.clone());
         let store = FileStore::new(SystemFiles::new(fs_root, packages));

@@ -50,7 +50,10 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["f
 typst = "0.15.1"
 typst-eval = "0.15.1"
 typst-html = "0.15.1"
-typst-kit = { version = "0.15.1", features = ["datetime", "embedded-fonts", "emit-diagnostics", "scan-fonts", "system-downloader", "system-files"] }
+typst-kit = { version = "0.15.1", features = ["datetime", "embedded-fonts", "emit-diagnostics", "scan-fonts", "system-files"] }
+# Downloads Typst Universe packages with rustls, so cross-compiled release
+# binaries never link against a system OpenSSL.
+ureq = { version = "3", features = ["rustls"], default-features = false }
 typst-library = "0.15.1"
 typst-svg = "0.15.1"
 url = "2.5"
