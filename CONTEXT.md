@@ -16,13 +16,15 @@ An **Aster project** is a directory containing `aster.toml`. Its conventional di
 
 Project discovery selects the nearest ancestor containing an `aster.toml` file. A build requires `pages/`; `generate/`, `content/`, `styles/`, `assets/`, and `public/` are optional. The project owns watch-path policy: configuration, structural directories, tracked build dependencies, project-relative `[watch].paths`, and each postprocessor's `watch` paths are watched while `dist/` is always excluded. An additional watch path is classified as a file or recursive directory from its current filesystem state; missing paths remain dependencies and are reclassified after creation. The project root and paths overlapping the output directory are rejected.
 
-Aster deserializes only its build-owned settings from `aster.toml`. The manifest is not injected into Typst inputs; project Typst code reads the complete value explicitly with `toml("/aster.toml")`. Typst inputs are reserved for Aster's content protocol and per-route parameters.
+Aster deserializes only its build-owned settings from `aster.toml`. The manifest is not injected into Typst inputs; project Typst code reads the complete value explicitly with `toml("/aster.toml")`. Typst inputs are reserved for Aster's runtime protocol.
 
 Like Typst's standard filesystem loader, project paths retain their absolute lexical form instead of being canonicalized. Operating-system absolute paths and `..` paths that escape the project root are rejected, while filesystem access follows symbolic links even when their targets are outside the project root. A leading `/` in a project-source interface denotes the project virtual root; paths within that namespace are computed through Typst's `VirtualPath` model.
 
 ## Content protocol
 
-The **content protocol** is the `_aster` Typst input. Rust owns its version and complete value, including the empty state. It maps each collection and entry id to a lazy entry module. Each module exposes `id`, `collection`, and a Typst `render` closure; it does not expose a source path or contain evaluated content or frontmatter.
+The **content protocol** is the `_aster` Typst input. Rust owns its version and complete value, including the empty state. It maps each collection and entry id to a lazy entry module. Each module exposes `id`, `collection`, and Typst `metadata` and `render` closures; it does not expose a source path or contain evaluated content or frontmatter.
+
+`_aster.route` is a stable module with native `path(default: none)` and `param(name, default: none)` functions. A concrete compilation supplies their string values through reserved virtual files in its tracked Typst world; a dynamic route probe supplies no route, so the functions return their defaults. `_aster.routes` is another stable module whose native `pages()` function reads the planned page URL set from the same virtual namespace; it returns an empty array before page planning. Route values and the route manifest therefore do not change `sys.inputs` or the `Library`: dynamic probes and every page share the same library, while comemo observes only the runtime values actually read by a compilation. Project helpers keep runtime access lazy and guard the entirely absent `_aster` input for editor evaluation.
 
 `_aster` is reserved. Route parameters cannot replace another existing Typst input.
 
@@ -32,7 +34,7 @@ The non-rendering content helpers in `templates/default/lib.typ` expose the prot
 
 A `.typ` file under `pages/` is always an HTML page template. Page output paths append `.html`, so directory URLs are expressed explicitly with templates such as `posts/[...slug]/index.typ`. A page template without bracket parameters defines one static route. A page template with `[name]` or `[...name]` parameters is a **dynamic route** and declares parameter sets through `<aster-route>` metadata.
 
-A `.typ` file under `generate/` is a **generator**. It runs after all pages have been transformed and encoded, and declares one string or bytes payload with `<aster-output>`. Its exact output path removes only the final `.typ` extension. Dynamic generators use the same `<aster-route>` metadata as dynamic pages. Generator inputs include `_aster.site.pages`; each page has `path`, final `html`, and optional `content` containing final HTML and plain text from the page's unique `<aster-content>` element. `_aster.routes.pages` contains the complete planned page URL set; generated files are deliberately absent because generators do not form a second navigable route graph.
+A `.typ` file under `generate/` is a **generator**. It runs after all pages have been transformed and encoded, and declares one string or bytes payload with `<aster-output>`. Its exact output path removes only the final `.typ` extension. Dynamic generators use the same `<aster-route>` metadata as dynamic pages. Generator inputs include `_aster.site.pages`; each page has `path`, final `html`, and optional `content` containing final HTML and plain text from the page's unique `<aster-content>` element. `_aster.routes.pages()` returns the complete planned page URL set; generated files are deliberately absent because generators do not form a second navigable route graph.
 
 A **route plan** is a deterministic, collision-free set of outputs. Pages are planned before rendering; generators are planned afterward so their dynamic parameters can use the rendered site snapshot. Planning owns template discovery, parameter matching, output confinement, warnings, ordering, and collisions across both sets.
 
@@ -40,7 +42,7 @@ A normal parameter fills one path segment and cannot contain separators. A sprea
 
 ## Build session
 
-A **build session** is the reusable public build interface bound to one Aster project. It loads the project's configuration for each build and owns an internal Typst build session with shared fonts, package and project-file access, tracked source and content discovery, input libraries, Typst world construction, page compilation, and source-aware diagnostics. The project-file store is the tracked filesystem surface for directory membership, dynamically imported content, and build transforms that need incremental file access.
+A **build session** is the reusable public build interface bound to one Aster project. It loads the project's configuration for each build and owns an internal Typst build session with shared fonts, package and project-file access, tracked source and content discovery, phase-specific input libraries, per-compilation route worlds, page compilation, and source-aware diagnostics. The project-file store is the tracked filesystem surface for directory membership, dynamically imported content, and build transforms that need incremental file access.
 
 The session is reused across builds. The first build compiles directly. Before each later build, it marks loaded files stale; subsequent reads update Typst sources in place so comemo can validate and reuse unchanged compilation and transformation results. After the build attempt, it ages the global comemo cache. Page compilation is memoized through a tracked Typst world.
 

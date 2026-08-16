@@ -120,7 +120,8 @@ fn plan_templates(
                 message = "probed dynamic template"
             )
             .entered();
-            let document = world::compile_document(session, &template, runtime, warnings)
+            let context = runtime.probe();
+            let document = world::compile_document(session, &template, &context, warnings)
                 .with_context(|| format!("failed to probe {}", relative.display()))?;
             let params = route::extract_params(document.introspector().as_ref())
                 .with_context(|| format!("invalid route metadata in {}", relative.display()))?;

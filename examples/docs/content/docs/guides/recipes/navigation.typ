@@ -29,10 +29,10 @@ The page reads its current id from the route and supplies the ordered query.
 `/blog/` where the journal uses `/posts/`:
 
 ```typ
-#import "/lib.typ": published-posts, route-params
+#import "/lib.typ": published-posts, route-param
 
 #let post-url(id) = "/posts/" + id + "/"
-#let current-id = route-params.at("slug", default: "")
+#let current-id = route-param("slug", default: "")
 #let neighbors = adjacent(published-posts(), current-id)
 #if neighbors.previous != none {
   html.a(href: post-url(neighbors.previous.entry.id))[Previous]

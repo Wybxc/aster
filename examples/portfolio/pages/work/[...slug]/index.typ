@@ -1,9 +1,9 @@
-#import "/lib.typ": get-entry, projects, route-params
+#import "/lib.typ": get-entry, projects, route-param
 #import "/templates/site.typ": site
 
 #metadata(projects().map(item => (slug: item.entry.id))) <aster-route>
 
-#let entry = get-entry("work", route-params.at("slug", default: ""))
+#let entry = get-entry("work", route-param("slug", default: ""))
 #if entry != none [
   #let data = entry.metadata()
   #show: site.with(title: data.title + " | Mira Chen", description: data.description, active: "work")

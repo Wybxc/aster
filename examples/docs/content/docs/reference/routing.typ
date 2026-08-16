@@ -61,19 +61,34 @@ case-insensitive, and file-versus-directory collisions before publication.
 
 = Route context
 
-During a concrete page compilation, `sys.inputs._aster.route` is:
+`sys.inputs._aster.route` is a stable module exposing two native functions:
 
-```typc
-(
-  path: "/posts/first/",
-  params: (slug: "first"),
-)
+- `path(default: none)` returns the preferred browser path;
+- `param(name, default: none)` returns one named route parameter.
+
+The functions return their `default` during a dynamic probe and when the
+parameter is absent. The whole `_aster` input is absent during editor
+evaluation, so a shared project library can provide guarded accessors:
+
+```typ
+#let state = sys.inputs.at("_aster", default: none)
+#let route-path() = if state == none {
+  "/"
+} else {
+  state.route.path(default: "/")
+}
+#let route-param(name, default: none) = if state == none {
+  default
+} else {
+  state.route.param(name, default: default)
+}
 ```
 
-`route` is `none` during editor evaluation and the dynamic probe. Templates
-should tolerate that state when they are evaluated outside a concrete route.
-`_aster.routes.pages` contains all planned page browser paths in deterministic
-order; generator outputs are intentionally absent from that navigation graph.
+Keep these accessors as functions instead of eagerly storing their results.
+They read the current compilation's route without changing the shared Typst
+library. `_aster.routes.pages()` contains all planned page browser paths in
+deterministic order; generator outputs are intentionally absent from that
+navigation graph.
 
 = Navigation URLs
 

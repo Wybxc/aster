@@ -95,7 +95,7 @@ impl BuildSession {
                 pages.len(),
                 if pages.len() == 1 { "" } else { "s" }
             );
-            let runtime = runtime.with_page_routes(&page_paths);
+            let runtime = runtime.with_page_routes(page_paths);
             drop(stage);
 
             let stage = tracing::info_span!("render", message = "rendered pages").entered();
@@ -104,7 +104,7 @@ impl BuildSession {
                 let path = job.output.page_url_path();
                 let route = tracing::info_span!("page", route = %path, message = "rendered page");
                 let _route = route.enter();
-                let route_runtime = runtime.for_route(path, &job.params);
+                let context = runtime.for_route(path, &job.params);
                 let stage = tracing::debug_span!(
                     "compile",
                     source = %job.template.get_with_slash(),
@@ -112,7 +112,7 @@ impl BuildSession {
                 )
                 .entered();
                 let document =
-                    world::compile_document(session, &job.template, &route_runtime, &mut warnings)?;
+                    world::compile_document(session, &job.template, &context, &mut warnings)?;
                 drop(stage);
                 let page = transform
                     .render(
@@ -142,20 +142,16 @@ impl BuildSession {
                     message = "ran generator"
                 );
                 let _route = route.enter();
-                let route_runtime = runtime.for_route(path, &job.params);
+                let context = runtime.for_route(path, &job.params);
                 let stage = tracing::debug_span!(
                     "compile",
                     source = %job.template.get_with_slash(),
                     message = "compiled"
                 )
                 .entered();
-                let content = world::evaluate_generator(
-                    session,
-                    &job.template,
-                    &route_runtime,
-                    &mut warnings,
-                )
-                .context("invalid generator output")?;
+                let content =
+                    world::evaluate_generator(session, &job.template, &context, &mut warnings)
+                        .context("invalid generator output")?;
                 drop(stage);
                 publication
                     .add_generator_output(job.output.clone(), content)

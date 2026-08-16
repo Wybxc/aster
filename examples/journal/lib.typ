@@ -4,22 +4,24 @@
   (:)
 } else {
   assert(
-    _content-state.protocol == 7,
+    _content-state.protocol == 9,
     message: "incompatible runtime protocol with the Aster binary",
   )
   _content-state.collections
 }
-#let _route = if _content-state == none {
-  none
-} else {
-  _content-state.at("route", default: none)
-}
-
 #let aster-version = if _content-state == none { none } else { _content-state.version }
-#let route-path = if _route == none { "/" } else { _route.path }
-#let route-params = if _route == none { (:) } else { _route.params }
-#let route-pages = if _content-state == none { () } else { _content-state.routes.pages }
-#let route-section = route-path.trim("/").split("/").first()
+#let route-path() = if _content-state == none {
+  "/"
+} else {
+  _content-state.route.path(default: "/")
+}
+#let route-param(name, default: none) = if _content-state == none {
+  default
+} else {
+  _content-state.route.param(name, default: default)
+}
+#let route-pages() = if _content-state == none { () } else { _content-state.routes.pages() }
+#let route-section() = route-path().trim("/").split("/").first()
 
 #let settings = toml("/aster.toml")
 
@@ -39,7 +41,10 @@
 
 #let post-url(id) = "/posts/" + id + "/"
 
-#let canonical-url(path: route-path) = settings.site.url + path.slice(1)
+#let canonical-url(path: none) = {
+  let path = if path == none { route-path() } else { path }
+  settings.site.url + path.slice(1)
+}
 
 #let date-value(value) = {
   let parts = value.slice(0, 10).split("-").map(int)

@@ -54,7 +54,7 @@ A sitemap can use planned page paths directly:
 ```typ
 #import "/lib.typ": absolute-page-url
 
-#let paths = sys.inputs._aster.routes.pages
+#let paths = sys.inputs._aster.routes.pages()
 #let urls = paths
   .filter(path => path != "/404.html")
   .map(path => (

@@ -74,10 +74,8 @@ fn build_injects_namespaced_route_context() {
         root.join("pages/blog/[slug]/index.typ"),
         concat!(
             "#metadata(((slug: \"post\"),)) <aster-route>\n",
-            "#let route = sys.inputs.at(\"_aster\").at(\"route\", default: none)\n",
-            "#if route != none {\n",
-            "  html.elem(\"p\")[#route.path|#route.params.slug]\n",
-            "}\n",
+            "#let aster = sys.inputs.at(\"_aster\")\n",
+            "#html.elem(\"p\")[#aster.route.path()|#aster.route.param(\"slug\")|#aster.routes.pages().len()]\n",
         ),
     )
     .unwrap();
@@ -85,9 +83,8 @@ fn build_injects_namespaced_route_context() {
         root.join("generate/feed.xml.typ"),
         concat!(
             "#let aster = sys.inputs.at(\"_aster\")\n",
-            "#let route = aster.at(\"route\", default: none)\n",
             "#metadata(\n",
-            "  if route == none { \"probe\" } else { route.path + \"|\" + aster.version },\n",
+            "  aster.route.path(default: \"probe\") + \"|\" + aster.version,\n",
             ") <aster-output>\n",
         ),
     )
@@ -101,17 +98,14 @@ fn build_injects_namespaced_route_context() {
     let feed = std::fs::read_to_string(root.join("dist/feed.xml")).unwrap();
     assert!(index.contains(&format!("/|{}|3", env!("CARGO_PKG_VERSION"))));
     assert!(about.contains(&format!("/about.html|{}|3", env!("CARGO_PKG_VERSION"))));
-    assert!(post.contains("/blog/post/|post"));
+    assert!(post.contains("/blog/post/|post|3"));
     assert_eq!(feed, format!("/feed.xml|{}", env!("CARGO_PKG_VERSION")));
 }
 
 fn route_context_page() -> &'static str {
     concat!(
         "#let aster = sys.inputs.at(\"_aster\")\n",
-        "#let route = aster.at(\"route\", default: none)\n",
-        "#if route != none {\n",
-        "  html.elem(\"p\")[#route.path|#aster.version|#aster.routes.pages.len()]\n",
-        "}\n",
+        "#html.elem(\"p\")[#aster.route.path()|#aster.version|#aster.routes.pages().len()]\n",
     )
 }
 
@@ -169,23 +163,42 @@ fn reentrant_build_discovers_added_and_removed_pages() {
     std::fs::create_dir_all(root.join("pages")).unwrap();
     let index = root.join("pages/index.typ");
     let about = root.join("pages/about/index.typ");
-    std::fs::write(&index, "#html.elem(\"p\")[Index]").unwrap();
+    let page = concat!(
+        "#let count = sys.inputs._aster.routes.pages().len()\n",
+        "#html.elem(\"p\", attrs: (id: \"route-count\"))[#count]\n",
+    );
+    std::fs::write(&index, page).unwrap();
 
     let project = project(root);
     let mut driver = BuildSession::new(project.clone());
     driver.build().unwrap();
     assert!(root.join("dist/index.html").is_file());
+    assert!(
+        std::fs::read_to_string(root.join("dist/index.html"))
+            .unwrap()
+            .contains("id=\"route-count\">1</p>")
+    );
 
     std::fs::create_dir_all(about.parent().unwrap()).unwrap();
-    std::fs::write(&about, "#html.elem(\"p\")[About]").unwrap();
+    std::fs::write(&about, page).unwrap();
     driver.build().unwrap();
     assert!(root.join("dist/index.html").is_file());
     assert!(root.join("dist/about/index.html").is_file());
+    assert!(
+        std::fs::read_to_string(root.join("dist/index.html"))
+            .unwrap()
+            .contains("id=\"route-count\">2</p>")
+    );
 
     std::fs::remove_file(index).unwrap();
     driver.build().unwrap();
     assert!(!root.join("dist/index.html").exists());
     assert!(root.join("dist/about/index.html").is_file());
+    assert!(
+        std::fs::read_to_string(root.join("dist/about/index.html"))
+            .unwrap()
+            .contains("id=\"route-count\">1</p>")
+    );
 }
 
 #[test]

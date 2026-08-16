@@ -1,4 +1,4 @@
-#import "/lib.typ": page-count, page-items, published-posts, route-params
+#import "/lib.typ": page-count, page-items, published-posts, route-param
 #import "/components/pagination.typ": pagination
 #import "/components/page-header.typ": page-header
 #import "/components/post-list.typ": post-list
@@ -14,7 +14,7 @@
   }
 ) <aster-route>
 
-#let current = int(route-params.at("page", default: "1"))
+#let current = int(route-param("page", default: "1"))
 
 #show: site.with(
   title: "Posts - Page " + str(current),

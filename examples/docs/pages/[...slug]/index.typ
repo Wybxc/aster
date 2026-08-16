@@ -1,4 +1,4 @@
-#import "/lib.typ": get-collection-ids, get-entry, route-params
+#import "/lib.typ": get-collection-ids, get-entry, route-param
 #import "/templates/docs.typ": docs-page
 
 #metadata(
@@ -7,6 +7,6 @@
     .map(slug => (slug: slug))
 ) <aster-route>
 
-#let slug = route-params.at("slug", default: "")
+#let slug = route-param("slug", default: "")
 #let entry = get-entry("docs", slug)
 #if entry != none { docs-page(entry) }

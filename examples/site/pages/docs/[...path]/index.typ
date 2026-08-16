@@ -1,11 +1,11 @@
-#import "/lib.typ": get-collection-ids, get-entry, route-params
+#import "/lib.typ": get-collection-ids, get-entry, route-param
 #import "/templates/site.typ": site
 
 #metadata(
   get-collection-ids("docs").map(path => (path: path))
 ) <aster-route>
 
-#let path = route-params.at("path", default: "")
+#let path = route-param("path", default: "")
 #let entry = get-entry("docs", path)
 
 #if entry != none [

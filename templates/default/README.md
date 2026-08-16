@@ -9,9 +9,10 @@ project styles live in `styles/`.
 
 Typst reads project settings directly with `toml("/aster.toml")`. Aster reserves
 `sys.inputs._aster` for its runtime protocol. It contains the Aster version,
-lazy content collections, and the current route's URL path and parameter
-dictionary, together with the complete planned page URL list.
-Route data is absent during editor evaluation and dynamic route probing.
+lazy content collections, native accessors for the current route's URL path and
+parameters, and the complete planned page URL list. The whole protocol is
+absent during editor evaluation; route accessors return their supplied defaults
+during dynamic route probing.
 Generators run after pages and can inspect `_aster.site.pages`; label a page's
 main article with `<aster-content>` to expose its final HTML and plain text.
 

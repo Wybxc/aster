@@ -38,11 +38,11 @@ For `pages/posts/[page]/index.typ`, emit the complete parameter set:
 Read the current page from the route context and select its items:
 
 ```typ
-#import "/lib.typ": published-posts, route-params
+#import "/lib.typ": published-posts, route-param
 
 #let settings = toml("/aster.toml")
 #let posts = published-posts()
-#let page = int(route-params.at("page", default: "1"))
+#let page = int(route-param("page", default: "1"))
 #let items = page-items(posts, page, settings.posts.per-page)
 ```
 

@@ -13,11 +13,11 @@ has this shape:
 
 ```typc
 (
-  protocol: 7,
+  protocol: 9,
   version: "0.1.0",
   collections: (:),
-  route: none,
-  routes: (pages: ()),
+  route: module,
+  routes: module,
   site: (pages: ()),
 )
 ```
@@ -38,9 +38,14 @@ Each module exposes:
 
 = Route phases
 
-`route` is `none` in the base runtime used to probe dynamic templates. Concrete
-page and generator compilations receive `(path, params)`. `routes.pages` is
-added after page planning and remains available while pages and generators run.
+`route` is a stable module with native `path(default: none)` and
+`param(name, default: none)` functions. During a dynamic probe they return the
+provided default. A concrete page or generator compilation supplies their
+values through its Typst world, so changing routes does not require rebuilding
+the shared library. The stable `routes` module exposes `pages()`, which returns
+an empty array during route discovery and the complete planned page URL set
+while pages and generators run. Supplying that set through the Typst world also
+does not rebuild the library.
 
 = Rendered site
 

@@ -69,8 +69,7 @@ fn contextual_dynamic_generators_are_compiled_for_each_declared_route() {
     std::fs::write(
         root.join("generate/feed/[slug].xml.typ"),
         concat!(
-            "#let route = sys.inputs.at(\"_aster\").at(\"route\", default: none)\n",
-            "#let slug = if route == none { none } else { route.params.at(\"slug\", default: none) }\n",
+            "#let slug = sys.inputs.at(\"_aster\").route.param(\"slug\")\n",
             "#context [\n",
             "  #metadata(((slug: \"alpha\"), (slug: \"beta\"))) <aster-route>\n",
             "  #metadata(if slug == none { none } else { \"<feed>\" + slug + \"</feed>\" }) <aster-output>\n",

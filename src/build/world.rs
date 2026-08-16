@@ -19,7 +19,7 @@ use typst_kit::fonts::FontStore;
 
 use crate::build::files::ProjectFiles;
 use crate::build::{BuildSession, BuildWarning};
-use crate::engine::content::Runtime;
+use crate::engine::content::CompilationRuntime;
 use crate::foundation::ProjectLayout;
 use crate::foundation::config::FontConfig;
 
@@ -62,10 +62,10 @@ pub fn configure_fonts(
 pub fn compile_document(
     session: &BuildSession,
     entry: &VirtualPath,
-    runtime: &Runtime,
+    runtime: &CompilationRuntime<'_>,
     warnings: &mut Vec<BuildWarning>,
 ) -> Result<typst_html::HtmlDocument> {
-    let world = world(session, entry, runtime.library());
+    let world = world(session, entry, runtime);
     let warned = compile_html((&world as &dyn World).track());
     let document = warned
         .output
@@ -85,7 +85,7 @@ pub fn compile_document(
 pub fn evaluate_generator(
     session: &BuildSession,
     entry: &VirtualPath,
-    runtime: &Runtime,
+    runtime: &CompilationRuntime<'_>,
     warnings: &mut Vec<BuildWarning>,
 ) -> Result<Bytes> {
     let document = compile_document(session, entry, runtime, warnings)?;
@@ -116,11 +116,11 @@ pub fn evaluate_generator(
 fn world<'a>(
     session: &'a BuildSession,
     entry: &VirtualPath,
-    library: &'a LazyHash<Library>,
+    runtime: &'a CompilationRuntime<'a>,
 ) -> CompileWorld<'a> {
     let main = RootedPath::new(VirtualRoot::Project, entry.clone()).intern();
     CompileWorld {
-        library,
+        runtime,
         fonts: &session.fonts,
         files: &session.files,
         main,
@@ -198,7 +198,7 @@ fn format_warning(world: &impl DiagnosticWorld, warning: &SourceDiagnostic) -> B
 }
 
 struct CompileWorld<'a> {
-    library: &'a LazyHash<Library>,
+    runtime: &'a CompilationRuntime<'a>,
     fonts: &'a FontStore,
     files: &'a ProjectFiles,
     main: FileId,
@@ -207,7 +207,7 @@ struct CompileWorld<'a> {
 
 impl World for CompileWorld<'_> {
     fn library(&self) -> &LazyHash<Library> {
-        self.library
+        self.runtime.library()
     }
 
     fn book(&self) -> &LazyHash<FontBook> {
@@ -219,10 +219,16 @@ impl World for CompileWorld<'_> {
     }
 
     fn source(&self, id: FileId) -> Result<typst::syntax::Source, FileError> {
+        if self.runtime.resolve_file(id).is_some() {
+            return Err(FileError::NotFound(id.vpath().get_with_slash().into()));
+        }
         self.files.source(id)
     }
 
     fn file(&self, id: FileId) -> Result<Bytes, FileError> {
+        if let Some(file) = self.runtime.resolve_file(id) {
+            return file;
+        }
         self.files.file(id)
     }
 

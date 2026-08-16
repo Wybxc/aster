@@ -26,6 +26,7 @@ cssparser = "0.37"
 data-url = "0.3"
 dirs = "6"
 futures-util = "0.3"
+hex = "0.4"
 image = { version = "0.25.10", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
 include_dir = "0.7"
 lightningcss = { version = "=1.0.0-alpha.72", default-features = false, features = ["bundler", "browserslist"] }
@@ -56,6 +57,7 @@ typst-kit = { version = "0.15.1", features = ["datetime", "embedded-fonts", "emi
 ureq = { version = "3", features = ["rustls"], default-features = false }
 typst-library = "0.15.1"
 typst-svg = "0.15.1"
+typst-utils = "0.15.1"
 url = "2.5"
 walkdir = "2.5"
 

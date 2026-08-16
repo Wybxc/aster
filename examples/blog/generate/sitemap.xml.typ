@@ -4,7 +4,7 @@
 #let sitemap = (
   tag: "urlset",
   attrs: (xmlns: "http://www.sitemaps.org/schemas/sitemap/0.9"),
-  children: route-pages.sorted().map(path => (
+  children: route-pages().sorted().map(path => (
     tag: "url",
     children: ((tag: "loc", children: (settings.site.url + path.slice(1),)),),
   )),

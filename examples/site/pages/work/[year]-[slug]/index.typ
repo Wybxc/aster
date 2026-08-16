@@ -1,4 +1,4 @@
-#import "/lib.typ": get-collection-ids, get-entry, route-params
+#import "/lib.typ": get-collection-ids, get-entry, route-param
 #import "/templates/site.typ": site
 
 #metadata(
@@ -8,8 +8,8 @@
   })
 ) <aster-route>
 
-#let year = route-params.at("year", default: "")
-#let slug = route-params.at("slug", default: "")
+#let year = route-param("year", default: "")
+#let slug = route-param("slug", default: "")
 #let entry = get-entry("projects", year + "/" + slug)
 
 #if entry != none [

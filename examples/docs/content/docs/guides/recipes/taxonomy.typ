@@ -36,7 +36,7 @@ display name, a URL slug, and a count for each tag:
 The tag page can use the result to declare dynamic route parameters:
 
 ```typ
-#import "/lib.typ": published-posts, route-params
+#import "/lib.typ": published-posts, route-param
 
 #metadata(
   all-tags(published-posts()).map(tag => (tag: tag.slug))
@@ -46,7 +46,7 @@ The tag page can use the result to declare dynamic route parameters:
 The page then finds the matching entry and filters the same published query:
 
 ```typ
-#let tag = route-params.at("tag", default: "")
+#let tag = route-param("tag", default: "")
 #let info = all-tags(published-posts()).find(item => item.slug == tag)
 #let name = if info == none { tag } else { info.name }
 #let posts = published-posts().filter(item =>

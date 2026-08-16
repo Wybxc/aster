@@ -1,7 +1,7 @@
 #import "@preview/exemel:0.1.0": to-xml
 #import "/lib.typ": route-pages, settings
 
-#let paths = route-pages.filter(path => path != "/404.html").sorted()
+#let paths = route-pages().filter(path => path != "/404.html").sorted()
 
 #let sitemap = (
   tag: "urlset",

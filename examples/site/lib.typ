@@ -4,21 +4,23 @@
   (:)
 } else {
   assert(
-    _content_state.protocol == 7,
+    _content_state.protocol == 9,
     message: "incompatible runtime protocol with the Aster binary",
   )
   _content_state.collections
 }
-#let _route = if _content_state == none {
-  none
-} else {
-  _content_state.at("route", default: none)
-}
-
 #let aster-version = if _content_state == none { none } else { _content_state.version }
-#let route-path = if _route == none { "/" } else { _route.path }
-#let route-params = if _route == none { (:) } else { _route.params }
-#let route-pages = if _content_state == none { () } else { _content_state.routes.pages }
+#let route-path() = if _content_state == none {
+  "/"
+} else {
+  _content_state.route.path(default: "/")
+}
+#let route-param(name, default: none) = if _content_state == none {
+  default
+} else {
+  _content_state.route.param(name, default: default)
+}
+#let route-pages() = if _content_state == none { () } else { _content_state.routes.pages() }
 
 #let get-collection-ids(name) = {
   _collections.at(name, default: (:)).keys().sorted()

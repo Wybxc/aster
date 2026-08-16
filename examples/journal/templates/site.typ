@@ -46,7 +46,7 @@
       #if extra-head != none { extra-head }
     ]
     #html.body[
-      #header(active: route-section)
+      #header(active: route-section())
       #body
       #footer()
     ]

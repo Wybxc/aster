@@ -1,9 +1,11 @@
 #let _state = sys.inputs.at("_aster", default: none)
 #let _collections = if _state == none { (:) } else { _state.collections }
-#let _route = if _state == none { none } else { _state.at("route", default: none) }
-
 #let settings = toml("/aster.toml")
-#let route-params = if _route == none { (:) } else { _route.params }
+#let route-param(name, default: none) = if _state == none {
+  default
+} else {
+  _state.route.param(name, default: default)
+}
 
 #let get-collection(name) = {
   _collections.at(name, default: (:)).values().sorted(key: entry => entry.id)

@@ -37,19 +37,32 @@ Aster validates missing parameters, extra parameters, unsafe segments, and
 output collisions before rendering pages.
 
 During the final compilation of each route, Aster exposes its preferred browser
-path and parameters inside `sys.inputs._aster.route`. Shared project libraries
-can provide stable accessors while retaining editor fallbacks:
+path and parameters through native functions in `sys.inputs._aster.route`.
+Shared project libraries can provide lazy accessors while retaining editor
+fallbacks:
 
 ```typ
-#let route = sys.inputs.at("_aster", default: (:)).at("route", default: none)
-#let route-path = if route == none { "/" } else { route.path }
-#let route-params = if route == none { (:) } else { route.params }
+#let state = sys.inputs.at("_aster", default: none)
+#let route-path() = if state == none {
+  "/"
+} else {
+  state.route.path(default: "/")
+}
+#let route-param(name, default: none) = if state == none {
+  default
+} else {
+  state.route.param(name, default: default)
+}
 ```
+
+Keeping the accessors as functions lets every compilation read its own route
+without changing the shared Typst library. During dynamic route discovery, the
+native functions return their supplied defaults.
 
 For pages, root and nested `index.html` outputs become `/` and directory URLs;
 file-shaped pages retain their `.html` suffix. Generators remove only their
 final `.typ` extension and use that exact output path. The same protocol exposes
-all planned page paths through `sys.inputs._aster.routes.pages`, so generated
+all planned page paths through `sys.inputs._aster.routes.pages()`, so generated
 artifacts such as sitemaps do not need to duplicate route discovery.
 
 == Site-root navigation
