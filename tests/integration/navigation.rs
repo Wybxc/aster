@@ -16,7 +16,7 @@ fn site_root_navigation_is_relative_to_each_output_page() {
     std::fs::write(root.join("downloads/guide.pdf"), b"guide").unwrap();
     std::fs::write(root.join("aster.toml"), "[highlight]\nenabled = false\n").unwrap();
 
-    BuildSession::new(project(root)).build().unwrap();
+    BuildSession::new(project(root), false).build().unwrap();
 
     let index = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     let file = std::fs::read_to_string(root.join("dist/404.html")).unwrap();

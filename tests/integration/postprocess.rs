@@ -22,7 +22,7 @@ fn postprocessor_imports_only_its_private_output() {
     )
     .unwrap();
 
-    let mut session = BuildSession::new(project(root));
+    let mut session = BuildSession::new(project(root), false);
     session.build().unwrap();
 
     assert_eq!(
@@ -46,7 +46,7 @@ fn postprocessor_can_mutate_the_staged_site() {
     std::fs::write(root.join("pages/index.typ"), "#html.p[Original]").unwrap();
     std::fs::write(root.join("aster.toml"), "").unwrap();
 
-    let mut session = BuildSession::new(project(root));
+    let mut session = BuildSession::new(project(root), false);
     session.build().unwrap();
     std::fs::write(
         root.join("aster.toml"),
@@ -74,7 +74,7 @@ fn failed_postprocessor_preserves_the_previous_output() {
     std::fs::write(root.join("pages/index.typ"), "#html.p[Original]").unwrap();
     std::fs::write(root.join("aster.toml"), "").unwrap();
 
-    let mut session = BuildSession::new(project(root));
+    let mut session = BuildSession::new(project(root), false);
     session.build().unwrap();
     let original = std::fs::read(root.join("dist/index.html")).unwrap();
 
@@ -112,7 +112,7 @@ fn removed_page_is_not_reported_after_postprocessing() {
     )
     .unwrap();
 
-    let outcome = BuildSession::new(project(root)).build().unwrap();
+    let outcome = BuildSession::new(project(root), false).build().unwrap();
 
     assert!(outcome.pages.is_empty());
     assert!(!root.join("dist/index.html").exists());

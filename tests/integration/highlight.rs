@@ -62,7 +62,7 @@ fn custom_theme_changes_replace_the_highlight_stylesheet() {
     write_theme(&theme, "#112233");
 
     let project = project(root);
-    let mut driver = BuildSession::new(project.clone());
+    let mut driver = BuildSession::new(project.clone(), false);
     driver.build().unwrap();
     let (first_path, first_css) = generated_asset_containing(root, "#112233");
     let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
@@ -93,7 +93,7 @@ fn creates_head_before_body_for_highlight_stylesheet() {
     .unwrap();
 
     let project = project(root);
-    let mut session = BuildSession::new(project.clone());
+    let mut session = BuildSession::new(project.clone(), false);
     session.build().unwrap();
 
     let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
@@ -121,7 +121,7 @@ fn applies_lumis_themes_to_dynamic_rust_highlighting() {
     )
     .unwrap();
 
-    BuildSession::new(project(root)).build().unwrap();
+    BuildSession::new(project(root), false).build().unwrap();
 
     let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     assert!(html.contains("<span class=\"hl-s0\">pub</span>"));
@@ -168,7 +168,7 @@ fn highlights_injected_languages_in_one_pass() {
     )
     .unwrap();
 
-    BuildSession::new(project(root)).build().unwrap();
+    BuildSession::new(project(root), false).build().unwrap();
 
     let css = highlight_stylesheet(root);
     assert!(css.contains("color:#123456"));
@@ -195,7 +195,7 @@ fn invalid_theme_warns_once_for_the_whole_build() {
     }
 
     let project = project(root);
-    let outcome = BuildSession::new(project.clone()).build().unwrap();
+    let outcome = BuildSession::new(project.clone(), false).build().unwrap();
 
     assert_eq!(
         outcome
@@ -242,7 +242,7 @@ fn allows_symlinked_theme_outside_project_root() {
     symlink(external_theme, root.join("theme.json")).unwrap();
 
     let project = project(root);
-    let mut session = BuildSession::new(project.clone());
+    let mut session = BuildSession::new(project.clone(), false);
     session.build().unwrap();
 
     assert!(

@@ -11,7 +11,11 @@ use crate::build::files::{self, ProjectFiles};
 use crate::engine::content::{ContentEntry, Runtime};
 
 /// Discover content entries through the tracked project filesystem.
-pub fn load(project_files: Tracked<ProjectFiles>, root: &VirtualPath) -> Result<Runtime> {
+pub fn load(
+    project_files: Tracked<ProjectFiles>,
+    root: &VirtualPath,
+    dev: bool,
+) -> Result<Runtime> {
     let entries = files::list_typst_files(project_files, root, false)?
         .into_iter()
         .map(|path| content_entry(root, path))
@@ -22,7 +26,7 @@ pub fn load(project_files: Tracked<ProjectFiles>, root: &VirtualPath) -> Result<
         entries.len(),
         if entries.len() == 1 { "y" } else { "ies" }
     );
-    Ok(Runtime::new(entries))
+    Ok(Runtime::new(entries, dev))
 }
 
 fn content_entry(root: &VirtualPath, path: VirtualPath) -> Result<ContentEntry> {

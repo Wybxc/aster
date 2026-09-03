@@ -79,8 +79,9 @@ impl BuildSession {
                 &mut warnings,
             )?;
 
-            let runtime = super::content::load(session.project_files(), layout.content())
-                .context("failed to load content collections")?;
+            let runtime =
+                super::content::load(session.project_files(), layout.content(), session.dev)
+                    .context("failed to load content collections")?;
             drop(stage);
 
             let stage = tracing::info_span!("plan", message = "planned routes").entered();

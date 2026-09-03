@@ -50,7 +50,7 @@ fn publishes_html_resources_from_project_and_component_paths() {
     .unwrap();
     std::fs::write(root.join("aster.toml"), "[highlight]\nenabled = false\n").unwrap();
 
-    let mut session = BuildSession::new(project(root));
+    let mut session = BuildSession::new(project(root), false);
     session.build().unwrap();
 
     let html = std::fs::read_to_string(root.join("dist/nested/index.html")).unwrap();
@@ -109,7 +109,7 @@ fn rechecks_a_missing_html_resource() {
     )
     .unwrap();
     let missing = root.join("assets/missing.svg");
-    let mut session = BuildSession::new(project(root));
+    let mut session = BuildSession::new(project(root), false);
 
     assert!(session.build().is_err());
     assert!(

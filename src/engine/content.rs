@@ -35,7 +35,7 @@ pub struct Runtime {
 
 impl Runtime {
     /// Construct the base runtime used for route planning.
-    pub fn new(entries: impl IntoIterator<Item = ContentEntry>) -> Self {
+    pub fn new(entries: impl IntoIterator<Item = ContentEntry>, dev: bool) -> Self {
         let mut collections: BTreeMap<EcoString, Vec<(EcoString, RootedPath)>> = BTreeMap::new();
         for entry in entries {
             collections
@@ -45,7 +45,7 @@ impl Runtime {
         }
 
         let mut inputs = Dict::new();
-        inputs.insert(Str::from(INPUT_NAME), protocol_value(collections));
+        inputs.insert(Str::from(INPUT_NAME), protocol_value(collections, dev));
         let library = library(&inputs);
         Self {
             inputs,
@@ -255,7 +255,10 @@ pub struct SiteContent {
     pub text: EcoString,
 }
 
-fn protocol_value(collections: BTreeMap<EcoString, Vec<(EcoString, RootedPath)>>) -> Value {
+fn protocol_value(
+    collections: BTreeMap<EcoString, Vec<(EcoString, RootedPath)>>,
+    dev: bool,
+) -> Value {
     let mut packed_collections = Dict::new();
     for (collection_name, entries) in collections {
         let mut packed_entries = Dict::new();
@@ -274,6 +277,7 @@ fn protocol_value(collections: BTreeMap<EcoString, Vec<(EcoString, RootedPath)>>
     Value::Dict(dict! {
         "protocol" => PROTOCOL_VERSION,
         "version" => ASTER_VERSION,
+        "dev" => dev,
         "collections" => packed_collections,
         "route" => route_module(),
         "routes" => routes_module(),
@@ -451,19 +455,22 @@ mod tests {
     use typst::syntax::{VirtualPath, VirtualRoot};
 
     fn empty() -> Runtime {
-        Runtime::new(std::iter::empty())
+        Runtime::new(std::iter::empty(), false)
     }
 
     #[test]
     fn protocol_contains_lazy_entry_modules() {
-        let runtime = Runtime::new([ContentEntry {
-            collection: "blog".into(),
-            id: "nested/post".into(),
-            source: RootedPath::new(
-                VirtualRoot::Project,
-                VirtualPath::new("content/blog/nested/post.typ").unwrap(),
-            ),
-        }]);
+        let runtime = Runtime::new(
+            [ContentEntry {
+                collection: "blog".into(),
+                id: "nested/post".into(),
+                source: RootedPath::new(
+                    VirtualRoot::Project,
+                    VirtualPath::new("content/blog/nested/post.typ").unwrap(),
+                ),
+            }],
+            false,
+        );
 
         let Value::Dict(protocol) = runtime.inputs.get(INPUT_NAME).unwrap() else {
             panic!("protocol must be a dictionary");
@@ -512,11 +519,22 @@ mod tests {
             protocol.get("version").unwrap(),
             &Value::Str(Str::from(ASTER_VERSION))
         );
+        assert_eq!(protocol.get("dev").unwrap(), &Value::Bool(false));
         let Value::Module(route) = protocol.get("route").unwrap() else {
             panic!("route protocol must be a module");
         };
         assert!(matches!(route.field("path", ()).unwrap(), Value::Func(_)));
         assert!(matches!(route.field("param", ()).unwrap(), Value::Func(_)));
+    }
+
+    #[test]
+    fn protocol_exposes_development_mode() {
+        let runtime = Runtime::new(std::iter::empty(), true);
+        let Value::Dict(protocol) = runtime.inputs.get(INPUT_NAME).unwrap() else {
+            panic!("protocol must be a dictionary");
+        };
+
+        assert_eq!(protocol.get("dev").unwrap(), &Value::Bool(true));
     }
 
     #[test]

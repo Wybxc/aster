@@ -15,7 +15,7 @@ use aster::{BuildSession, Project};
 
 fn build(root: &std::path::Path) -> anyhow::Result<()> {
     let project = Project::open(root)?;
-    let mut session = BuildSession::new(project);
+    let mut session = BuildSession::new(project, false);
     let outcome = session.build()?;
 
     println!("published {} pages", outcome.pages.len());
@@ -34,6 +34,10 @@ made absolute lexically without canonicalizing symlinks.
 A `BuildSession` belongs to one project and is intended to survive repeated
 builds. It retains fonts, package state, tracked files, and memoized compilation
 inputs while reloading `aster.toml` for every attempt.
+
+Pass `true` to `BuildSession::new(project, true)` to expose
+`sys.inputs._aster.dev` as `true`, matching the CLI development server. Pass
+`false` for production builds.
 
 `build()` publishes the site and returns a `BuildOutcome` containing:
 

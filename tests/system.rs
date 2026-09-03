@@ -181,6 +181,52 @@ fn build_command_builds_the_selected_project() {
     }
 }
 
+#[test]
+fn build_command_passes_development_mode_to_typst() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join("pages")).unwrap();
+    std::fs::write(
+        root.join("pages/index.typ"),
+        concat!(
+            "#let mode = if sys.inputs._aster.dev { \"development\" } else { \"production\" }\n",
+            "#html.elem(\"p\")[#mode]\n",
+        ),
+    )
+    .unwrap();
+    std::fs::write(root.join("aster.toml"), "").unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_aster"))
+        .arg("build")
+        .arg("--project")
+        .arg(root)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
+    assert!(html.contains("production"));
+
+    let output = Command::new(env!("CARGO_BIN_EXE_aster"))
+        .arg("build")
+        .arg("--project")
+        .arg(root)
+        .arg("--dev")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
+    assert!(html.contains("development"));
+    assert!(!html.contains("production"));
+}
+
 #[cfg(unix)]
 #[test]
 fn build_uses_tailwind_cli_for_tailwind_links() {
@@ -396,7 +442,7 @@ fn init_creates_a_buildable_project() {
     assert!(config.contains("name = \"my-site\""));
 
     let project = Project::open(destination).unwrap();
-    let outcome = BuildSession::new(project).build().unwrap();
+    let outcome = BuildSession::new(project, false).build().unwrap();
     assert_eq!(outcome.pages.len(), 1);
 }
 

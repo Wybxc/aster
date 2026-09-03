@@ -30,9 +30,9 @@ const LIVE_RELOAD_SCRIPT: &str = r#"(() => {
 })();
 "#;
 
-pub fn run(project_dir: Option<PathBuf>, host: IpAddr, port: u16) -> Result<()> {
+pub fn run(project_dir: Option<PathBuf>, host: IpAddr, port: u16, dev: bool) -> Result<()> {
     let project = resolve_project(project_dir)?;
-    let mut session = BuildSession::new(project.clone());
+    let mut session = BuildSession::new(project.clone(), dev);
     let mut watcher = Watcher::new().context("failed to initialize file watcher")?;
     let server = DevServer::start(SocketAddr::new(host, port))?;
     tracing::info!(
@@ -504,7 +504,7 @@ mod tests {
         std::fs::write(root.join("aster.toml"), "").unwrap();
         let page = root.join("pages/index.typ");
         std::fs::write(&page, "#html.elem(\"p\")[First]").unwrap();
-        let mut session = BuildSession::new(Project::open(root.to_owned()).unwrap());
+        let mut session = BuildSession::new(Project::open(root.to_owned()).unwrap(), false);
         let server = DevServer::start("127.0.0.1:0".parse().unwrap()).unwrap();
 
         let outcome = server.build(&mut session).unwrap();

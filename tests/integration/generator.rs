@@ -15,7 +15,7 @@ fn build_publishes_generator_output_at_the_exact_template_path() {
     )
     .unwrap();
 
-    let outcome = BuildSession::new(project(root)).build().unwrap();
+    let outcome = BuildSession::new(project(root), false).build().unwrap();
 
     assert_eq!(outcome.pages, [root.join("dist/index.html")]);
     assert_eq!(outcome.generated, [root.join("dist/feed/rss.xml")]);
@@ -40,7 +40,7 @@ fn generator_bytes_are_tracked_and_refreshed_by_a_reused_session() {
     )
     .unwrap();
 
-    let mut session = BuildSession::new(project(root));
+    let mut session = BuildSession::new(project(root), false);
     session.build().unwrap();
     assert_eq!(
         std::fs::read(root.join("dist/archive.bin")).unwrap(),
@@ -78,7 +78,7 @@ fn contextual_dynamic_generators_are_compiled_for_each_declared_route() {
     )
     .unwrap();
 
-    let outcome = BuildSession::new(project(root)).build().unwrap();
+    let outcome = BuildSession::new(project(root), false).build().unwrap();
 
     assert!(outcome.pages.is_empty());
     assert_eq!(
@@ -116,7 +116,7 @@ fn generator_requires_one_string_or_byte_output() {
         std::fs::create_dir(root.join("generate")).unwrap();
         std::fs::write(root.join("generate/feed.xml.typ"), source).unwrap();
 
-        let error = BuildSession::new(project(root))
+        let error = BuildSession::new(project(root), false)
             .build()
             .err()
             .expect("invalid generator output must fail");
@@ -154,7 +154,7 @@ fn generator_receives_final_labelled_page_content() {
     )
     .unwrap();
 
-    BuildSession::new(project(root)).build().unwrap();
+    BuildSession::new(project(root), false).build().unwrap();
 
     let snapshot = std::fs::read_to_string(root.join("dist/snapshot.txt")).unwrap();
     assert!(snapshot.starts_with("/\n<article>"), "{snapshot}");
@@ -186,7 +186,7 @@ fn content_marker_survives_head_insertion_during_transforms() {
     )
     .unwrap();
 
-    BuildSession::new(project(root)).build().unwrap();
+    BuildSession::new(project(root), false).build().unwrap();
 
     let page = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     let snapshot = std::fs::read_to_string(root.join("dist/snapshot.html")).unwrap();
@@ -213,7 +213,7 @@ fn page_rejects_multiple_content_roots() {
     )
     .unwrap();
 
-    let error = BuildSession::new(project(root))
+    let error = BuildSession::new(project(root), false)
         .build()
         .err()
         .expect("multiple content roots must fail");

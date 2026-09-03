@@ -12,7 +12,7 @@ fn copies_public_tree_and_removes_stale_files() {
     std::fs::write(root.join("public/CNAME"), "example.com\n").unwrap();
     std::fs::write(root.join("public/images/logo.bin"), [0, 1, 2, 255]).unwrap();
 
-    let mut session = BuildSession::new(project(root));
+    let mut session = BuildSession::new(project(root), false);
     let outcome = session.build().unwrap();
 
     assert_eq!(outcome.pages, [root.join("dist/index.html")]);
@@ -51,7 +51,7 @@ fn rejects_public_file_that_collides_with_generated_page() {
     std::fs::write(root.join("pages/index.typ"), "#html.elem(\"p\")[Generated]").unwrap();
     std::fs::write(root.join("public/index.html"), "Public").unwrap();
 
-    let error = BuildSession::new(project(root))
+    let error = BuildSession::new(project(root), false)
         .build()
         .err()
         .expect("public file and page must not share an output path");
@@ -73,7 +73,7 @@ fn rejects_output_that_overlaps_public_without_deleting_files() {
     std::fs::write(&public_file, "Keep").unwrap();
     std::fs::write(root.join("aster.toml"), "[paths]\noutput = \"public\"\n").unwrap();
 
-    let error = BuildSession::new(project(root))
+    let error = BuildSession::new(project(root), false)
         .build()
         .err()
         .expect("overlapping public and output directories must fail");

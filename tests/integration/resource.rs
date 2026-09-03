@@ -35,7 +35,7 @@ fn component_file_resources_are_resolved_tracked_and_injected_once() {
     )
     .unwrap();
 
-    let mut session = BuildSession::new(project(root));
+    let mut session = BuildSession::new(project(root), false);
     session.build().unwrap();
 
     let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
@@ -119,7 +119,7 @@ fn raw_resources_are_deduplicated_by_component_and_accept_surrounding_whitespace
     )
     .unwrap();
 
-    let mut session = BuildSession::new(project(root));
+    let mut session = BuildSession::new(project(root), false);
     session.build().unwrap();
 
     let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
@@ -235,7 +235,7 @@ fn component_resources_preserve_document_order() {
     )
     .unwrap();
 
-    BuildSession::new(project(root)).build().unwrap();
+    BuildSession::new(project(root), false).build().unwrap();
 
     let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     let first = generated_asset_containing(root, "css", ".outer-first");
@@ -267,7 +267,7 @@ fn resource_content_rejects_multiple_raw_elements() {
     )
     .unwrap();
 
-    let error = BuildSession::new(project(root))
+    let error = BuildSession::new(project(root), false)
         .build()
         .err()
         .expect("multiple raw elements must fail");

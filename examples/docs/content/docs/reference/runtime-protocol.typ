@@ -14,7 +14,8 @@ has this shape:
 ```typc
 (
   protocol: 9,
-  version: "0.1.0",
+  version: "0.2.0",
+  dev: false,
   collections: (:),
   route: module,
   routes: module,
@@ -23,8 +24,11 @@ has this shape:
 ```
 
 `protocol` is the compatibility version, while `version` is the Aster package
-version. Project code should validate the protocol version when `_aster` exists
-and remain usable when the entire input is absent during editor evaluation.
+version. `dev` reports whether the build session enabled development mode. The
+`aster dev` command enables it by default, while `build` and `watch` disable it
+by default. Rust callers select the mode explicitly in `BuildSession::new`.
+Project code should validate the protocol version when `_aster` exists and
+remain usable when the entire input is absent during editor evaluation.
 
 = Collections
 

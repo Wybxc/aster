@@ -34,11 +34,14 @@ pub struct BuildSession {
     fonts: FontStore,
     files: ProjectFiles,
     now: Time,
+    dev: bool,
 }
 
 impl BuildSession {
     /// Create a reusable session bound to a validated project.
-    pub fn new(project: Project) -> Self {
+    ///
+    /// `dev` is exposed to Typst code as `sys.inputs._aster.dev`.
+    pub fn new(project: Project, dev: bool) -> Self {
         let files = ProjectFiles::new(&project);
         Self {
             project,
@@ -46,6 +49,7 @@ impl BuildSession {
             fonts: FontStore::new(),
             files,
             now: Time::system(),
+            dev,
         }
     }
 

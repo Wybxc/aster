@@ -9,9 +9,34 @@ fn build_suppresses_typst_html_warning() {
     std::fs::create_dir_all(root.join("pages")).unwrap();
     std::fs::write(root.join("pages/index.typ"), "#html.elem(\"p\")[Page]").unwrap();
 
-    let outcome = BuildSession::new(project(root)).build().unwrap();
+    let outcome = BuildSession::new(project(root), false).build().unwrap();
 
     assert!(outcome.warnings.is_empty(), "{:?}", outcome.warnings);
+}
+
+#[test]
+fn build_exposes_development_mode_to_typst() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join("pages")).unwrap();
+    std::fs::write(
+        root.join("pages/index.typ"),
+        concat!(
+            "#let mode = if sys.inputs._aster.dev { \"development\" } else { \"production\" }\n",
+            "#html.elem(\"p\")[#mode]\n",
+        ),
+    )
+    .unwrap();
+
+    let project = project(root);
+    BuildSession::new(project.clone(), false).build().unwrap();
+    let production = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
+    assert!(production.contains("production"));
+
+    BuildSession::new(project, true).build().unwrap();
+    let development = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
+    assert!(development.contains("development"));
+    assert!(!development.contains("production"));
 }
 
 #[test]
@@ -23,7 +48,7 @@ fn build_reuses_the_session_and_observes_source_changes() {
     std::fs::write(&entry, "#html.elem(\"p\")[first]").unwrap();
 
     let project = project(root);
-    let mut driver = BuildSession::new(project.clone());
+    let mut driver = BuildSession::new(project.clone(), false);
     driver.build().unwrap();
     let first = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
 
@@ -52,7 +77,7 @@ fn build_provides_current_date_with_local_and_explicit_offsets() {
     )
     .unwrap();
 
-    BuildSession::new(project(root)).build().unwrap();
+    BuildSession::new(project(root), false).build().unwrap();
 
     let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     let dates = html
@@ -90,7 +115,7 @@ fn build_injects_namespaced_route_context() {
     )
     .unwrap();
 
-    BuildSession::new(project(root)).build().unwrap();
+    BuildSession::new(project(root), false).build().unwrap();
 
     let index = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     let about = std::fs::read_to_string(root.join("dist/about.html")).unwrap();
@@ -138,7 +163,7 @@ fn build_exposes_separate_content_and_metadata_accessors() {
     .unwrap();
 
     let project = project(root);
-    let mut driver = BuildSession::new(project.clone());
+    let mut driver = BuildSession::new(project.clone(), false);
     driver.build().unwrap();
     let first = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     assert!(first.contains("First"));
@@ -170,7 +195,7 @@ fn reentrant_build_discovers_added_and_removed_pages() {
     std::fs::write(&index, page).unwrap();
 
     let project = project(root);
-    let mut driver = BuildSession::new(project.clone());
+    let mut driver = BuildSession::new(project.clone(), false);
     driver.build().unwrap();
     assert!(root.join("dist/index.html").is_file());
     assert!(
@@ -210,7 +235,7 @@ fn reentrant_build_recovers_after_compilation_failure() {
     std::fs::write(&entry, "#html.elem(\"p\")[First]").unwrap();
 
     let project = project(root);
-    let mut driver = BuildSession::new(project.clone());
+    let mut driver = BuildSession::new(project.clone(), false);
     driver.build().unwrap();
 
     std::fs::write(&entry, "#let broken =").unwrap();
@@ -239,7 +264,7 @@ fn build_follows_a_pages_directory_symlink_outside_the_project() {
     symlink(external.path(), root.join("pages")).unwrap();
 
     let project = project(root);
-    let outcome = BuildSession::new(project.clone()).build().unwrap();
+    let outcome = BuildSession::new(project.clone(), false).build().unwrap();
 
     assert_eq!(outcome.pages, vec![root.join("dist/index.html")]);
     assert!(
@@ -267,7 +292,7 @@ fn build_preserves_a_symlinked_project_root() {
     symlink(&actual, &linked).unwrap();
 
     let project = Project::open(&linked).unwrap();
-    let outcome = BuildSession::new(project.clone()).build().unwrap();
+    let outcome = BuildSession::new(project.clone(), false).build().unwrap();
 
     assert_eq!(outcome.pages, vec![linked.join("dist/index.html")]);
     assert!(

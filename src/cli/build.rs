@@ -5,9 +5,9 @@ use aster::BuildSession;
 
 use crate::cli::{resolve_project, telemetry};
 
-pub fn run(project_dir: Option<PathBuf>) -> Result<()> {
+pub fn run(project_dir: Option<PathBuf>, dev: bool) -> Result<()> {
     let project = resolve_project(project_dir)?;
-    let outcome = BuildSession::new(project).build()?;
+    let outcome = BuildSession::new(project, dev).build()?;
     telemetry::report_build(&outcome);
     Ok(())
 }

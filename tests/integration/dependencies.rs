@@ -17,7 +17,7 @@ fn includes_accessed_trees_even_when_missing() {
     )
     .unwrap();
     let project = Project::open(root.to_owned()).unwrap();
-    let mut session = BuildSession::new(project.clone());
+    let mut session = BuildSession::new(project.clone(), false);
 
     session.build().unwrap();
     let dependencies = session.dependencies();
@@ -49,7 +49,7 @@ fn includes_observed_inputs_but_not_generated_outputs() {
     let theme = root.join("theme.json");
     let generated = root.join("dist/index.html");
 
-    let mut session = BuildSession::new(project);
+    let mut session = BuildSession::new(project, false);
     session.build().unwrap();
     let dependencies = session.dependencies();
 
@@ -79,7 +79,7 @@ fn snapshot_follows_reloaded_layout() {
     std::fs::create_dir(root.join("pages")).unwrap();
     std::fs::write(root.join("aster.toml"), "").unwrap();
     let project = Project::open(root.to_owned()).unwrap();
-    let mut session = BuildSession::new(project);
+    let mut session = BuildSession::new(project, false);
     session.build().unwrap();
 
     assert!(
@@ -119,7 +119,7 @@ fn includes_configured_watch_files_directories_and_missing_paths() {
         ),
     )
     .unwrap();
-    let mut session = BuildSession::new(Project::open(root).unwrap());
+    let mut session = BuildSession::new(Project::open(root).unwrap(), false);
 
     session.build().unwrap();
     let dependencies = session.dependencies();

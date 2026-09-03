@@ -81,9 +81,9 @@ for every nested entry id.
 
 ```text
 aster init [path]
-aster build [-p project] [-v|-vv]
-aster watch [-p project] [-v|-vv]
-aster dev [-p project] [--host 127.0.0.1] [--port 4321] [-v|-vv]
+aster build [-p project] [-v|-vv] [--dev[=BOOL]]
+aster watch [-p project] [-v|-vv] [--dev[=BOOL]]
+aster dev [-p project] [--host 127.0.0.1] [--port 4321] [-v|-vv] [--dev[=BOOL]]
 ```
 
 Without `-p`, build commands find the nearest ancestor containing
@@ -91,6 +91,10 @@ Without `-p`, build commands find the nearest ancestor containing
 `dev` adds a static server with browser reload. The server resolves `/` and
 directory requests such as `/guide/` to their `index.html` files and serves a
 project-provided `404.html` when present.
+
+Typst code can read `sys.inputs._aster.dev` to select development-only output.
+It defaults to `true` for `aster dev` and `false` for `build` and `watch`.
+`--dev` enables it explicitly, while `--dev=false` disables it.
 
 The default log level shows stages and rendered routes. `-v` includes detailed
 build operations; `-vv` includes ordinary resource processing.

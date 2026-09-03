@@ -69,7 +69,7 @@ fn build_honors_configured_layout_and_processing_options() {
     .unwrap();
 
     let project = project(root);
-    let mut session = BuildSession::new(project);
+    let mut session = BuildSession::new(project, false);
     let outcome = session.build().unwrap();
 
     assert_eq!(outcome.pages, [root.join("public/index.html")]);
@@ -131,7 +131,7 @@ fn rejects_output_that_overlaps_pages_without_deleting_files() {
     )
     .unwrap();
 
-    let error = BuildSession::new(project(root))
+    let error = BuildSession::new(project(root), false)
         .build()
         .err()
         .expect("overlapping output must fail");
@@ -152,7 +152,7 @@ fn rejects_watch_path_overlapping_output() {
     )
     .unwrap();
 
-    let error = BuildSession::new(project(root))
+    let error = BuildSession::new(project(root), false)
         .build()
         .err()
         .expect("overlapping watch path must fail");
@@ -171,7 +171,7 @@ fn rejects_project_root_watch_path() {
     std::fs::write(root.join("pages/index.typ"), "#html.elem(\"p\")[Page]").unwrap();
     std::fs::write(root.join("aster.toml"), "[watch]\npaths = [\".\"]\n").unwrap();
 
-    let error = BuildSession::new(project(root))
+    let error = BuildSession::new(project(root), false)
         .build()
         .err()
         .expect("project root watch path must fail");
@@ -188,7 +188,7 @@ fn session_recovers_after_manifest_is_fixed() {
     let project = project(root);
 
     std::fs::write(root.join("aster.toml"), "[paths\n").unwrap();
-    let mut session = BuildSession::new(project.clone());
+    let mut session = BuildSession::new(project.clone(), false);
     assert!(session.build().is_err());
     assert!(
         session

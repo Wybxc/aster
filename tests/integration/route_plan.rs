@@ -30,7 +30,7 @@ fn route_plan_is_sorted_and_probes_dynamic_templates() {
     let (_temp, project) = fixture(&["z/index.typ", "blog/[slug]/index.typ", "a/index.typ"]);
     write_routes(&project, "blog/[slug]/index.typ", "((slug: \"post\"),)");
 
-    let outcome = BuildSession::new(project.clone()).build().unwrap();
+    let outcome = BuildSession::new(project.clone(), false).build().unwrap();
     let output_dir = project.root().join("dist");
     let outputs = outcome
         .pages
@@ -56,7 +56,7 @@ fn route_plan_preserves_file_shaped_page_routes() {
     let (_temp, project) = fixture(&["a.typ", "blog/[slug].typ"]);
     write_routes(&project, "blog/[slug].typ", "((slug: \"post\"),)");
 
-    let outcome = BuildSession::new(project.clone()).build().unwrap();
+    let outcome = BuildSession::new(project.clone(), false).build().unwrap();
     let output_dir = project.root().join("dist");
     let outputs = outcome
         .pages
@@ -78,7 +78,7 @@ fn route_plan_rejects_static_dynamic_collision() {
     let (_temp, project) = fixture(&["post.typ", "[slug].typ"]);
     write_routes(&project, "[slug].typ", "((slug: \"post\"),)");
 
-    assert!(BuildSession::new(project).build().is_err());
+    assert!(BuildSession::new(project, false).build().is_err());
 }
 
 #[test]
@@ -91,7 +91,7 @@ fn route_plan_rejects_page_generator_collision() {
     )
     .unwrap();
 
-    let error = BuildSession::new(project)
+    let error = BuildSession::new(project, false)
         .build()
         .err()
         .expect("page and generator collision must fail");
@@ -111,7 +111,7 @@ fn route_plan_rejects_generator_collision() {
     )
     .unwrap();
 
-    let error = BuildSession::new(project)
+    let error = BuildSession::new(project, false)
         .build()
         .err()
         .expect("generator collision must fail");
@@ -125,7 +125,7 @@ fn route_plan_rejects_generator_collision() {
 fn route_plan_reports_missing_dynamic_metadata() {
     let (_temp, project) = fixture(&["[slug].typ"]);
 
-    let outcome = BuildSession::new(project).build().unwrap();
+    let outcome = BuildSession::new(project, false).build().unwrap();
 
     assert!(outcome.pages.is_empty());
     assert_eq!(outcome.warnings.len(), 1);

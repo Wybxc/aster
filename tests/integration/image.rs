@@ -23,7 +23,7 @@ fn downsamples_project_images_to_declared_html_dimensions() {
     )
     .unwrap();
 
-    BuildSession::new(project(root)).build().unwrap();
+    BuildSession::new(project(root), false).build().unwrap();
 
     let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     assert!(html.contains("src=\"_assets/photo."), "{html}");
@@ -65,7 +65,7 @@ fn optimizes_images_inside_inline_typst_frames() {
     )
     .unwrap();
 
-    BuildSession::new(project(root)).build().unwrap();
+    BuildSession::new(project(root), false).build().unwrap();
 
     let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     assert!(html.contains("<svg"), "{html}");
@@ -97,7 +97,7 @@ fn keeps_frame_images_at_source_size_without_a_density_limit() {
     )
     .unwrap();
 
-    BuildSession::new(project(root)).build().unwrap();
+    BuildSession::new(project(root), false).build().unwrap();
 
     let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     let images = embedded_pngs(&html);
@@ -134,7 +134,7 @@ fn optimizes_images_discovered_in_css() {
     )
     .unwrap();
 
-    BuildSession::new(project(root)).build().unwrap();
+    BuildSession::new(project(root), false).build().unwrap();
 
     let optimized = std::fs::read(only_generated_png(root)).unwrap();
     assert!(optimized.len() < source.len());
@@ -168,7 +168,7 @@ fn extracts_and_downsamples_image_data_urls() {
     )
     .unwrap();
 
-    BuildSession::new(project(root)).build().unwrap();
+    BuildSession::new(project(root), false).build().unwrap();
 
     let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
     assert!(!html.contains("data:image/png"), "{html}");

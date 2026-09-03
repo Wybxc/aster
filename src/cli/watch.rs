@@ -12,9 +12,9 @@ use notify_debouncer_full::{DebounceEventResult, Debouncer, RecommendedCache, ne
 
 use crate::cli::{resolve_project, telemetry};
 
-pub fn run(project_dir: Option<PathBuf>) -> Result<()> {
+pub fn run(project_dir: Option<PathBuf>, dev: bool) -> Result<()> {
     let project = resolve_project(project_dir)?;
-    let mut session = BuildSession::new(project.clone());
+    let mut session = BuildSession::new(project.clone(), dev);
     let mut watcher = Watcher::new().context("failed to initialize file watcher")?;
     tracing::info!(
         project = %project.root().display(),

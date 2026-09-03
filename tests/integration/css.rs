@@ -14,7 +14,7 @@ fn bundles_and_tracks_entry_and_transitive_imports() {
     std::fs::write(&dependency, ".theme { color: blue; }").unwrap();
 
     let project = project(root);
-    let mut driver = BuildSession::new(project.clone());
+    let mut driver = BuildSession::new(project.clone(), false);
     driver.build().unwrap();
     let (first_path, first_css) = generated_asset_containing(root, ".page");
     assert!(
@@ -63,7 +63,7 @@ fn publishes_and_tracks_assets_from_transitive_stylesheets() {
     .unwrap();
     std::fs::write(&font, b"first font").unwrap();
 
-    let mut session = BuildSession::new(project(root));
+    let mut session = BuildSession::new(project(root), false);
     session.build().unwrap();
 
     let first_font = generated_asset_with_extension(root, "woff2");
@@ -107,7 +107,7 @@ fn reuses_resolved_stylesheet_across_page_output_directories() {
     .unwrap();
     std::fs::write(root.join("styles/pixel.bin"), b"pixel").unwrap();
 
-    BuildSession::new(project(root)).build().unwrap();
+    BuildSession::new(project(root), false).build().unwrap();
 
     let (css_path, css) = generated_asset_containing(root, ".shared");
     let css_name = css_path.file_name().unwrap().to_string_lossy();
@@ -136,7 +136,7 @@ fn preserves_browser_managed_urls() {
     )
     .unwrap();
 
-    BuildSession::new(project(root)).build().unwrap();
+    BuildSession::new(project(root), false).build().unwrap();
 
     let css = generated_asset_containing(root, ".remote").1;
     let html = std::fs::read_to_string(root.join("dist/index.html")).unwrap();
@@ -176,7 +176,7 @@ fn resolves_project_root_stylesheets_imports_and_urls() {
     std::fs::write(root.join("shared/theme.css"), ".theme { color: green; }").unwrap();
     std::fs::write(root.join("assets/site.svg"), b"root svg").unwrap();
 
-    BuildSession::new(project(root)).build().unwrap();
+    BuildSession::new(project(root), false).build().unwrap();
 
     let (css_path, css) = generated_asset_containing(root, ".root");
     let css_name = css_path.file_name().unwrap().to_string_lossy();
@@ -204,7 +204,7 @@ fn rechecks_missing_css_assets() {
     .unwrap();
     let missing = root.join("styles/assets/missing.bin");
 
-    let mut session = BuildSession::new(project(root));
+    let mut session = BuildSession::new(project(root), false);
     assert!(session.build().is_err());
     assert!(
         session
@@ -233,7 +233,7 @@ fn rejects_css_assets_outside_project_root() {
     )
     .unwrap();
 
-    let error = BuildSession::new(project(root))
+    let error = BuildSession::new(project(root), false)
         .build()
         .err()
         .expect("escaping CSS asset must fail");
@@ -267,7 +267,7 @@ fn transforms_for_configured_targets_without_minifying() {
     )
     .unwrap();
 
-    BuildSession::new(project(root)).build().unwrap();
+    BuildSession::new(project(root), false).build().unwrap();
 
     let css = generated_asset_containing(root, ".page").1;
     assert!(css.contains("@media (max-width: 30rem)"), "{css}");
@@ -293,7 +293,7 @@ fn minify_only_compacts_serialized_output() {
     )
     .unwrap();
 
-    let mut session = BuildSession::new(project(root));
+    let mut session = BuildSession::new(project(root), false);
     session.build().unwrap();
 
     let readable = generated_asset_containing(root, ".page").1;
@@ -322,7 +322,7 @@ fn rejects_invalid_browser_targets() {
         "[css]\ntargets = [\"not-a-browser 1\"]\n",
     )
     .unwrap();
-    let error = BuildSession::new(project(root))
+    let error = BuildSession::new(project(root), false)
         .build()
         .err()
         .expect("invalid Browserslist query must fail the build");
@@ -343,7 +343,7 @@ fn rechecks_missing_imports() {
     let missing = root.join("styles/missing.css");
 
     let project = project(root);
-    let mut driver = BuildSession::new(project.clone());
+    let mut driver = BuildSession::new(project.clone(), false);
     assert!(driver.build().is_err());
     let dependencies = driver.dependencies();
     assert!(
@@ -370,7 +370,7 @@ fn allows_imports_across_project_directories() {
     std::fs::write(root.join("secret.css"), ".secret { color: red; }").unwrap();
 
     let project = project(root);
-    let mut session = BuildSession::new(project.clone());
+    let mut session = BuildSession::new(project.clone(), false);
     session.build().unwrap();
 
     assert!(
@@ -399,7 +399,7 @@ fn rejects_transitive_import_outside_project_root() {
     .unwrap();
 
     let project = project(root);
-    let error = BuildSession::new(project)
+    let error = BuildSession::new(project, false)
         .build()
         .err()
         .expect("escaping import must fail");
@@ -428,7 +428,7 @@ fn allows_symlinked_css_outside_project_root() {
 
     let project = project(root);
     let linked = root.join("styles/shared.css");
-    let mut session = BuildSession::new(project.clone());
+    let mut session = BuildSession::new(project.clone(), false);
     session.build().unwrap();
 
     assert!(

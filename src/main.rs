@@ -13,6 +13,17 @@ struct Cli {
     /// Show detailed build progress; repeat to include ordinary resources
     #[arg(short = 'v', long = "verbose", action = clap::ArgAction::Count, global = true)]
     verbosity: u8,
+    /// Expose development mode to Typst; defaults to true for `dev` only
+    #[arg(
+        short = 'D',
+        long = "dev",
+        global = true,
+        action = clap::ArgAction::Set,
+        num_args = 0..=1,
+        default_missing_value = "true",
+        value_name = "BOOL"
+    )]
+    dev: Option<bool>,
     #[command(subcommand)]
     command: Commands,
 }
@@ -54,6 +65,13 @@ enum Commands {
     },
 }
 
+impl Cli {
+    fn dev_mode(&self) -> bool {
+        self.dev
+            .unwrap_or(matches!(&self.command, Commands::Dev { .. }))
+    }
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
     telemetry::init(cli.verbosity);
@@ -70,15 +88,16 @@ fn main() -> ExitCode {
 }
 
 fn run(cli: Cli) -> Result<ExitCode> {
+    let dev = cli.dev_mode();
     match cli.command {
         Commands::Init { path } => init::run(path)?,
-        Commands::Build { project_dir } => build::run(project_dir)?,
+        Commands::Build { project_dir } => build::run(project_dir, dev)?,
         Commands::Dev {
             project_dir,
             host,
             port,
-        } => dev::run(project_dir, host, port)?,
-        Commands::Watch { project_dir } => watch::run(project_dir)?,
+        } => dev::run(project_dir, host, port, dev)?,
+        Commands::Watch { project_dir } => watch::run(project_dir, dev)?,
     }
     Ok(ExitCode::SUCCESS)
 }
@@ -103,5 +122,22 @@ mod tests {
                 .expect("version flag should stop command parsing");
             assert_eq!(error.kind(), ErrorKind::DisplayVersion);
         }
+    }
+
+    #[test]
+    fn development_mode_defaults_follow_the_command() {
+        for (command, expected) in [("build", false), ("watch", false), ("dev", true)] {
+            let cli = Cli::try_parse_from(["aster", command]).unwrap();
+            assert_eq!(cli.dev_mode(), expected, "unexpected default for {command}");
+        }
+    }
+
+    #[test]
+    fn development_mode_can_be_overridden() {
+        let build = Cli::try_parse_from(["aster", "build", "--dev"]).unwrap();
+        assert!(build.dev_mode());
+
+        let dev = Cli::try_parse_from(["aster", "dev", "--dev=false"]).unwrap();
+        assert!(!dev.dev_mode());
     }
 }
